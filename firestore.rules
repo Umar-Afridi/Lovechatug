@@ -1,0 +1,18 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can create their own profile
+    match /users/{userId} {
+      allow create: if request.auth != null && request.auth.uid == userId;
+      // Logged-in users can read user profiles to find other users.
+      // Users can only update or delete their own profile.
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Allow logged-in users to list users for search functionality
+    match /users/{document=**} {
+      allow list: if request.auth != null;
+    }
+  }
+}
