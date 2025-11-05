@@ -18,6 +18,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { ForgotPasswordDialog } from './forgot-password-dialog';
 
 
 export function LoginForm() {
@@ -97,7 +98,10 @@ export function LoginForm() {
             <Input id="email" name="email" type="email" placeholder="m@example.com" required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+             <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <ForgotPasswordDialog />
+             </div>
             <Input id="password" name="password" type="password" required />
           </div>
            {error && <p className="text-sm text-destructive">{error}</p>}
