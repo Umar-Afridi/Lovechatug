@@ -44,56 +44,63 @@ export function SignupForm() {
         return;
     }
 
-    try {
-      // Check if username already exists
-      const usersRef = collection(firestore, 'users');
-      const q = query(usersRef, where('username', '==', username));
-      const querySnapshot = await getDocs(q);
-
+    // Check if username already exists
+    const usersRef = collection(firestore, 'users');
+    const q = query(usersRef, where('username', '==', username));
+    
+    getDocs(q).then(async (querySnapshot) => {
       if (!querySnapshot.empty) {
         setError('This username is already taken. Please try another one.');
         return;
       }
 
       // If username is available, create the user
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(userCredential.user, {
-        displayName: fullName,
-      });
-      
-      const userDocRef = doc(firestore, 'users', userCredential.user.uid);
-      const userData = {
-        uid: userCredential.user.uid,
-        displayName: fullName,
-        email: email,
-        username: username,
-        photoURL: userCredential.user.photoURL,
-        friends: [],
-        bio: '',
-      };
-
-      setDoc(userDocRef, userData)
-        .then(() => {
-          router.push('/chat');
-        })
-        .catch((serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: userDocRef.path,
-            operation: 'create',
-            requestResourceData: userData,
-          });
-          errorEmitter.emit('permission-error', permissionError);
-          setError('Could not save user profile. Insufficient permissions.');
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(userCredential.user, {
+          displayName: fullName,
         });
+        
+        const userDocRef = doc(firestore, 'users', userCredential.user.uid);
+        const userData = {
+          uid: userCredential.user.uid,
+          displayName: fullName,
+          email: email,
+          username: username,
+          photoURL: userCredential.user.photoURL,
+          friends: [],
+          bio: '',
+        };
 
-    } catch (err: any) {
-      // Handle Firebase auth errors (e.g., email-already-in-use)
-      if (err.code === 'auth/email-already-in-use') {
-         setError('This email address is already in use by another account.');
-      } else {
-         setError(err.message);
+        setDoc(userDocRef, userData)
+          .then(() => {
+            router.push('/chat');
+          })
+          .catch((serverError) => {
+            const permissionError = new FirestorePermissionError({
+              path: userDocRef.path,
+              operation: 'create',
+              requestResourceData: userData,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            setError('Could not save user profile. Insufficient permissions.');
+          });
+      } catch (err: any) {
+        // Handle Firebase auth errors (e.g., email-already-in-use)
+        if (err.code === 'auth/email-already-in-use') {
+           setError('This email address is already in use by another account.');
+        } else {
+           setError(err.message);
+        }
       }
-    }
+    }).catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: usersRef.path,
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        setError('Could not check if username is available. Insufficient permissions.');
+    });
   };
 
   return (
