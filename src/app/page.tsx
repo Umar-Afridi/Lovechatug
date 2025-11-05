@@ -1,13 +1,12 @@
 import { LoginForm } from '@/components/auth/login-form';
-import { Leaf } from 'lucide-react';
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4">
+    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-background">
       <div className="w-full max-w-md">
         <div className="flex justify-center items-center gap-2 mb-8">
             <h1 className="text-4xl font-headline font-bold text-primary">
-              Roshan Chat
+              LoveChat
             </h1>
         </div>
         <LoginForm />

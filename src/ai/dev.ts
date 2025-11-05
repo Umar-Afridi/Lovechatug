@@ -1,4 +1,4 @@
 import { config } from 'dotenv';
 config();
 
-import '@/ai/flows/ai-suggested-replies.ts';
+// Flows will be added according to the LoveChat prompt

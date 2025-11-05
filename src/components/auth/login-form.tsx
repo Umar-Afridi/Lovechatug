@@ -13,9 +13,9 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-sm shadow-2xl shadow-primary/10">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-headline">Welcome Back</CardTitle>
+        <CardTitle className="text-2xl font-headline">Welcome to LoveChat</CardTitle>
         <CardDescription>
-          Sign in to continue to Roshan Chat
+          Sign in to connect with your loved ones
         </CardDescription>
       </CardHeader>
       <CardContent>
