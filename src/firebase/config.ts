@@ -10,7 +10,7 @@ export const firebaseConfig: FirebaseOptions = {
   authDomain: "lovechat-c483c.firebaseapp.com",
   databaseURL: "https://lovechat-c483c-default-rtdb.firebaseio.com",
   projectId: "lovechat-c483c",
-  storageBucket: "lovechat-c483c.appspot.com",
+  storageBucket: "lovechat-c483c.firebasestorage.app",
   messagingSenderId: "648583863356",
   appId: "1:648583863356:web:a04d30ddb237da835c3739",
   measurementId: "G-Y7TZ7W6QNB"
