@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -27,7 +27,11 @@ export function SignupForm() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!auth || !firestore) return;
+    setError(null); // Reset error on new submission
+    if (!auth || !firestore) {
+        setError("Authentication service is not available.");
+        return;
+    }
 
     const formData = new FormData(event.currentTarget);
     const fullName = formData.get('fullName') as string;
@@ -41,6 +45,17 @@ export function SignupForm() {
     }
 
     try {
+      // Check if username already exists
+      const usersRef = collection(firestore, 'users');
+      const q = query(usersRef, where('username', '==', username));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        setError('This username is already taken. Please try another one.');
+        return;
+      }
+
+      // If username is available, create the user
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(userCredential.user, {
         displayName: fullName,
@@ -72,7 +87,12 @@ export function SignupForm() {
         });
 
     } catch (err: any) {
-      setError(err.message);
+      // Handle Firebase auth errors (e.g., email-already-in-use)
+      if (err.code === 'auth/email-already-in-use') {
+         setError('This email address is already in use by another account.');
+      } else {
+         setError(err.message);
+      }
     }
   };
 
