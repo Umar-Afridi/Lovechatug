@@ -13,6 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function ProfilePage() {
   const auth = useAuth();
@@ -83,32 +85,49 @@ export default function ProfilePage() {
     if (!user || !auth || !firestore) return;
 
     try {
-        // Update Firebase Auth profile
+        // Update Firebase Auth profile first
         await updateProfile(user, {
             displayName: displayName,
             photoURL: photoURL,
         });
 
-        // Update Firestore document
+        // Then update the Firestore document
         const userDocRef = doc(firestore, 'users', user.uid);
-        await updateDoc(userDocRef, {
+        const updatedData = {
             displayName: displayName,
             username: username,
             email: email,
             photoURL: photoURL,
             bio: bio,
-        });
+        };
 
-        toast({
-            title: "Profile Updated",
-            description: "Your profile has been saved successfully.",
-        });
+        updateDoc(userDocRef, updatedData)
+            .then(() => {
+                 toast({
+                    title: "Profile Updated",
+                    description: "Your profile has been saved successfully.",
+                });
+            })
+            .catch((serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: userDocRef.path,
+                    operation: 'update',
+                    requestResourceData: updatedData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+                toast({
+                    variant: "destructive",
+                    title: "Update Failed",
+                    description: "Could not update your profile in the database.",
+                });
+            });
+
     } catch (error: any) {
-        console.error("Error updating profile: ", error);
+        console.error("Error updating auth profile: ", error);
         toast({
             variant: "destructive",
             title: "Update Failed",
-            description: error.message || "Could not update your profile.",
+            description: error.message || "Could not update your authentication profile.",
         });
     }
   };
