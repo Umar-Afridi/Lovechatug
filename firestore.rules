@@ -4,17 +4,14 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     match /users/{userId} {
-      // Anyone can create their own user document
+      // Any authenticated user can create their own user document.
       allow create: if request.auth != null && request.auth.uid == userId;
       
-      // Any authenticated user can list users (for search functionality)
+      // Any authenticated user can list users (for search functionality).
       allow list: if request.auth != null;
 
-      // Only the owner can read or delete their own document
-      allow read, delete: if request.auth != null && request.auth.uid == userId;
-
-      // Only the owner can update their own document
-      allow update: if request.auth != null && request.auth.uid == userId;
+      // Only the owner of the document can read, update, or delete it.
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
     }
 
     match /friendRequests/{requestId} {
