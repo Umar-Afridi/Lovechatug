@@ -42,6 +42,10 @@ export default function ProfilePage() {
               const data = docSnap.data();
               setUsername(data.username ?? '');
               setBio(data.bio ?? '');
+              // Use photo from Firestore if it exists, as it might be a data URI
+              if (data.photoURL) {
+                setPhotoURL(data.photoURL);
+              }
           }
       });
     }
@@ -85,13 +89,12 @@ export default function ProfilePage() {
     if (!user || !auth || !firestore) return;
 
     try {
-        // Update Firebase Auth profile first
+        // Update Firebase Auth profile first (only for properties that are not data URIs)
         await updateProfile(user, {
             displayName: displayName,
-            photoURL: photoURL,
         });
 
-        // Then update the Firestore document
+        // Then update the Firestore document, which can store the data URI for the photo
         const userDocRef = doc(firestore, 'users', user.uid);
         const updatedData = {
             displayName: displayName,
@@ -115,11 +118,6 @@ export default function ProfilePage() {
                     requestResourceData: updatedData,
                 });
                 errorEmitter.emit('permission-error', permissionError);
-                toast({
-                    variant: "destructive",
-                    title: "Update Failed",
-                    description: "Could not update your profile in the database.",
-                });
             });
 
     } catch (error: any) {
