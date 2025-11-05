@@ -16,6 +16,8 @@ import { doc, setDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export function SignupForm() {
   const auth = useAuth();
@@ -39,16 +41,29 @@ export function SignupForm() {
         displayName: fullName,
       });
       
-      // Save user data to Firestore
-      await setDoc(doc(firestore, 'users', userCredential.user.uid), {
+      const userDocRef = doc(firestore, 'users', userCredential.user.uid);
+      const userData = {
         uid: userCredential.user.uid,
         displayName: fullName,
         email: email,
         username: username,
         photoURL: userCredential.user.photoURL,
-      });
+      };
 
-      router.push('/chat');
+      setDoc(userDocRef, userData)
+        .then(() => {
+          router.push('/chat');
+        })
+        .catch((serverError) => {
+          const permissionError = new FirestorePermissionError({
+            path: userDocRef.path,
+            operation: 'create',
+            requestResourceData: userData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+          setError('Could not save user profile. Insufficient permissions.');
+        });
+
     } catch (err: any) {
       setError(err.message);
     }

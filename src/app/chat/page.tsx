@@ -25,6 +25,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { User as FirebaseUserType } from 'firebase/auth';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 
 // Mock data, will be replaced with Firebase data
@@ -102,7 +104,7 @@ const ChatList = () => {
         <ScrollArea className="h-[calc(100vh-172px)]">
           <div className="flex flex-col">
             {chats.map(chat => (
-              <Link href={`/chat/${chat.id}`} key={chat.id} passHref>
+              <Link href={`/chat/${chat.id}`} key={chat.id}>
                 <div 
                   className='flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50'
                 >
@@ -152,17 +154,25 @@ export default function ChatPage() {
       setIsSearching(true);
       if (firestore && user) {
         const usersRef = collection(firestore, 'users');
-        // Search by displayName or username, ensuring we don't return the current user
         const q = query(usersRef, where('displayName', '>=', searchQuery), where('displayName', '<=', searchQuery + '\uf8ff'));
-        // const qUsername = query(usersRef, where('username', '>=', searchQuery), where('username', '<=', searchQuery + '\uf8ff'));
-
-        const querySnapshot = await getDocs(q);
-        const users = querySnapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() }))
-            .filter(u => u.id !== user.uid); // Exclude self
-        setSearchResults(users);
+        
+        getDocs(q).then((querySnapshot) => {
+            const users = querySnapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .filter(u => u.id !== user.uid); // Exclude self
+            setSearchResults(users);
+            setIsSearching(false);
+        }).catch((serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: usersRef.path,
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            setIsSearching(false);
+        });
+      } else {
+        setIsSearching(false);
       }
-      setIsSearching(false);
     };
 
     const debounceTimer = setTimeout(() => {
