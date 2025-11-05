@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, MessageSquare, Users, UserPlus, Phone, Heart, LogOut } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -98,28 +99,28 @@ const ChatList = () => {
         <ScrollArea className="h-[calc(100vh-172px)]">
           <div className="flex flex-col">
             {chats.map(chat => (
-              <div 
-                key={chat.id} 
-                className='flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50'
-                onClick={() => router.push(`/chat/${chat.id}`)}
-              >
-                <Avatar>
-                  <AvatarImage src={chat.participantDetails?.avatar} />
-                  <AvatarFallback>{getInitials(chat.participantDetails?.name ?? '')}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <p className="font-semibold">{chat.participantDetails?.name}</p>
-                  <p className="text-sm text-muted-foreground truncate">{chat.messages[chat.messages.length - 1].content}</p>
+              <Link href={`/chat/${chat.id}`} key={chat.id} passHref>
+                <div 
+                  className='flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50'
+                >
+                  <Avatar>
+                    <AvatarImage src={chat.participantDetails?.avatar} />
+                    <AvatarFallback>{getInitials(chat.participantDetails?.name ?? '')}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <p className="font-semibold">{chat.participantDetails?.name}</p>
+                    <p className="text-sm text-muted-foreground truncate">{chat.messages[chat.messages.length - 1].content}</p>
+                  </div>
+                  <div className="flex flex-col items-end text-xs text-muted-foreground">
+                    <span>{chat.messages[chat.messages.length - 1].timestamp}</span>
+                    {chat.unreadCount > 0 && (
+                      <span className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                        {chat.unreadCount}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-col items-end text-xs text-muted-foreground">
-                  <span>{chat.messages[chat.messages.length - 1].timestamp}</span>
-                  {chat.unreadCount > 0 && (
-                    <span className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                      {chat.unreadCount}
-                    </span>
-                  )}
-                </div>
-              </div>
+              </Link>
             ))}
           </div>
         </ScrollArea>
@@ -197,7 +198,9 @@ export default function ChatPage() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Profile</DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/profile">Profile</Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem>Settings</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut}>

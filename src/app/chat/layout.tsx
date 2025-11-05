@@ -71,7 +71,7 @@ export default function ChatAppLayout({
   const { user, loading } = useUser();
   const router = useRouter();
   const isMobile = useIsMobile();
-  const isChatDetailPage = pathname.includes('/chat/') && pathname.split('/').length > 2;
+  const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2;
 
   useEffect(() => {
     if (auth) {
@@ -117,7 +117,7 @@ export default function ChatAppLayout({
 
   // On mobile, if we are on a chat detail page, we don't want to show the sidebar.
   // The main layout for mobile will be handled by the pages themselves.
-  if (isMobile) {
+  if (isMobile && (isChatDetailPage || pathname === '/profile')) {
       return (
         <main>{children}</main>
       )
@@ -156,7 +156,9 @@ export default function ChatAppLayout({
                     <DropdownMenuContent side="right" align="start">
                     <DropdownMenuLabel>My Account</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem>Profile</DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/profile">Profile</Link>
+                    </DropdownMenuItem>
                     <DropdownMenuItem>Billing</DropdownMenuItem>
                     <DropdownMenuItem>Team</DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -195,18 +197,7 @@ export default function ChatAppLayout({
                 </SidebarMenu>
                 </SidebarFooter>
             </Sidebar>
-
-             {/* Main Content Area */}
-            <div className={`flex-1 flex ${isChatDetailPage ? '' : 'max-w-[420px] border-r'}`}>
-                {children}
-            </div>
-
-            {/* This area will be used to show the detailed chat view on desktop */}
-            {isChatDetailPage && !isMobile && (
-                 <div className="flex-1 hidden md:flex">
-                     {/* The ChatIdPage will render the ChatDetail component */}
-                 </div>
-            )}
+            <main className="flex-1">{children}</main>
         </SidebarProvider>
     </div>
   );
