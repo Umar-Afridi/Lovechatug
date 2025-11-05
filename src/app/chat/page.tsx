@@ -142,18 +142,15 @@ export default function ChatPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     const handleSearch = async () => {
       if (searchQuery.trim() === '') {
         setSearchResults([]);
-        setIsSearching(false);
         return;
       }
 
-      setIsSearching(true);
       if (firestore && user) {
         const usersRef = collection(firestore, 'users');
         const q = query(usersRef, where('displayName', '>=', searchQuery), where('displayName', '<=', searchQuery + '\uf8ff'));
@@ -163,17 +160,13 @@ export default function ChatPage() {
                 .map(doc => ({ id: doc.id, ...doc.data() }))
                 .filter(u => u.id !== user.uid); // Exclude self
             setSearchResults(users);
-            setIsSearching(false);
         }).catch((serverError) => {
             const permissionError = new FirestorePermissionError({
                 path: usersRef.path,
                 operation: 'list',
             });
             errorEmitter.emit('permission-error', permissionError);
-            setIsSearching(false);
         });
-      } else {
-        setIsSearching(false);
       }
     };
 
@@ -229,42 +222,34 @@ export default function ChatPage() {
   };
 
   const renderContent = () => {
-    if (isSearching) {
-      return (
-        <div className="flex h-[calc(100vh-172px)] items-center justify-center text-muted-foreground">
-           <p>Searching...</p>
-         </div>
-      )
-    }
-
-    if (searchResults.length > 0) {
-      return (
-        <ScrollArea className="h-[calc(100vh-172px)]">
-          {searchResults.map(foundUser => (
-            <div key={foundUser.id} className="flex items-center justify-between p-4 hover:bg-muted/50">
-              <div className="flex items-center gap-4">
-                <Avatar>
-                  <AvatarImage src={foundUser.photoURL} />
-                  <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-semibold">{foundUser.displayName}</p>
-                  <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
+    if (searchQuery.trim() !== '') {
+      if (searchResults.length > 0) {
+        return (
+          <ScrollArea className="h-[calc(100vh-172px)]">
+            {searchResults.map(foundUser => (
+              <div key={foundUser.id} className="flex items-center justify-between p-4 hover:bg-muted/50">
+                <div className="flex items-center gap-4">
+                  <Avatar>
+                    <AvatarImage src={foundUser.photoURL} />
+                    <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold">{foundUser.displayName}</p>
+                    <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
+                  </div>
                 </div>
+                <Button size="sm" onClick={() => handleAddRequest(foundUser.id)}>Add Request</Button>
               </div>
-              <Button size="sm" onClick={() => handleAddRequest(foundUser.id)}>Add Request</Button>
-            </div>
-          ))}
-        </ScrollArea>
-      );
-    }
-    
-    if (searchQuery.length > 0 && !isSearching) {
-       return (
-         <div className="flex h-[calc(100vh-172px)] items-center justify-center text-muted-foreground">
-           <p>No users found.</p>
-         </div>
-       );
+            ))}
+          </ScrollArea>
+        );
+      } else {
+         return (
+           <div className="flex h-[calc(100vh-172px)] items-center justify-center text-muted-foreground">
+             <p>No users found.</p>
+           </div>
+         );
+      }
     }
     
     switch (activeTab) {
@@ -337,7 +322,7 @@ export default function ChatPage() {
             />
           </div>
         </div>
-        {!searchQuery && (
+        {searchQuery.trim() === '' && (
           <div className='flex justify-around border-b'>
               {navigationItems.map((item) => (
                   <Button 
