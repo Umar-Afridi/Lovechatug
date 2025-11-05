@@ -2,26 +2,26 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can create their own profile
+
+    // Allow logged-in users to list all users for search functionality
     match /users/{userId} {
       allow create: if request.auth != null && request.auth.uid == userId;
-      // Logged-in users can read user profiles to find other users.
-      // Users can only update or delete their own profile.
       allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-    }
-    
-    // Allow logged-in users to list users for search functionality
-    match /users/{document=**} {
       allow list: if request.auth != null;
     }
 
     match /friendRequests/{requestId} {
-      // Any authenticated user can create a friend request
-      allow create: if request.auth != null;
-      // Only the recipient of the friend request can read, update (accept/reject), or delete it.
-      allow read, update, delete: if request.auth != null && resource.data.to == request.auth.uid;
-      // Allow the sender to list the requests they've sent
-      allow list: if request.auth != null && request.auth.uid == resource.data.from;
+      // Any authenticated user can create a friend request if the data is valid.
+      allow create: if request.auth != null 
+                    && request.resource.data.from == request.auth.uid
+                    && request.resource.data.status == 'pending';
+                    
+      // The recipient can read, update (accept/reject), or delete the request.
+      // The sender can also read the request to see its status.
+      allow read, update, delete: if request.auth != null && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
+      
+      // Allow users to list requests sent to them.
+      allow list: if request.auth != null && request.query.get("to") == request.auth.uid;
     }
   }
 }
