@@ -21,8 +21,9 @@ import {
   SidebarFooter,
   SidebarProvider,
   SidebarInset,
+  SidebarMenuBadge,
 } from '@/components/ui/sidebar';
-import { useAuth } from '@/firebase/provider';
+import { useAuth, useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,9 +34,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { getRedirectResult } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 
 
 const menuItems = [
@@ -53,6 +55,7 @@ const menuItems = [
      href: '/chat/friends',
      icon: UserPlus,
      label: 'Friend Requests',
+     id: 'friend-requests'
   },
   {
      href: '/chat/calls',
@@ -68,10 +71,12 @@ export default function ChatAppLayout({
 }) {
   const pathname = usePathname();
   const auth = useAuth();
+  const firestore = useFirestore();
   const { user, loading } = useUser();
   const router = useRouter();
   const isMobile = useIsMobile();
   const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2;
+  const [requestCount, setRequestCount] = useState(0);
 
   useEffect(() => {
     if (auth) {
@@ -86,6 +91,20 @@ export default function ChatAppLayout({
         });
     }
   }, [auth, router]);
+  
+  useEffect(() => {
+    if (!firestore || !user?.uid) return;
+
+    const requestsRef = collection(firestore, 'friendRequests');
+    const q = query(requestsRef, where('to', '==', user.uid), where('status', '==', 'pending'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setRequestCount(snapshot.size);
+    });
+
+    return () => unsubscribe();
+  }, [firestore, user]);
+
 
   useEffect(() => {
     if (!loading && !user) {
@@ -160,6 +179,9 @@ export default function ChatAppLayout({
                         >
                             <item.icon />
                             <span>{item.label}</span>
+                             {item.id === 'friend-requests' && requestCount > 0 && (
+                                <SidebarMenuBadge>{requestCount}</SidebarMenuBadge>
+                            )}
                         </SidebarMenuButton>
                         </Link>
                     </SidebarMenuItem>
