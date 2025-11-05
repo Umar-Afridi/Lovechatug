@@ -87,6 +87,12 @@ export default function ChatAppLayout({
     }
   }, [auth, router]);
 
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/');
+    }
+  }, [loading, user, router]);
+
   const handleSignOut = async () => {
     if (auth) {
       await auth.signOut();
@@ -94,17 +100,12 @@ export default function ChatAppLayout({
     }
   };
 
-  if (loading) {
+  if (loading || !user) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <p>Loading...</p>
       </div>
     );
-  }
-
-  if (!user) {
-    router.push('/');
-    return null;
   }
 
   const getInitials = (name: string | null | undefined) => {
