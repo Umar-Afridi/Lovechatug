@@ -95,7 +95,7 @@ const ChatList = () => {
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
 
     return (
-        <ScrollArea className="h-[calc(100vh-172px)]">
+        <ScrollArea className="h-[calc(100vh-220px)]">
           <div className="flex flex-col">
             {chats.map(chat => (
               <Link href={`/chat/${chat.id}`} key={chat.id}>
@@ -248,7 +248,7 @@ export default function ChatPage() {
     if (searchQuery.trim() !== '') {
       if (searchResults.length > 0) {
         return (
-          <ScrollArea className="h-[calc(100vh-172px)]">
+          <ScrollArea className="h-[calc(100vh-220px)]">
             {searchResults.map(foundUser => (
               <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
                 <div className="flex items-center gap-4">
@@ -268,7 +268,7 @@ export default function ChatPage() {
         );
       } else {
          return (
-           <div className="flex h-[calc(100vh-172px)] items-center justify-center text-muted-foreground">
+           <div className="flex h-[calc(100vh-220px)] items-center justify-center text-muted-foreground">
              <p>No users found.</p>
            </div>
          );
@@ -321,30 +321,24 @@ export default function ChatPage() {
             />
           </div>
         </div>
-        {searchQuery.trim() === '' && (
-          <div className='flex justify-around border-b'>
-              {navigationItems.map((item) => (
-                  <Button 
-                      key={item.name}
-                      variant="ghost" 
-                      className={cn(
-                          "flex-1 justify-center gap-2 rounded-none",
-                          activeTab === item.content ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground'
-                      )}
-                      onClick={() => setActiveTab(item.content)}
-                  >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.name}</span>
-                  </Button>
-              ))}
-          </div>
-        )}
+        <div className='flex justify-around border-b'>
+            {navigationItems.map((item) => (
+                <Button 
+                    key={item.name}
+                    variant="ghost" 
+                    className={cn(
+                        "flex-1 justify-center gap-2 rounded-none",
+                        activeTab === item.content ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground'
+                    )}
+                    onClick={() => setActiveTab(item.content)}
+                >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.name}</span>
+                </Button>
+            ))}
+        </div>
         {renderContent()}
       </div>
     </div>
   );
 }
-
-    
-
-    
