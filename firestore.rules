@@ -21,7 +21,7 @@ service cloud.firestore {
       allow read, update, delete: if request.auth != null && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
       
       // Allow users to list requests sent to them.
-      allow list: if request.auth != null && request.query.get("to") == request.auth.uid;
+      allow list: if request.auth != null && request.query.where('to', '==', request.auth.uid).size() > 0;
     }
   }
 }
