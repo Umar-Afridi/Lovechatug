@@ -10,8 +10,11 @@ service cloud.firestore {
       // Any authenticated user can list users (for search functionality)
       allow list: if request.auth != null;
 
-      // Only the owner can read, update, or delete their own document
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      // Only the owner can read or delete their own document
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+
+      // Only the owner can update their own document
+      allow update: if request.auth != null && request.auth.uid == userId;
     }
 
     match /friendRequests/{requestId} {
