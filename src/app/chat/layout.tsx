@@ -174,10 +174,12 @@ export default function ChatAppLayout({
                 <SidebarFooter>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Settings">
-                        <Settings />
-                        <span>Settings</span>
-                    </SidebarMenuButton>
+                      <Link href="/profile" className="w-full">
+                        <SidebarMenuButton tooltip="Settings">
+                            <Settings />
+                            <span>Settings</span>
+                        </SidebarMenuButton>
+                      </Link>
                     </SidebarMenuItem>
                 </SidebarMenu>
                 </SidebarFooter>
