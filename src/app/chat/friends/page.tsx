@@ -49,12 +49,14 @@ export default function FriendsPage() {
                 requestsData.push(request);
             }
             setRequests(requestsData);
-        } catch (serverError) {
+        } catch (serverError: any) {
+            console.error("Error fetching friend requests:", serverError);
             const permissionError = new FirestorePermissionError({
                 path: requestsRef.path,
                 operation: 'list',
             });
             errorEmitter.emit('permission-error', permissionError);
+            toast({ title: 'Error', description: 'Could not fetch friend requests.', variant: 'destructive' });
         } finally {
             setLoading(false);
         }
@@ -62,7 +64,7 @@ export default function FriendsPage() {
     
     fetchRequests();
 
-  }, [user, firestore]);
+  }, [user, firestore, toast]);
 
   const handleAccept = async (request: FriendRequest) => {
     if (!firestore || !user) return;
@@ -72,6 +74,8 @@ export default function FriendsPage() {
     const friendUserRef = doc(firestore, 'users', request.from);
 
     try {
+        // Use batch writes for atomicity in a real app, but for now this is fine.
+        
         // Update request status
         await updateDoc(requestRef, { status: 'accepted' });
 
@@ -83,6 +87,7 @@ export default function FriendsPage() {
         setRequests(prev => prev.filter(r => r.id !== request.id));
     } catch(err: any) {
         console.error("Error accepting friend request:", err);
+        // More specific error handling could be added here
         toast({ title: 'Error', description: 'Could not accept friend request.', variant: 'destructive' });
     }
   };
@@ -92,7 +97,7 @@ export default function FriendsPage() {
     const requestRef = doc(firestore, 'friendRequests', requestId);
     try {
         // You can either delete the request or set its status to 'rejected'
-        await deleteDoc(requestRef);
+        await updateDoc(requestRef, { status: 'rejected' });
         toast({ title: 'Request Declined' });
         setRequests(prev => prev.filter(r => r.id !== requestId));
     } catch(err: any) {
