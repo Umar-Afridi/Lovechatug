@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, MessageSquare, Users, UserPlus, Phone } from 'lucide-react';
+import { Search, MessageSquare, Users, UserPlus, Phone, Heart } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -139,7 +139,11 @@ export default function ChatPage() {
     <div className="flex h-screen bg-background">
       <div className="w-full border-r">
         <div className="p-4 space-y-4">
-          <h1 className="text-2xl font-bold">Chats</h1>
+          <h1 className="text-2xl font-bold flex items-center justify-center gap-2 text-primary">
+            <Heart className="text-red-500 animate-pulse" fill="red"/>
+            <span>LoveChat</span>
+            <Heart className="text-red-500 animate-pulse" fill="red"/>
+          </h1>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search users..." className="pl-9" />
