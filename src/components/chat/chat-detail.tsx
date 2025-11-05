@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Phone,
   Video,
@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
-import type { Chat } from '@/lib/types';
+import type { Chat, Message } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 
 interface ChatDetailProps {
@@ -30,6 +30,32 @@ interface ChatDetailProps {
 
 export function ChatDetail({ chat }: ChatDetailProps) {
   const { toast } = useToast();
+  const [messages, setMessages] = useState<Omit<Message, 'id' | 'timestamp' | 'senderId' | 'type'> & { id: string; sender: string; text: string; }[]>([]);
+  const [inputValue, setInputValue] = useState('');
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Mock messages for display, combining initial and chat messages
+    const initialMessages = [
+      { id: '1', sender: 'other', text: 'Hey, how are you?' },
+      { id: '2', sender: 'me', text: 'I am good, thanks! How about you?' },
+      { id: '3', sender: 'other', text: 'Doing great! Just working on the new project.' },
+      { id: '4', sender: 'me', text: 'Awesome! Let me know if you need any help.' },
+      ...chat.messages.map(m => ({ id: m.id, sender: m.senderId === 'user1' ? 'me' : 'other', text: m.content})),
+    ];
+    setMessages(initialMessages);
+  }, [chat.messages]);
+
+  useEffect(() => {
+    // Scroll to bottom when messages change
+    if (scrollAreaRef.current) {
+        const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
+        if(viewport) {
+            viewport.scrollTop = viewport.scrollHeight;
+        }
+    }
+  }, [messages]);
+
   const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
 
   const handleBlockUser = () => {
@@ -39,14 +65,29 @@ export function ChatDetail({ chat }: ChatDetailProps) {
     })
   }
 
-  // Mock messages for display
-  const messages = [
-    { id: '1', sender: 'other', text: 'Hey, how are you?' },
-    { id: '2', sender: 'me', text: 'I am good, thanks! How about you?' },
-    { id: '3', sender: 'other', text: 'Doing great! Just working on the new project.' },
-    { id: '4', sender: 'me', text: 'Awesome! Let me know if you need any help.' },
-    ...chat.messages.map(m => ({ id: m.id, sender: m.senderId === 'user1' ? 'me' : 'other', text: m.content})),
-  ];
+  const handleSendMessage = () => {
+    if (inputValue.trim() === '') return;
+
+    const newMessage = {
+      id: (messages.length + 1).toString(),
+      sender: 'me',
+      text: inputValue.trim(),
+    };
+
+    setMessages([...messages, newMessage]);
+    setInputValue('');
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value);
+  };
+  
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSendMessage();
+    }
+  };
+
 
   return (
     <div className="flex h-screen flex-col">
@@ -96,7 +137,7 @@ export function ChatDetail({ chat }: ChatDetailProps) {
       </header>
 
       {/* Messages Area */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1" ref={scrollAreaRef}>
         <div className="p-6 space-y-4">
             {messages.map((msg) => (
                  <div
@@ -124,7 +165,13 @@ export function ChatDetail({ chat }: ChatDetailProps) {
             <Smile className="h-5 w-5" />
             <span className="sr-only">Emoji</span>
           </Button>
-          <Input placeholder="Type a message..." className="pl-12 pr-24" />
+          <Input 
+            placeholder="Type a message..." 
+            className="pl-12 pr-24"
+            value={inputValue}
+            onChange={handleInputChange}
+            onKeyPress={handleKeyPress}
+          />
           <div className="absolute right-1 flex items-center">
             <Button variant="ghost" size="icon">
               <Paperclip className="h-5 w-5" />
@@ -134,7 +181,7 @@ export function ChatDetail({ chat }: ChatDetailProps) {
               <Mic className="h-5 w-5" />
               <span className="sr-only">Record voice message</span>
             </Button>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" onClick={handleSendMessage}>
               <Send className="h-5 w-5" />
               <span className="sr-only">Send</span>
             </Button>
