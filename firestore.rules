@@ -21,8 +21,8 @@ service cloud.firestore {
       allow update: if request.auth != null && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
       allow delete: if request.auth != null && resource.data.to == request.auth.uid;
       
-      // Allow users to list requests sent to them.
-      allow list: if request.auth != null && request.query.get("to") == request.auth.uid;
+      // Allow users to list requests sent to them that are pending.
+      allow list: if request.auth != null && request.query.to == request.auth.uid && request.query.status == 'pending';
     }
   }
 }
