@@ -98,8 +98,7 @@ export default function ProfilePage() {
         const userDocRef = doc(firestore, 'users', user.uid);
         const updatedData = {
             displayName: displayName,
-            username: username,
-            email: email,
+            username: username.toLowerCase(),
             photoURL: photoURL,
             bio: bio,
         };
@@ -195,7 +194,8 @@ export default function ProfilePage() {
                             id="email" 
                             type="email" 
                             value={email} 
-                            onChange={(e) => setEmail(e.target.value)} 
+                            readOnly
+                            className="focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 cursor-not-allowed opacity-70"
                         />
                     </div>
 

@@ -31,9 +31,14 @@ export function SignupForm() {
 
     const formData = new FormData(event.currentTarget);
     const fullName = formData.get('fullName') as string;
-    const username = formData.get('username') as string;
+    const username = (formData.get('username') as string).toLowerCase();
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
+    
+    if (!username) {
+        setError("Username is required.");
+        return;
+    }
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -48,6 +53,8 @@ export function SignupForm() {
         email: email,
         username: username,
         photoURL: userCredential.user.photoURL,
+        friends: [],
+        bio: '',
       };
 
       setDoc(userDocRef, userData)
