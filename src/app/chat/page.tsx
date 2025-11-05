@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, MessageSquare, Users, UserPlus, Phone, Heart } from 'lucide-react';
+import { Search, MessageSquare, Users, UserPlus, Phone, Heart, LogOut } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -12,6 +12,16 @@ import { cn } from '@/lib/utils';
 import GroupsPage from './groups/page';
 import FriendsPage from './friends/page';
 import CallsPage from './calls/page';
+import { useAuth } from '@/firebase/provider';
+import { useUser } from '@/firebase/auth/use-user';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 // Mock data, will be replaced with Firebase data
 const chats: Chat[] = [
@@ -119,6 +129,24 @@ const ChatList = () => {
 
 export default function ChatPage() {
   const [activeTab, setActiveTab] = useState('chats');
+  const auth = useAuth();
+  const { user, loading } = useUser();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    if (auth) {
+      await auth.signOut();
+      router.push('/');
+    }
+  };
+
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return 'U';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('');
+  };
   
   const renderContent = () => {
     switch (activeTab) {
@@ -139,11 +167,46 @@ export default function ChatPage() {
     <div className="flex h-screen bg-background">
       <div className="w-full border-r">
         <div className="p-4 space-y-4">
-          <h1 className="text-2xl font-bold flex items-center justify-center gap-2 text-primary">
-            <Heart className="text-red-500 animate-pulse" fill="red"/>
-            <span>LoveChat</span>
-            <Heart className="text-red-500 animate-pulse" fill="red"/>
-          </h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
+                <Heart className="text-red-500 animate-pulse" fill="red"/>
+                <span>LoveChat</span>
+                <Heart className="text-red-500 animate-pulse" fill="red"/>
+            </h1>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage
+                        src={user?.photoURL ?? undefined}
+                        alt={user?.displayName ?? 'user-avatar'}
+                    />
+                    <AvatarFallback>
+                        {getInitials(user?.displayName)}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user?.displayName ?? 'User'}</p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {user?.email ?? 'No email'}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Profile</DropdownMenuItem>
+                <DropdownMenuItem>Settings</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search users..." className="pl-9" />
