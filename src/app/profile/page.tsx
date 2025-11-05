@@ -17,9 +17,20 @@ export default function ProfilePage() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [displayName, setDisplayName] = useState(user?.displayName ?? '');
-  const [email, setEmail] = useState(user?.email ?? '');
-  const [photoURL, setPhotoURL] = useState(user?.photoURL ?? '');
+  // Initialize state with user data or empty strings if user is not loaded yet
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
+  const [photoURL, setPhotoURL] = useState('');
+  
+  // Update state once user data is available
+  useState(() => {
+    if (user) {
+      setDisplayName(user.displayName ?? '');
+      setEmail(user.email ?? '');
+      setPhotoURL(user.photoURL ?? '');
+    }
+  });
+
 
   if (loading) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
@@ -68,37 +79,33 @@ export default function ProfilePage() {
             <Button variant="ghost" size="icon" onClick={() => router.back()}>
                 <ArrowLeft className="h-5 w-5" />
             </Button>
-            <h1 className="text-xl font-bold">Edit Profile</h1>
+            <h1 className="text-xl font-bold">Profile</h1>
         </header>
 
         <main className="flex-1 p-4 md:p-8">
-            <Card className="mx-auto max-w-xl">
-                <CardHeader>
-                    <CardTitle>Profile Details</CardTitle>
-                    <CardDescription>Update your personal information and photo.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="flex justify-center">
-                        <div className="relative">
-                            <Avatar className="h-32 w-32 cursor-pointer" onClick={handleAvatarClick}>
-                                <AvatarImage src={photoURL} alt={displayName} />
-                                <AvatarFallback className="text-4xl">
-                                    {getInitials(displayName)}
-                                </AvatarFallback>
-                            </Avatar>
-                            <div className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground" onClick={handleAvatarClick}>
-                                <Camera className="h-5 w-5" />
-                            </div>
-                            <input 
-                                type="file" 
-                                ref={fileInputRef} 
-                                className="hidden" 
-                                accept="image/*"
-                                onChange={handleFileChange}
-                            />
-                        </div>
+            <div className="mx-auto max-w-xl space-y-8">
+                <div className="flex justify-center">
+                    <div className="relative">
+                        <Avatar className="h-32 w-32 cursor-pointer" onClick={handleAvatarClick}>
+                            <AvatarImage src={photoURL} alt={displayName} />
+                            <AvatarFallback className="text-4xl">
+                                {getInitials(displayName)}
+                            </AvatarFallback>
+                        </Avatar>
+                        <button className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground" onClick={handleAvatarClick}>
+                            <Camera className="h-5 w-5" />
+                        </button>
+                        <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            className="hidden" 
+                            accept="image/*"
+                            onChange={handleFileChange}
+                        />
                     </div>
-                    
+                </div>
+                
+                <div className="space-y-4">
                     <div className="space-y-2">
                         <Label htmlFor="displayName">Full Name</Label>
                         <Input 
@@ -117,10 +124,10 @@ export default function ProfilePage() {
                             onChange={(e) => setEmail(e.target.value)} 
                         />
                     </div>
-                    
-                    <Button className="w-full" onClick={handleSaveChanges}>Save Changes</Button>
-                </CardContent>
-            </Card>
+                </div>
+                
+                <Button className="w-full" onClick={handleSaveChanges}>Save Changes</Button>
+            </div>
         </main>
     </div>
   );
