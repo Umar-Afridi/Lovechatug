@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ChatDetail } from '@/components/chat/chat-detail';
 import type { Chat } from '@/lib/types';
@@ -67,8 +68,10 @@ const chats: Chat[] = [
 ];
 
 
-export default function ChatIdPage({ params }: { params: { chatId: string } }) {
+export default function ChatIdPage({ params: paramsProp }: { params: { chatId: string } }) {
   const router = useRouter();
+  // params is a promise in the app router. We need to resolve it.
+  const params = React.use(paramsProp as any);
   const chat = chats.find(c => c.id === params.chatId);
 
   if (!chat) {
