@@ -38,6 +38,8 @@ import { useEffect, useState } from 'react';
 import { getRedirectResult } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 
 const menuItems = [
@@ -98,9 +100,19 @@ export default function ChatAppLayout({
     const requestsRef = collection(firestore, 'friendRequests');
     const q = query(requestsRef, where('to', '==', user.uid), where('status', '==', 'pending'));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setRequestCount(snapshot.size);
-    });
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        setRequestCount(snapshot.size);
+      },
+      (serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: requestsRef.path,
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching friend request count:", serverError);
+      }
+    );
 
     return () => unsubscribe();
   }, [firestore, user]);
