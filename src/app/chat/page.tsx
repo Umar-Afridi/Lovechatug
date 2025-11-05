@@ -7,7 +7,7 @@ import { Search, MessageSquare, Users, UserPlus, Phone, Heart, LogOut } from 'lu
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { Chat } from '@/lib/types';
+import type { Chat, UserProfile } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import GroupsPage from './groups/page';
@@ -131,7 +131,7 @@ export default function ChatPage() {
   const firestore = useFirestore();
   const { user, loading } = useUser();
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -143,13 +143,22 @@ export default function ChatPage() {
 
       if (firestore && user) {
         const usersRef = collection(firestore, 'users');
-        const q = query(usersRef, where('displayName', '>=', searchQuery), where('displayName', '<=', searchQuery + '\uf8ff'));
         
-        getDocs(q).then((querySnapshot) => {
-            const users = querySnapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() }))
-                .filter(u => u.id !== user.uid); // Exclude self
-            setSearchResults(users);
+        getDocs(usersRef).then((querySnapshot) => {
+            const allUsers = querySnapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() })) as UserProfile[];
+
+            const lowercasedQuery = searchQuery.toLowerCase();
+
+            const filteredUsers = allUsers.filter(u => 
+                u.uid !== user.uid && 
+                (
+                  u.displayName?.toLowerCase().includes(lowercasedQuery) ||
+                  u.username?.toLowerCase().includes(lowercasedQuery)
+                )
+            );
+            
+            setSearchResults(filteredUsers);
         }).catch((serverError) => {
             const permissionError = new FirestorePermissionError({
                 path: usersRef.path,
@@ -162,7 +171,7 @@ export default function ChatPage() {
 
     const debounceTimer = setTimeout(() => {
       handleSearch();
-    }, 500); // Debounce search to avoid too many queries
+    }, 300); // Debounce search to avoid too many queries
 
     return () => clearTimeout(debounceTimer);
   }, [searchQuery, firestore, user]);
@@ -210,7 +219,7 @@ export default function ChatPage() {
         return (
           <ScrollArea className="h-[calc(100vh-172px)]">
             {searchResults.map(foundUser => (
-              <div key={foundUser.id} className="flex items-center justify-between p-4 hover:bg-muted/50">
+              <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
                 <div className="flex items-center gap-4">
                   <Avatar>
                     <AvatarImage src={foundUser.photoURL} />
@@ -221,7 +230,7 @@ export default function ChatPage() {
                     <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
                   </div>
                 </div>
-                <Button size="sm" onClick={() => handleAddRequest(foundUser.id)}>Add Request</Button>
+                <Button size="sm" onClick={() => handleAddRequest(foundUser.uid)}>Add Request</Button>
               </div>
             ))}
           </ScrollArea>
@@ -306,3 +315,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
