@@ -4,11 +4,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     match /users/{userId} {
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow read: if true;
-      allow update: if request.auth != null && request.auth.uid == userId;
-      allow delete: if request.auth != null && request.auth.uid == userId;
-      allow list: if request.auth != null;
+      allow read, list: if request.auth != null;
+      allow create, update, delete: if request.auth != null && request.auth.uid == userId;
     }
 
     match /friendRequests/{requestId} {
@@ -17,12 +14,10 @@ service cloud.firestore {
                     && request.resource.data.to != request.auth.uid
                     && request.resource.data.status == 'pending';
                     
-      allow read: if request.auth != null && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
+      allow read, list: if request.auth != null && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
       allow update: if request.auth != null && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
       allow delete: if request.auth != null && resource.data.to == request.auth.uid;
       
-      // Allow users to list requests sent to them that are pending.
-      allow list: if request.auth != null && request.query.to == request.auth.uid && request.query.status == 'pending';
     }
   }
 }
