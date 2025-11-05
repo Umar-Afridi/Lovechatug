@@ -21,6 +21,13 @@ export type Chat = {
   participants: string[]; // array of user ids
   messages: Message[];
   unreadCount: number;
+  // This is a temporary field for mock data to hold the other user's details
+  participantDetails?: {
+    id: string;
+    name: string;
+    avatar: string;
+    online: boolean;
+  }
 };
 
 export type Group = {
