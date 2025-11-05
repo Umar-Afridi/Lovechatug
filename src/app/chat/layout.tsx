@@ -21,7 +21,6 @@ import {
   SidebarFooter,
   SidebarProvider,
   SidebarInset,
-  SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
@@ -34,6 +33,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useEffect } from 'react';
+import { getRedirectResult } from 'firebase/auth';
 
 const menuItems = [
   {
@@ -67,6 +68,22 @@ export default function ChatAppLayout({
   const auth = useAuth();
   const { user, loading } = useUser();
   const router = useRouter();
+
+  useEffect(() => {
+    if (auth) {
+      getRedirectResult(auth)
+        .then((result) => {
+          if (result) {
+            // User successfully signed in.
+            router.push('/chat');
+          }
+        })
+        .catch((error) => {
+          // Handle Errors here.
+          console.error('Google sign-in redirect error:', error);
+        });
+    }
+  }, [auth, router]);
 
   const handleSignOut = async () => {
     if (auth) {

@@ -11,12 +11,12 @@ import {
 import { GoogleIcon } from '@/components/icons/google-icon';
 import Link from 'next/link';
 import { useAuth } from '@/firebase/provider';
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithRedirect, signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -38,8 +38,10 @@ export function LoginForm() {
     }
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
-      router.push('/chat');
+      await signInWithRedirect(auth, provider);
+      // The user will be redirected to the Google sign-in page.
+      // After successful sign-in, they will be redirected back to the app.
+      // The redirect result is handled in the chat page or layout.
     } catch (error: any) {
       console.error('Error signing in with Google', error);
       setError(error.message);
