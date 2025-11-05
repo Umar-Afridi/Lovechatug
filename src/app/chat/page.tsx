@@ -244,8 +244,7 @@ export default function ChatPage() {
     }
   };
 
-  const renderContent = () => {
-    if (searchQuery.trim() !== '') {
+  const renderSearchResults = () => {
       if (searchResults.length > 0) {
         return (
           <ScrollArea className="h-[calc(100vh-220px)]">
@@ -273,19 +272,7 @@ export default function ChatPage() {
            </div>
          );
       }
-    }
-    
-    return (
-        <Carousel setApi={setApi} className="w-full">
-            <CarouselContent>
-                <CarouselItem><ChatList /></CarouselItem>
-                <CarouselItem><GroupsPage /></CarouselItem>
-                <CarouselItem><FriendsPage /></CarouselItem>
-                <CarouselItem><CallsPage /></CarouselItem>
-            </CarouselContent>
-        </Carousel>
-    );
-  };
+  }
 
   return (
     <div className="flex h-screen bg-background">
@@ -321,7 +308,7 @@ export default function ChatPage() {
             />
           </div>
         </div>
-        <div className='flex justify-around border-b'>
+        <div className='flex border-b'>
             {navigationItems.map((item) => (
                 <Button 
                     key={item.name}
@@ -337,7 +324,17 @@ export default function ChatPage() {
                 </Button>
             ))}
         </div>
-        {renderContent()}
+        
+        {searchQuery.trim() !== '' ? renderSearchResults() : (
+            <Carousel setApi={setApi} className="w-full">
+                <CarouselContent>
+                    <CarouselItem><ChatList /></CarouselItem>
+                    <CarouselItem><GroupsPage /></CarouselItem>
+                    <CarouselItem><FriendsPage /></CarouselItem>
+                    <CarouselItem><CallsPage /></CarouselItem>
+                </CarouselContent>
+            </Carousel>
+        )}
       </div>
     </div>
   );
