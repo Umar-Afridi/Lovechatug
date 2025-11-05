@@ -20,6 +20,7 @@ import type { User as FirebaseUserType } from 'firebase/auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
+import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '@/components/ui/carousel';
 
 
 // Mock data, will be replaced with Firebase data
@@ -133,6 +134,36 @@ export default function ChatPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const { toast } = useToast();
+  const [api, setApi] = useState<CarouselApi>();
+  const [current, setCurrent] = useState(0);
+
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+
+    const onSelect = () => {
+      setCurrent(api.selectedScrollSnap());
+      const newActiveTab = navigationItems[api.selectedScrollSnap()].content;
+      setActiveTab(newActiveTab);
+    };
+
+    api.on('select', onSelect);
+
+    return () => {
+      api.off('select', onSelect);
+    };
+  }, [api]);
+
+  useEffect(() => {
+    if (api) {
+      const activeIndex = navigationItems.findIndex(item => item.content === activeTab);
+      if (activeIndex !== -1) {
+        api.scrollTo(activeIndex);
+      }
+    }
+  }, [activeTab, api]);
+
 
   useEffect(() => {
     const handleSearch = async () => {
@@ -244,18 +275,16 @@ export default function ChatPage() {
       }
     }
     
-    switch (activeTab) {
-        case 'chats':
-            return <ChatList />;
-        case 'groups':
-            return <GroupsPage />;
-        case 'requests':
-            return <FriendsPage />;
-        case 'calls':
-            return <CallsPage />;
-        default:
-            return <ChatList />;
-    }
+    return (
+        <Carousel setApi={setApi} className="w-full">
+            <CarouselContent>
+                <CarouselItem><ChatList /></CarouselItem>
+                <CarouselItem><GroupsPage /></CarouselItem>
+                <CarouselItem><FriendsPage /></CarouselItem>
+                <CarouselItem><CallsPage /></CarouselItem>
+            </CarouselContent>
+        </Carousel>
+    );
   };
 
   return (
@@ -315,5 +344,7 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
 
     
