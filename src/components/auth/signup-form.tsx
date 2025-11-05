@@ -10,20 +10,22 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/firebase/provider';
+import { useAuth, useFirestore } from '@/firebase/provider';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 export function SignupForm() {
   const auth = useAuth();
+  const firestore = useFirestore();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || !firestore) return;
 
     const formData = new FormData(event.currentTarget);
     const fullName = formData.get('fullName') as string;
@@ -36,7 +38,16 @@ export function SignupForm() {
       await updateProfile(userCredential.user, {
         displayName: fullName,
       });
-      // Here you would also save the username to Firestore
+      
+      // Save user data to Firestore
+      await setDoc(doc(firestore, 'users', userCredential.user.uid), {
+        uid: userCredential.user.uid,
+        displayName: fullName,
+        email: email,
+        username: username,
+        photoURL: userCredential.user.photoURL,
+      });
+
       router.push('/chat');
     } catch (err: any) {
       setError(err.message);
