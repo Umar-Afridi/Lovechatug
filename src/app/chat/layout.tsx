@@ -129,11 +129,12 @@ export default function ChatAppLayout({
         <SidebarProvider>
             <Sidebar side="left" collapsible="icon" className="group">
                 <SidebarHeader>
-                 <Link href="/profile">
                     <Button
                         variant="ghost"
                         className="h-12 w-full justify-start gap-2 px-2"
+                        asChild
                     >
+                      <Link href="/profile">
                         <Avatar className="h-8 w-8">
                         <AvatarImage
                             src={user?.photoURL ?? undefined}
@@ -151,8 +152,8 @@ export default function ChatAppLayout({
                             {user?.email ?? 'No email'}
                         </span>
                         </div>
+                      </Link>
                     </Button>
-                    </Link>
                 </SidebarHeader>
                 <SidebarContent>
                 <SidebarMenu>

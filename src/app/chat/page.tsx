@@ -259,8 +259,8 @@ export default function ChatPage() {
                 <span>LoveChat</span>
                 <Heart className="text-red-500 animate-pulse" fill="red"/>
             </h1>
-            <Link href="/profile">
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+            <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
+                <Link href="/profile">
                   <Avatar className="h-10 w-10">
                     <AvatarImage
                         src={user?.photoURL ?? undefined}
@@ -270,8 +270,8 @@ export default function ChatPage() {
                         {getInitials(user?.displayName)}
                     </AvatarFallback>
                   </Avatar>
-                </Button>
-            </Link>
+                </Link>
+            </Button>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
