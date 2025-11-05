@@ -1,12 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, MessageSquare, Users, UserPlus, Phone } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChatDetail } from '@/components/chat/chat-detail';
 import type { Chat } from '@/lib/types';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import GroupsPage from './groups/page';
+import FriendsPage from './friends/page';
+import CallsPage from './calls/page';
 
 
 // Mock data, will be replaced with Firebase data
@@ -18,7 +23,6 @@ const chats: Chat[] = [
         { id: 'm1', senderId: 'user2', content: 'See you tomorrow!', timestamp: '10:42 AM', type: 'text' }
     ],
     unreadCount: 2,
-    // Add participantDetails for rendering
     participantDetails: {
         id: 'user2',
         name: 'Ayesha Khan',
@@ -70,29 +74,31 @@ const chats: Chat[] = [
   },
 ];
 
+const navigationItems = [
+    { name: 'Chats', icon: MessageSquare, content: 'chats' },
+    { name: 'Groups', icon: Users, content: 'groups' },
+    { name: 'Requests', icon: UserPlus, content: 'requests' },
+    { name: 'Calls', icon: Phone, content: 'calls' },
+];
 
-export default function ChatPage() {
-  const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
+const ChatList = ({ onSelectChat }: { onSelectChat: (chat: Chat) => void }) => {
+    const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+    const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
 
-  const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
-
-  return (
-    <div className="flex h-screen bg-background">
-      <div className="w-full max-w-sm border-r">
-        <div className="p-4 space-y-4">
-          <h1 className="text-2xl font-bold">Chats</h1>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search users..." className="pl-9" />
-          </div>
-        </div>
-        <ScrollArea className="h-[calc(100vh-120px)]">
+    return (
+        <ScrollArea className="h-[calc(100vh-172px)]">
           <div className="flex flex-col">
             {chats.map(chat => (
               <div 
                 key={chat.id} 
-                className={`flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50 ${selectedChat?.id === chat.id ? 'bg-muted/50' : ''}`}
-                onClick={() => setSelectedChat(chat)}
+                className={cn(
+                    'flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50',
+                    selectedChatId === chat.id ? 'bg-muted' : ''
+                )}
+                onClick={() => {
+                    setSelectedChatId(chat.id);
+                    onSelectChat(chat);
+                }}
               >
                 <Avatar>
                   <AvatarImage src={chat.participantDetails?.avatar} />
@@ -114,13 +120,68 @@ export default function ChatPage() {
             ))}
           </div>
         </ScrollArea>
+    );
+};
+
+
+export default function ChatPage() {
+  const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
+  const [activeTab, setActiveTab] = useState('chats');
+  
+  const renderContent = () => {
+    switch (activeTab) {
+        case 'chats':
+            return <ChatList onSelectChat={setSelectedChat} />;
+        case 'groups':
+            return <GroupsPage />;
+        case 'requests':
+            return <FriendsPage />;
+        case 'calls':
+            return <CallsPage />;
+        default:
+            return <ChatList onSelectChat={setSelectedChat} />;
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-background">
+      <div className="w-full max-w-sm border-r">
+        <div className="p-4 space-y-4">
+          <h1 className="text-2xl font-bold">Chats</h1>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search users..." className="pl-9" />
+          </div>
+        </div>
+        <div className='flex justify-around border-b'>
+            {navigationItems.map((item) => (
+                <Button 
+                    key={item.name}
+                    variant="ghost" 
+                    className={cn(
+                        "flex-1 justify-center gap-2 rounded-none",
+                        activeTab === item.content ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground'
+                    )}
+                    onClick={() => {
+                        setActiveTab(item.content);
+                        setSelectedChat(null); // Deselect chat when changing tabs
+                    }}
+                >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.name}</span>
+                </Button>
+            ))}
+        </div>
+        {renderContent()}
       </div>
       <div className="flex-1 flex flex-col">
-        {selectedChat ? (
+        {selectedChat && activeTab === 'chats' ? (
           <ChatDetail chat={selectedChat} />
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <p>Select a chat to start messaging</p>
+            <p>
+                {activeTab === 'chats' ? 'Select a chat to start messaging' : ''}
+            </p>
           </div>
         )}
       </div>

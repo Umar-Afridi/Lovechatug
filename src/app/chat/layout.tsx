@@ -36,27 +36,29 @@ import {
 import { useEffect } from 'react';
 import { getRedirectResult } from 'firebase/auth';
 
+// Main navigation items are now on the chat page itself.
+// The sidebar can be used for secondary navigation or kept minimal.
 const menuItems = [
   {
     href: '/chat',
     icon: MessageSquare,
     label: 'Chats',
   },
-  {
-    href: '/chat/groups',
-    icon: Users,
-    label: 'Groups',
-  },
-  {
-    href: '/chat/friends',
-    icon: UserPlus,
-    label: 'Friend Requests',
-  },
-  {
-    href: '/chat/calls',
-    icon: Phone,
-    label: 'Call History',
-  },
+  // {
+  //   href: '/chat/groups',
+  //   icon: Users,
+  //   label: 'Groups',
+  // },
+  // {
+  //   href: '/chat/friends',
+  //   icon: UserPlus,
+  //   label: 'Friend Requests',
+  // },
+  // {
+  //   href: '/chat/calls',
+  //   icon: Phone,
+  //   label: 'Call History',
+  // },
 ];
 
 export default function ChatAppLayout({
@@ -162,7 +164,7 @@ export default function ChatAppLayout({
               <SidebarMenuItem key={item.href}>
                 <Link href={item.href}>
                   <SidebarMenuButton
-                    isActive={pathname === item.href}
+                    isActive={pathname.startsWith(item.href) && (item.href === '/chat' ? pathname.split('/').length <= 2 : true)}
                     tooltip={item.label}
                   >
                     <item.icon />
