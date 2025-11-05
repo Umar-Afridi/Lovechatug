@@ -10,10 +10,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Camera, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/firebase/provider';
+import { useAuth, useFirestore } from '@/firebase/provider';
+import { updateProfile } from 'firebase/auth';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 export default function ProfilePage() {
   const auth = useAuth();
+  const firestore = useFirestore();
   const { user, loading } = useUser();
   const router = useRouter();
   const { toast } = useToast();
@@ -26,16 +29,21 @@ export default function ProfilePage() {
   const [photoURL, setPhotoURL] = useState('');
   
   useEffect(() => {
-    if (user) {
+    if (user && firestore) {
       setDisplayName(user.displayName ?? '');
       setEmail(user.email ?? '');
       setPhotoURL(user.photoURL ?? '');
-      // Fetch username and bio from Firestore in a real app
-      // For now, we'll use placeholder data.
-      setUsername(user.email?.split('@')[0] ?? 'newuser');
-      setBio('This is a sample bio.');
+      
+      const userDocRef = doc(firestore, 'users', user.uid);
+      getDoc(userDocRef).then(docSnap => {
+          if (docSnap.exists()) {
+              const data = docSnap.data();
+              setUsername(data.username ?? '');
+              setBio(data.bio ?? '');
+          }
+      });
     }
-  }, [user]);
+  }, [user, firestore]);
 
 
   if (loading) {
@@ -71,12 +79,38 @@ export default function ProfilePage() {
     }
   };
   
-  const handleSaveChanges = () => {
-    // Here you would typically update the user profile in Firebase Auth and Firestore
-    toast({
-        title: "Profile Updated",
-        description: "Your profile has been saved successfully.",
-    });
+  const handleSaveChanges = async () => {
+    if (!user || !auth || !firestore) return;
+
+    try {
+        // Update Firebase Auth profile
+        await updateProfile(user, {
+            displayName: displayName,
+            photoURL: photoURL,
+        });
+
+        // Update Firestore document
+        const userDocRef = doc(firestore, 'users', user.uid);
+        await updateDoc(userDocRef, {
+            displayName: displayName,
+            username: username,
+            email: email,
+            photoURL: photoURL,
+            bio: bio,
+        });
+
+        toast({
+            title: "Profile Updated",
+            description: "Your profile has been saved successfully.",
+        });
+    } catch (error: any) {
+        console.error("Error updating profile: ", error);
+        toast({
+            variant: "destructive",
+            title: "Update Failed",
+            description: error.message || "Could not update your profile.",
+        });
+    }
   };
 
   const handleSignOut = async () => {
