@@ -1,35 +1,41 @@
 'use client';
 
-import { useState, useRef, ChangeEvent } from 'react';
+import { useState, useRef, ChangeEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Camera } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { ArrowLeft, Camera, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/firebase/provider';
 
 export default function ProfilePage() {
+  const auth = useAuth();
   const { user, loading } = useUser();
   const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize state with user data or empty strings if user is not loaded yet
   const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [bio, setBio] = useState('');
   const [photoURL, setPhotoURL] = useState('');
   
-  // Update state once user data is available
-  useState(() => {
+  useEffect(() => {
     if (user) {
       setDisplayName(user.displayName ?? '');
       setEmail(user.email ?? '');
       setPhotoURL(user.photoURL ?? '');
+      // Fetch username and bio from Firestore in a real app
+      // For now, we'll use placeholder data.
+      setUsername(user.email?.split('@')[0] ?? 'newuser');
+      setBio('This is a sample bio.');
     }
-  });
+  }, [user]);
 
 
   if (loading) {
@@ -37,10 +43,11 @@ export default function ProfilePage() {
   }
 
   if (!user) {
+    // This should be handled by the layout, but as a fallback
     router.push('/');
     return null;
   }
-
+  
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
     return name
@@ -66,20 +73,27 @@ export default function ProfilePage() {
   
   const handleSaveChanges = () => {
     // Here you would typically update the user profile in Firebase Auth and Firestore
-    // For now, we'll just show a toast notification
     toast({
         title: "Profile Updated",
         description: "Your profile has been saved successfully.",
     });
-  }
+  };
+
+  const handleSignOut = async () => {
+    if (auth) {
+      await auth.signOut();
+      router.push('/');
+      toast({ title: "Logged Out", description: "You have been successfully logged out." });
+    }
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-        <header className="flex items-center gap-4 border-b p-4">
+        <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
             <Button variant="ghost" size="icon" onClick={() => router.back()}>
                 <ArrowLeft className="h-5 w-5" />
             </Button>
-            <h1 className="text-xl font-bold">Profile</h1>
+            <h1 className="text-xl font-bold">Edit Profile</h1>
         </header>
 
         <main className="flex-1 p-4 md:p-8">
@@ -105,13 +119,22 @@ export default function ProfilePage() {
                     </div>
                 </div>
                 
-                <div className="space-y-4">
+                <div className="space-y-6">
                     <div className="space-y-2">
                         <Label htmlFor="displayName">Full Name</Label>
                         <Input 
                             id="displayName" 
                             value={displayName} 
                             onChange={(e) => setDisplayName(e.target.value)} 
+                        />
+                    </div>
+
+                     <div className="space-y-2">
+                        <Label htmlFor="username">Username</Label>
+                        <Input 
+                            id="username" 
+                            value={username} 
+                            onChange={(e) => setUsername(e.target.value)} 
                         />
                     </div>
                     
@@ -124,9 +147,25 @@ export default function ProfilePage() {
                             onChange={(e) => setEmail(e.target.value)} 
                         />
                     </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="bio">Bio</Label>
+                        <Textarea 
+                            id="bio" 
+                            value={bio} 
+                            onChange={(e) => setBio(e.target.value)}
+                            placeholder="Tell us a little about yourself"
+                            rows={3}
+                        />
+                    </div>
                 </div>
                 
                 <Button className="w-full" onClick={handleSaveChanges}>Save Changes</Button>
+
+                <Button className="w-full" variant="outline" onClick={handleSignOut}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Logout
+                </Button>
             </div>
         </main>
     </div>

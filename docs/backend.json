@@ -33,6 +33,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "bio": {
+          "type": "string",
+          "description": "A short user bio."
         }
       },
       "required": ["uid", "displayName", "email", "username"]

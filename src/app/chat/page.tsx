@@ -15,14 +15,6 @@ import FriendsPage from './friends/page';
 import CallsPage from './calls/page';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import type { User as FirebaseUserType } from 'firebase/auth';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -136,10 +128,8 @@ const ChatList = () => {
 
 export default function ChatPage() {
   const [activeTab, setActiveTab] = useState('chats');
-  const auth = useAuth();
   const firestore = useFirestore();
   const { user, loading } = useUser();
-  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const { toast } = useToast();
@@ -176,13 +166,6 @@ export default function ChatPage() {
 
     return () => clearTimeout(debounceTimer);
   }, [searchQuery, firestore, user]);
-
-  const handleSignOut = async () => {
-    if (auth) {
-      await auth.signOut();
-      router.push('/');
-    }
-  };
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
@@ -276,8 +259,7 @@ export default function ChatPage() {
                 <span>LoveChat</span>
                 <Heart className="text-red-500 animate-pulse" fill="red"/>
             </h1>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <Link href="/profile">
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                   <Avatar className="h-10 w-10">
                     <AvatarImage
@@ -289,28 +271,7 @@ export default function ChatPage() {
                     </AvatarFallback>
                   </Avatar>
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{user?.displayName ?? 'User'}</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {user?.email ?? 'No email'}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/profile">Profile</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem>Settings</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            </Link>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

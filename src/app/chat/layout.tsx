@@ -129,8 +129,7 @@ export default function ChatAppLayout({
         <SidebarProvider>
             <Sidebar side="left" collapsible="icon" className="group">
                 <SidebarHeader>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                 <Link href="/profile">
                     <Button
                         variant="ghost"
                         className="h-12 w-full justify-start gap-2 px-2"
@@ -153,22 +152,7 @@ export default function ChatAppLayout({
                         </span>
                         </div>
                     </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent side="right" align="start">
-                    <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href="/profile">Profile</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>Billing</DropdownMenuItem>
-                    <DropdownMenuItem>Team</DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleSignOut}>
-                        <LogOut className="mr-2 h-4 w-4" />
-                        <span>Log out</span>
-                    </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                    </Link>
                 </SidebarHeader>
                 <SidebarContent>
                 <SidebarMenu>
