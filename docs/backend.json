@@ -26,9 +26,42 @@
           "type": "string",
           "format": "uri",
           "description": "URL of the user's profile picture."
+        },
+        "friends": {
+          "type": "array",
+          "description": "An array of UIDs of the user's friends.",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": ["uid", "displayName", "email", "username"]
+    },
+    "FriendRequest": {
+      "title": "Friend Request",
+      "description": "Represents a friend request from one user to another.",
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "The UID of the user who sent the request."
+        },
+        "to": {
+          "type": "string",
+          "description": "The UID of the user who received the request."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "accepted", "rejected"],
+          "description": "The status of the friend request."
+        },
+        "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The timestamp when the request was created."
+        }
+      },
+      "required": ["from", "to", "status", "createdAt"]
     }
   },
   "auth": {
@@ -40,6 +73,12 @@
         "$ref": "#/entities/UserProfile"
       },
       "description": "Stores public user profile information."
+    },
+    "/friendRequests/{requestId}": {
+      "schema": {
+        "$ref": "#/entities/FriendRequest"
+      },
+      "description": "Stores all friend requests between users."
     }
   }
 }

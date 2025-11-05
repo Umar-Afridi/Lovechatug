@@ -14,5 +14,14 @@ service cloud.firestore {
     match /users/{document=**} {
       allow list: if request.auth != null;
     }
+
+    match /friendRequests/{requestId} {
+      // Any authenticated user can create a friend request
+      allow create: if request.auth != null;
+      // Only the recipient of the friend request can read, update (accept/reject), or delete it.
+      allow read, update, delete: if request.auth != null && resource.data.to == request.auth.uid;
+      // Allow the sender to list the requests they've sent
+      allow list: if request.auth != null && request.auth.uid == resource.data.from;
+    }
   }
 }

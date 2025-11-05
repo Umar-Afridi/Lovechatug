@@ -23,10 +23,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import type { User as FirebaseUserType } from 'firebase/auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { useToast } from '@/hooks/use-toast';
 
 
 // Mock data, will be replaced with Firebase data
@@ -142,6 +143,7 @@ export default function ChatPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     const handleSearch = async () => {
@@ -197,7 +199,44 @@ export default function ChatPage() {
       .join('');
   };
 
+  const handleAddRequest = async (receiverId: string) => {
+    if (!firestore || !user) {
+        toast({ title: 'Error', description: 'You must be logged in to send a friend request.', variant: 'destructive' });
+        return;
+    }
+
+    const requestsRef = collection(firestore, 'friendRequests');
+    const newRequest = {
+        from: user.uid,
+        to: receiverId,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+    };
+
+    try {
+        await addDoc(requestsRef, newRequest);
+        toast({ title: 'Success', description: 'Friend request sent!' });
+    } catch(err) {
+        console.error("Error sending friend request:", err);
+        const permissionError = new FirestorePermissionError({
+            path: requestsRef.path,
+            operation: 'create',
+            requestResourceData: newRequest
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive' });
+    }
+  };
+
   const renderContent = () => {
+    if (isSearching) {
+      return (
+        <div className="flex h-[calc(100vh-172px)] items-center justify-center text-muted-foreground">
+           <p>Searching...</p>
+         </div>
+      )
+    }
+
     if (searchResults.length > 0) {
       return (
         <ScrollArea className="h-[calc(100vh-172px)]">
@@ -213,7 +252,7 @@ export default function ChatPage() {
                   <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
                 </div>
               </div>
-              <Button size="sm">Add Request</Button>
+              <Button size="sm" onClick={() => handleAddRequest(foundUser.id)}>Add Request</Button>
             </div>
           ))}
         </ScrollArea>

@@ -1,3 +1,12 @@
+export type UserProfile = {
+  uid: string;
+  displayName: string;
+  email: string;
+  username: string;
+  photoURL: string;
+  friends?: string[];
+}
+
 export type User = {
   id: string;
   name: string;
