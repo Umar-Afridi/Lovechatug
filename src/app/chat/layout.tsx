@@ -35,30 +35,30 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useEffect } from 'react';
 import { getRedirectResult } from 'firebase/auth';
+import { useIsMobile } from '@/hooks/use-mobile';
 
-// Main navigation items are now on the chat page itself.
-// The sidebar can be used for secondary navigation or kept minimal.
+
 const menuItems = [
   {
     href: '/chat',
     icon: MessageSquare,
     label: 'Chats',
   },
-  // {
-  //   href: '/chat/groups',
-  //   icon: Users,
-  //   label: 'Groups',
-  // },
-  // {
-  //   href: '/chat/friends',
-  //   icon: UserPlus,
-  //   label: 'Friend Requests',
-  // },
-  // {
-  //   href: '/chat/calls',
-  //   icon: Phone,
-  //   label: 'Call History',
-  // },
+  {
+     href: '/chat/groups',
+     icon: Users,
+     label: 'Groups',
+  },
+  {
+     href: '/chat/friends',
+     icon: UserPlus,
+     label: 'Friend Requests',
+  },
+  {
+     href: '/chat/calls',
+     icon: Phone,
+     label: 'Call History',
+  },
 ];
 
 export default function ChatAppLayout({
@@ -70,18 +70,18 @@ export default function ChatAppLayout({
   const auth = useAuth();
   const { user, loading } = useUser();
   const router = useRouter();
+  const isMobile = useIsMobile();
+  const isChatDetailPage = pathname.includes('/chat/') && pathname.split('/').length > 2;
 
   useEffect(() => {
     if (auth) {
       getRedirectResult(auth)
         .then((result) => {
           if (result) {
-            // User successfully signed in.
             router.push('/chat');
           }
         })
         .catch((error) => {
-          // Handle Errors here.
           console.error('Google sign-in redirect error:', error);
         });
     }
@@ -115,78 +115,99 @@ export default function ChatAppLayout({
       .join('');
   };
 
+  // On mobile, if we are on a chat detail page, we don't want to show the sidebar.
+  // The main layout for mobile will be handled by the pages themselves.
+  if (isMobile) {
+      return (
+        <main>{children}</main>
+      )
+  }
+
   return (
-    <SidebarProvider>
-      <Sidebar side="left" collapsible="icon" className="group">
-        <SidebarHeader>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className="h-12 w-full justify-start gap-2 px-2"
-              >
-                <Avatar className="h-8 w-8">
-                  <AvatarImage
-                    src={user?.photoURL ?? undefined}
-                    alt={user?.displayName ?? 'user-avatar'}
-                  />
-                  <AvatarFallback>
-                    {getInitials(user?.displayName)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
-                  <span className="truncate text-sm font-medium">
-                    {user?.displayName ?? 'User'}
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {user?.email ?? 'No email'}
-                  </span>
-                </div>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="right" align="start">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>Billing</DropdownMenuItem>
-              <DropdownMenuItem>Team</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarMenu>
-            {menuItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <Link href={item.href}>
-                  <SidebarMenuButton
-                    isActive={pathname.startsWith(item.href) && (item.href === '/chat' ? pathname.split('/').length <= 2 : true)}
-                    tooltip={item.label}
-                  >
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarContent>
-        <SidebarFooter>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton tooltip="Settings">
-                <Settings />
-                <span>Settings</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarFooter>
-      </Sidebar>
-      <SidebarInset>{children}</SidebarInset>
-    </SidebarProvider>
+    <div className="flex">
+        <SidebarProvider>
+            <Sidebar side="left" collapsible="icon" className="group">
+                <SidebarHeader>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="h-12 w-full justify-start gap-2 px-2"
+                    >
+                        <Avatar className="h-8 w-8">
+                        <AvatarImage
+                            src={user?.photoURL ?? undefined}
+                            alt={user?.displayName ?? 'user-avatar'}
+                        />
+                        <AvatarFallback>
+                            {getInitials(user?.displayName)}
+                        </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
+                        <span className="truncate text-sm font-medium">
+                            {user?.displayName ?? 'User'}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                            {user?.email ?? 'No email'}
+                        </span>
+                        </div>
+                    </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="right" align="start">
+                    <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem>Profile</DropdownMenuItem>
+                    <DropdownMenuItem>Billing</DropdownMenuItem>
+                    <DropdownMenuItem>Team</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleSignOut}>
+                        <LogOut className="mr-2 h-4 w-4" />
+                        <span>Log out</span>
+                    </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                </SidebarHeader>
+                <SidebarContent>
+                <SidebarMenu>
+                    {menuItems.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                        <Link href={item.href}>
+                        <SidebarMenuButton
+                            isActive={pathname.startsWith(item.href) && (item.href === '/chat' ? pathname.split('/').length <= 2 : true)}
+                            tooltip={item.label}
+                        >
+                            <item.icon />
+                            <span>{item.label}</span>
+                        </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                    ))}
+                </SidebarMenu>
+                </SidebarContent>
+                <SidebarFooter>
+                <SidebarMenu>
+                    <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Settings">
+                        <Settings />
+                        <span>Settings</span>
+                    </SidebarMenuButton>
+                    </SidebarMenuItem>
+                </SidebarMenu>
+                </SidebarFooter>
+            </Sidebar>
+
+             {/* Main Content Area */}
+            <div className={`flex-1 flex ${isChatDetailPage ? '' : 'max-w-[420px] border-r'}`}>
+                {children}
+            </div>
+
+            {/* This area will be used to show the detailed chat view on desktop */}
+            {isChatDetailPage && !isMobile && (
+                 <div className="flex-1 hidden md:flex">
+                     {/* The ChatIdPage will render the ChatDetail component */}
+                 </div>
+            )}
+        </SidebarProvider>
+    </div>
   );
 }

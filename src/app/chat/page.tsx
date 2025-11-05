@@ -1,18 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search, MessageSquare, Users, UserPlus, Phone } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChatDetail } from '@/components/chat/chat-detail';
 import type { Chat } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import GroupsPage from './groups/page';
 import FriendsPage from './friends/page';
 import CallsPage from './calls/page';
-
 
 // Mock data, will be replaced with Firebase data
 const chats: Chat[] = [
@@ -81,8 +80,8 @@ const navigationItems = [
     { name: 'Calls', icon: Phone, content: 'calls' },
 ];
 
-const ChatList = ({ onSelectChat }: { onSelectChat: (chat: Chat) => void }) => {
-    const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+const ChatList = () => {
+    const router = useRouter();
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
 
     return (
@@ -91,14 +90,8 @@ const ChatList = ({ onSelectChat }: { onSelectChat: (chat: Chat) => void }) => {
             {chats.map(chat => (
               <div 
                 key={chat.id} 
-                className={cn(
-                    'flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50',
-                    selectedChatId === chat.id ? 'bg-muted' : ''
-                )}
-                onClick={() => {
-                    setSelectedChatId(chat.id);
-                    onSelectChat(chat);
-                }}
+                className='flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50'
+                onClick={() => router.push(`/chat/${chat.id}`)}
               >
                 <Avatar>
                   <AvatarImage src={chat.participantDetails?.avatar} />
@@ -125,13 +118,12 @@ const ChatList = ({ onSelectChat }: { onSelectChat: (chat: Chat) => void }) => {
 
 
 export default function ChatPage() {
-  const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [activeTab, setActiveTab] = useState('chats');
   
   const renderContent = () => {
     switch (activeTab) {
         case 'chats':
-            return <ChatList onSelectChat={setSelectedChat} />;
+            return <ChatList />;
         case 'groups':
             return <GroupsPage />;
         case 'requests':
@@ -139,13 +131,13 @@ export default function ChatPage() {
         case 'calls':
             return <CallsPage />;
         default:
-            return <ChatList onSelectChat={setSelectedChat} />;
+            return <ChatList />;
     }
   };
 
   return (
     <div className="flex h-screen bg-background">
-      <div className="w-full max-w-sm border-r">
+      <div className="w-full border-r">
         <div className="p-4 space-y-4">
           <h1 className="text-2xl font-bold">Chats</h1>
           <div className="relative">
@@ -162,10 +154,7 @@ export default function ChatPage() {
                         "flex-1 justify-center gap-2 rounded-none",
                         activeTab === item.content ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground'
                     )}
-                    onClick={() => {
-                        setActiveTab(item.content);
-                        setSelectedChat(null); // Deselect chat when changing tabs
-                    }}
+                    onClick={() => setActiveTab(item.content)}
                 >
                     <item.icon className="h-4 w-4" />
                     <span>{item.name}</span>
@@ -173,17 +162,6 @@ export default function ChatPage() {
             ))}
         </div>
         {renderContent()}
-      </div>
-      <div className="flex-1 flex flex-col">
-        {selectedChat && activeTab === 'chats' ? (
-          <ChatDetail chat={selectedChat} />
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <p>
-                {activeTab === 'chats' ? 'Select a chat to start messaging' : ''}
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );
