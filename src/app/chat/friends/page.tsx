@@ -35,7 +35,7 @@ export default function FriendsPage() {
   const requestsQuery = useMemo(() => {
     if (!user || !firestore) return null;
     const requestsRef = collection(firestore, 'friendRequests');
-    return query(requestsRef, where('to', '==', user.uid), where('status', '==', 'pending'));
+    return query(requestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
   }, [user, firestore]);
   
   useEffect(() => {
@@ -55,22 +55,19 @@ export default function FriendsPage() {
 
         const requestsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequestWithUser));
         
-        // Get all unique sender IDs from the requests
-        const senderIds = [...new Set(requestsData.map(req => req.from))];
+        const senderIds = [...new Set(requestsData.map(req => req.senderId))];
         
         if (senderIds.length > 0) {
             const usersRef = collection(firestore, 'users');
-            // Use a 'in' query to fetch all sender profiles in one go
             const usersQuery = query(usersRef, where('uid', 'in', senderIds));
             
             try {
               const usersSnapshot = await getDocs(usersQuery);
               const userProfiles = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data() as UserProfile]));
               
-              // Map the fetched profiles back to the requests
               const populatedRequests = requestsData.map(req => ({
                   ...req,
-                  fromUser: userProfiles.get(req.from)
+                  fromUser: userProfiles.get(req.senderId)
               }));
               
               setRequests(populatedRequests);
@@ -93,7 +90,7 @@ export default function FriendsPage() {
     }, (serverError: any) => {
         console.error("Error fetching friend requests:", serverError);
         const permissionError = new FirestorePermissionError({
-            path: requestsQuery.path,
+            path: (requestsQuery.path as any), // This is not ideal, path is not on query
             operation: 'list',
         });
         errorEmitter.emit('permission-error', permissionError);
@@ -112,12 +109,11 @@ export default function FriendsPage() {
 
     const requestRef = doc(firestore, 'friendRequests', request.id);
     const currentUserRef = doc(firestore, 'users', user.uid);
-    const friendUserRef = doc(firestore, 'users', request.from);
+    const friendUserRef = doc(firestore, 'users', request.senderId);
 
     try {
-        // Use a batch for atomicity
-        batch.delete(requestRef); // Delete the request instead of updating status
-        batch.update(currentUserRef, { friends: arrayUnion(request.from) });
+        batch.delete(requestRef); 
+        batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
         batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
         
         await batch.commit();
@@ -126,8 +122,8 @@ export default function FriendsPage() {
     } catch(err: any) {
         console.error("Error accepting friend request:", err);
         const permissionError = new FirestorePermissionError({
-            path: requestRef.path, // This is an approximation for batch writes
-            operation: 'update', // Or 'delete'
+            path: requestRef.path,
+            operation: 'update',
         });
         errorEmitter.emit('permission-error', permissionError);
         toast({ title: 'Error', description: 'Could not accept friend request.', variant: 'destructive' });

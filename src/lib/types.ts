@@ -19,7 +19,7 @@ export type Message = {
 
 export type Chat = {
   id: string;
-  participants: string[]; // array of user ids
+  members: string[]; // array of user ids
   lastMessage?: {
     content: string;
     timestamp: any; // Firestore ServerTimestamp
@@ -44,8 +44,8 @@ export type Group = {
 
 export type FriendRequest = {
     id: string;
-    from: string; // user id
-    to: string; // user id
+    senderId: string; // user id
+    receiverId: string; // user id
     status: 'pending' | 'accepted' | 'rejected';
 }
 

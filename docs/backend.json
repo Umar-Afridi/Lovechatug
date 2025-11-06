@@ -46,11 +46,11 @@
       "description": "Represents a friend request from one user to another.",
       "type": "object",
       "properties": {
-        "from": {
+        "senderId": {
           "type": "string",
           "description": "The UID of the user who sent the request."
         },
-        "to": {
+        "receiverId": {
           "type": "string",
           "description": "The UID of the user who received the request."
         },
@@ -60,14 +60,14 @@
           "description": "The status of the friend request."
         }
       },
-      "required": ["from", "to", "status"]
+      "required": ["senderId", "receiverId", "status"]
     },
     "Chat": {
       "title": "Chat Room",
       "description": "Represents a conversation between two or more users.",
       "type": "object",
       "properties": {
-        "participants": {
+        "members": {
           "type": "array",
           "items": {
             "type": "string"
@@ -95,7 +95,7 @@
           "description": "The timestamp when the chat was created."
         }
       },
-      "required": ["participants", "createdAt"]
+      "required": ["members", "createdAt"]
     },
     "Message": {
       "title": "Chat Message",

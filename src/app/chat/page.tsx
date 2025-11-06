@@ -16,7 +16,7 @@ import CallsPage from './calls/page';
 import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc, Timestamp, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc, Timestamp, orderBy, setDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
@@ -119,12 +119,12 @@ export default function ChatPage() {
 
     setLoadingChats(true);
     const chatsRef = collection(firestore, 'chats');
-    const q = query(chatsRef, where('participants', 'array-contains', user.uid), orderBy('lastMessage.timestamp', 'desc'));
+    const q = query(chatsRef, where('members', 'array-contains', user.uid), orderBy('lastMessage.timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
         const chatPromises = snapshot.docs.map(async (docSnapshot) => {
             const chatData = docSnapshot.data();
-            const otherParticipantId = chatData.participants.find((p: string) => p !== user.uid);
+            const otherParticipantId = chatData.members.find((p: string) => p !== user.uid);
             
             if (otherParticipantId) {
                 const userDoc = await getDoc(doc(firestore, 'users', otherParticipantId));
@@ -202,49 +202,41 @@ export default function ChatPage() {
         return;
     }
 
-    // Check if they are already friends
     if (profile?.friends?.includes(receiverId)) {
         toast({ title: 'Already Friends', description: 'You are already friends with this user.'});
         return;
     }
 
     const requestsRef = collection(firestore, 'friendRequests');
-    // Check for existing pending request (either way)
-    const q1 = query(requestsRef, where('from', '==', user.uid), where('to', '==', receiverId));
-    const q2 = query(requestsRef, where('from', '==', receiverId), where('to', '==', user.uid));
-
-    const [q1Snap, q2Snap] = await Promise.all([getDocs(q1), getDocs(q2)]);
-
-    if (!q1Snap.empty || !q2Snap.empty) {
-        toast({ title: 'Request Already Exists', description: 'A friend request is already pending or has been dealt with.'});
-        return;
-    }
-
-    const newRequest = {
-        from: user.uid,
-        to: receiverId,
-        status: 'pending',
-    };
+    const q1 = query(requestsRef, where('senderId', '==', user.uid), where('receiverId', '==', receiverId));
+    const q2 = query(requestsRef, where('senderId', '==', receiverId), where('receiverId', '==', user.uid));
 
     try {
+        const [q1Snap, q2Snap] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
+        if (!q1Snap.empty || !q2Snap.empty) {
+            toast({ title: 'Request Already Exists', description: 'A friend request is already pending.'});
+            return;
+        }
+
+        const newRequest = {
+            senderId: user.uid,
+            receiverId: receiverId,
+            status: 'pending' as const,
+        };
+
         const requestDocRef = await addDoc(requestsRef, newRequest);
-        setDoc(requestDocRef, { ...newRequest, createdAt: serverTimestamp() }, { merge: true })
-        .catch(serverError => {
-            const permissionError = new FirestorePermissionError({
-                path: requestDocRef.path,
-                operation: 'create',
-                requestResourceData: { ...newRequest, createdAt: "SERVER_TIMESTAMP" }
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        });
+        // Using set with merge might be redundant if addDoc creates it, but it ensures createdAt is set.
+        await setDoc(requestDocRef, { ...newRequest, createdAt: serverTimestamp() }, { merge: true });
+        
         toast({ title: 'Success', description: 'Friend request sent!' });
-    } catch(err) {
-        // This catch block might be redundant if the one inside setDoc handles it, but good for safety.
+
+    } catch (err: any) {
         console.error("Error sending friend request:", err);
         const permissionError = new FirestorePermissionError({
             path: requestsRef.path,
             operation: 'create',
-            requestResourceData: newRequest
+            requestResourceData: { senderId: user.uid, receiverId: receiverId, status: 'pending' }
         });
         errorEmitter.emit('permission-error', permissionError);
         toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive' });
@@ -316,7 +308,7 @@ export default function ChatPage() {
         {/* Header */}
         <div className="p-4 space-y-4 border-b">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
+            <h1 className="text-2xl font-bold flex items-center gap-2 text-green-500">
                 <span>LoveChat</span>
             </h1>
             <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>

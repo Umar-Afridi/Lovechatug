@@ -144,7 +144,7 @@ export default function ChatAppLayout({
     if (!firestore || !user?.uid) return;
 
     const requestsRef = collection(firestore, 'friendRequests');
-    const q = query(requestsRef, where('to', '==', user.uid), where('status', '==', 'pending'));
+    const q = query(requestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
 
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {

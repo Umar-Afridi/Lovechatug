@@ -17,6 +17,7 @@ import {
   getDocs,
   writeBatch,
   updateDoc,
+  setDoc,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -57,14 +58,14 @@ async function getOrCreateChat(
   if (!chatSnap.exists()) {
     // Create chat if it doesn't exist
     await setDoc(chatRef, {
-      participants: [currentUserId, otherUserId],
+      members: [currentUserId, otherUserId],
       createdAt: serverTimestamp(),
     }).catch(serverError => {
         const permissionError = new FirestorePermissionError({
             path: chatRef.path,
             operation: 'create',
             requestResourceData: {
-                participants: [currentUserId, otherUserId],
+                members: [currentUserId, otherUserId],
             },
         });
         errorEmitter.emit('permission-error', permissionError);
@@ -96,24 +97,34 @@ export default function ChatIdPage({
   useEffect(() => {
     if (!firestore || !user || !otherUserId) return;
 
-    setLoading(true);
-    // Fetch other user's profile
-    const userDocRef = doc(firestore, 'users', otherUserId);
-    getDoc(userDocRef)
-      .then((docSnap) => {
+    const performSetup = async () => {
+      setLoading(true);
+      try {
+        // Fetch other user's profile
+        const userDocRef = doc(firestore, 'users', otherUserId);
+        const docSnap = await getDoc(userDocRef);
+
         if (docSnap.exists()) {
           setOtherUser(docSnap.data() as UserProfile);
         } else {
           toast({ title: 'Error', description: 'User not found.', variant: 'destructive' });
           router.push('/chat');
+          return;
         }
-      })
-      .finally(() => setLoading(false));
 
-    // Determine Chat ID
-    const sortedIds = [user.uid, otherUserId].sort();
-    const determinedChatId = sortedIds.join('_');
-    setChatId(determinedChatId);
+        // Get or create the chat and set the ID
+        const determinedChatId = await getOrCreateChat(firestore, user.uid, otherUserId);
+        setChatId(determinedChatId);
+      } catch (error) {
+        console.error("Error setting up chat page:", error);
+        toast({ title: 'Error', description: 'Could not initialize chat.', variant: 'destructive' });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    performSetup();
+
   }, [firestore, user, otherUserId, router, toast]);
 
   // Real-time listener for messages
@@ -173,11 +184,10 @@ export default function ChatIdPage({
     
     try {
         await addDoc(messagesRef, newMessage);
-        // Also update the lastMessage on the chat document
         await updateDoc(chatRef, {
             lastMessage: {
                 content: newMessage.content,
-                timestamp: newMessage.timestamp,
+                timestamp: serverTimestamp(), // Use server timestamp here as well for consistency
                 senderId: newMessage.senderId
             }
         });
@@ -222,7 +232,6 @@ export default function ChatIdPage({
             </Avatar>
             <div className="flex-1">
             <p className="font-semibold">{otherUser.displayName}</p>
-            {/* Online status removed for simplicity with real-time backend */}
             </div>
             <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon">
