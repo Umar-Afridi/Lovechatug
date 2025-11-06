@@ -98,6 +98,8 @@ export default function ChatIdPage({
   const [loading, setLoading] = useState(true);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
 
   // Fetch other user's profile and determine chat ID
   useEffect(() => {
@@ -182,15 +184,19 @@ export default function ChatIdPage({
       .join('');
   };
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    if (e) e.preventDefault(); // Prevent button from taking focus and hiding keyboard
     if (inputValue.trim() === '' || !firestore || !user || !chatId) return;
 
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
     const chatRef = doc(firestore, 'chats', chatId);
     
+    const contentToSend = inputValue.trim();
+    setInputValue(''); // Clear input immediately for better UX
+    
     const newMessage = {
       senderId: user.uid,
-      content: inputValue.trim(),
+      content: contentToSend,
       timestamp: serverTimestamp(),
       type: 'text' as const,
     };
@@ -218,8 +224,9 @@ export default function ChatIdPage({
         });
         errorEmitter.emit('permission-error', permissionError);
     });
-
-    setInputValue('');
+    
+    // Refocus the input to keep the keyboard open
+    inputRef.current?.focus();
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -249,7 +256,7 @@ export default function ChatIdPage({
             <AvatarFallback>{getInitials(otherUser.displayName)}</AvatarFallback>
             </Avatar>
             <div className="flex-1">
-            <p className="font-semibold">{otherUser.displayName}</p>
+            <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
             </div>
             <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon">
@@ -309,6 +316,7 @@ export default function ChatIdPage({
             <span className="sr-only">Emoji</span>
           </Button>
           <Input 
+            ref={inputRef}
             placeholder="Type a message..." 
             className="pl-12 pr-24"
             value={inputValue}
@@ -324,7 +332,7 @@ export default function ChatIdPage({
               <Mic className="h-5 w-5" />
               <span className="sr-only">Record voice message</span>
             </Button>
-            <Button variant="ghost" size="icon" onClick={handleSendMessage}>
+            <Button variant="ghost" size="icon" onMouseDown={handleSendMessage}>
               <Send className="h-5 w-5" />
               <span className="sr-only">Send</span>
             </Button>
