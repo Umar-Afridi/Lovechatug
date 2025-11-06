@@ -15,7 +15,7 @@ import CallsPage from './calls/page';
 import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc, updateDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
@@ -23,44 +23,13 @@ import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import useEmblaCarousel from 'embla-carousel-react';
 import type { EmblaCarouselType } from 'embla-carousel-react';
+import { ThemeToggle } from '@/components/theme-toggle';
 
-function useUserProfile() {
-  const { user, loading: authLoading } = useUser();
-  const firestore = useFirestore();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user || !firestore) {
-      setLoading(false);
-      return;
-    }
-    const userDocRef = doc(firestore, 'users', user.uid);
-    const unsub = onSnapshot(userDocRef, (doc) => {
-        if (doc.exists()) {
-            setProfile(doc.data() as UserProfile);
-        }
-        setLoading(false);
-    }, (error) => {
-        const permissionError = new FirestorePermissionError({
-            path: userDocRef.path,
-            operation: 'get',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-        setLoading(false);
-    });
-    return () => unsub();
-  }, [user, firestore, authLoading]);
-
-  return { profile, loading };
-}
 
 const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: string }) => {
     const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
     const firestore = useFirestore();
     const [participant, setParticipant] = useState<UserProfile | null>(null);
-
 
     const formatTimestamp = (timestamp: any) => {
       if (!timestamp) return '';
@@ -162,7 +131,8 @@ export default function ChatPage() {
   const [activeTab, setActiveTab] = useState('inbox');
   const firestore = useFirestore();
   const { user } = useUser();
-  const { profile, loading: loadingProfile } = useUserProfile();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -200,30 +170,69 @@ export default function ChatPage() {
     };
   }, [emblaApi, navigationItems]);
   
+  // Fetch user profile
   useEffect(() => {
     if (!user || !firestore) {
-        setLoadingChats(false);
-        return;
+      setLoadingProfile(false);
+      return;
     }
-    
-    setLoadingChats(true);
-    const chatsRef = collection(firestore, 'chats');
-    const q = query(chatsRef, where('members', 'array-contains', user.uid));
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const chatsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
-        setChats(chatsData);
-        setLoadingChats(false);
+    const userDocRef = doc(firestore, 'users', user.uid);
+    const unsub = onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+            setProfile(doc.data() as UserProfile);
+        }
+        setLoadingProfile(false);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: chatsRef.path, operation: 'list' });
+        const permissionError = new FirestorePermissionError({
+            path: userDocRef.path,
+            operation: 'get',
+        });
         errorEmitter.emit('permission-error', permissionError);
-        console.error("Error fetching chats:", error);
-        setLoadingChats(false);
+        setLoadingProfile(false);
     });
+    return () => unsub();
+  }, [user, firestore]);
 
-    return () => unsubscribe();
+  // Fetch chats based on user's chatIds
+  useEffect(() => {
+    if (!firestore || !profile?.chatIds || profile.chatIds.length === 0) {
+      setLoadingChats(false);
+      setChats([]);
+      return;
+    }
 
-}, [user, firestore]);
+    setLoadingChats(true);
+    const chatRefs = profile.chatIds.map(id => doc(firestore, 'chats', id));
+    
+    const unsubscribes = chatRefs.map(chatRef => 
+        onSnapshot(chatRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const newChat = { id: docSnap.id, ...docSnap.data() } as Chat;
+                setChats(currentChats => {
+                    const existingChatIndex = currentChats.findIndex(c => c.id === newChat.id);
+                    if (existingChatIndex > -1) {
+                        const updatedChats = [...currentChats];
+                        updatedChats[existingChatIndex] = newChat;
+                        return updatedChats;
+                    } else {
+                        return [...currentChats, newChat];
+                    }
+                });
+            }
+        }, (error) => {
+             const permissionError = new FirestorePermissionError({
+                path: chatRef.path,
+                operation: 'get',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        })
+    );
+    
+    setLoadingChats(false);
+
+    return () => unsubscribes.forEach(unsub => unsub());
+
+  }, [firestore, profile?.chatIds]);
 
 
    useEffect(() => {
@@ -408,6 +417,7 @@ export default function ChatPage() {
                 <span>Love Chat</span>
             </h1>
             <div className="flex items-center gap-2">
+                 <ThemeToggle />
                  <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
                     <Link href="/settings">
                       <Settings className="h-5 w-5" />
