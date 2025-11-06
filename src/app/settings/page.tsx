@@ -66,16 +66,15 @@ function BlockedUsersList() {
     const handleUnblock = async (blockedUserId: string) => {
         if (!userDocRef) return;
         
+        const payload = { blockedUsers: arrayRemove(blockedUserId) };
         try {
-            await updateDoc(userDocRef, {
-                blockedUsers: arrayRemove(blockedUserId)
-            });
+            await updateDoc(userDocRef, payload);
             toast({ title: "User Unblocked", description: "You can now chat with this user again."});
         } catch (error) {
              const permissionError = new FirestorePermissionError({
                 path: userDocRef.path,
                 operation: 'update',
-                requestResourceData: { blockedUsers: [blockedUserId] }
+                requestResourceData: { blockedUsers: arrayRemove(blockedUserId) }
             });
             errorEmitter.emit('permission-error', permissionError);
         }

@@ -20,6 +20,7 @@ import {
   setDoc,
   arrayUnion,
   deleteDoc,
+  arrayRemove,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -49,6 +50,7 @@ import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { formatDistanceToNow } from 'date-fns';
+import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 
 // Helper to get or create a chat
 async function getOrCreateChat(
@@ -101,6 +103,7 @@ export default function ChatIdPage({
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isContactSheetOpen, setContactSheetOpen] = useState(false);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -214,7 +217,7 @@ export default function ChatIdPage({
       .join('');
   };
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = () => {
     if (inputValue.trim() === '' || !firestore || !user || !chatId) return;
 
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
@@ -263,7 +266,7 @@ export default function ChatIdPage({
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault(); 
         handleSendMessage();
     }
@@ -294,15 +297,11 @@ export default function ChatIdPage({
     }
 
     const currentUserRef = doc(firestore, 'users', user.uid);
-    const chatRef = doc(firestore, 'chats', chatId!);
 
     try {
         await updateDoc(currentUserRef, {
             blockedUsers: arrayUnion(otherUserId)
         });
-        
-        // Optional: Delete the chat locally so it disappears
-        await deleteDoc(chatRef);
         
         toast({ title: "User Blocked", description: `${otherUser?.displayName} has been blocked.` });
         router.push('/chat');
@@ -312,14 +311,53 @@ export default function ChatIdPage({
             const permissionError = new FirestorePermissionError({
                 path: currentUserRef.path,
                 operation: 'update',
-                requestResourceData: { blockedUsers: [otherUserId] }
+                requestResourceData: { blockedUsers: arrayUnion(otherUserId) }
             });
             errorEmitter.emit('permission-error', permissionError);
         } else {
+            console.error("Error blocking user:", error);
             toast({ title: "Error", description: "Could not block user.", variant: "destructive" });
         }
     }
   };
+
+  const handleUnfriend = async () => {
+    if (!firestore || !user || !otherUserId || !chatId) {
+      toast({ title: "Error", description: "Cannot unfriend user. Please try again.", variant: "destructive" });
+      return;
+    }
+  
+    const currentUserRef = doc(firestore, 'users', user.uid);
+    const otherUserRef = doc(firestore, 'users', otherUserId);
+    const chatRef = doc(firestore, 'chats', chatId);
+  
+    const batch = writeBatch(firestore);
+  
+    // Remove each other from friends lists
+    batch.update(currentUserRef, { friends: arrayRemove(otherUserId) });
+    batch.update(otherUserRef, { friends: arrayRemove(user.uid) });
+  
+    // Delete the chat document
+    batch.delete(chatRef);
+  
+    try {
+      await batch.commit();
+      toast({ title: "Unfriended", description: `You are no longer friends with ${otherUser?.displayName}.` });
+      router.push('/chat');
+    } catch (error: any) {
+       if (error.code === 'permission-denied') {
+            const permissionError = new FirestorePermissionError({
+                path: `batch operation for unfriend`,
+                operation: 'update',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        } else {
+            console.error("Error unfriending user:", error);
+            toast({ title: "Error", description: "Could not unfriend user.", variant: "destructive" });
+        }
+    }
+  };
+
 
   if (loading || !otherUser) {
     return (
@@ -330,6 +368,12 @@ export default function ChatIdPage({
   }
 
   return (
+    <>
+    <ContactProfileSheet 
+        isOpen={isContactSheetOpen} 
+        onOpenChange={setContactSheetOpen}
+        userProfile={otherUser}
+    />
     <div className="flex h-screen flex-col">
        {/* Chat Header */}
         <header className="flex items-center gap-4 border-b bg-muted/40 px-4 py-3">
@@ -364,10 +408,15 @@ export default function ChatIdPage({
                 </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                <DropdownMenuItem>View Contact</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setContactSheetOpen(true)}>
+                    View Contact
+                </DropdownMenuItem>
                 <Separator />
                 <DropdownMenuItem className="text-destructive" onClick={handleBlockUser}>
                     Block User
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-destructive" onClick={handleUnfriend}>
+                    Unfriend
                 </DropdownMenuItem>
                 <DropdownMenuItem>Clear Chat</DropdownMenuItem>
                 </DropdownMenuContent>
@@ -439,5 +488,6 @@ export default function ChatIdPage({
         </div>
       </footer>
     </div>
+    </>
   );
 }
