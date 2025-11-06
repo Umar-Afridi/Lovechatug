@@ -50,16 +50,16 @@ export default function ProfilePage() {
       });
     }
   }, [user, firestore]);
+  
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/');
+    }
+  }, [loading, user, router]);
 
 
-  if (loading) {
+  if (loading || !user) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
-  }
-
-  if (!user) {
-    // This should be handled by the layout, but as a fallback
-    router.push('/');
-    return null;
   }
   
   const getInitials = (name: string | null | undefined) => {
