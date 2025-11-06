@@ -8,6 +8,7 @@ export type UserProfile = {
   bio?: string;
   isOnline?: boolean;
   lastSeen?: any;
+  blockedUsers?: string[];
 }
 
 export type Message = {

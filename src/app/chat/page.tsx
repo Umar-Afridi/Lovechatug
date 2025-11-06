@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, MessageSquare, Users, UserPlus, Phone, GalleryHorizontal } from 'lucide-react';
+import { Search, MessageSquare, Users, UserPlus, Phone, GalleryHorizontal, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -56,7 +56,7 @@ function useUserProfile() {
 }
 
 
-const ChatList = ({ chats }: { chats: Chat[] }) => {
+const ChatList = ({ chats, blockedUsers }: { chats: Chat[], blockedUsers: string[] }) => {
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
 
     const formatTimestamp = (timestamp: any) => {
@@ -65,8 +65,10 @@ const ChatList = ({ chats }: { chats: Chat[] }) => {
       const date = timestamp.toDate();
       return formatDistanceToNow(date, { addSuffix: true });
     };
+    
+    const filteredChats = chats.filter(chat => !blockedUsers.includes(chat.participantDetails?.id ?? ''));
 
-    if (chats.length === 0) {
+    if (filteredChats.length === 0) {
       return (
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
            <p>No chats yet. Find friends and start a conversation!</p>
@@ -77,7 +79,7 @@ const ChatList = ({ chats }: { chats: Chat[] }) => {
     return (
         <ScrollArea className="flex-1">
           <div className="flex flex-col">
-            {chats.map(chat => (
+            {filteredChats.map(chat => (
               <Link href={`/chat/${chat.participantDetails?.id}`} key={chat.id}>
                 <div 
                   className='flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50'
@@ -323,7 +325,7 @@ export default function ChatPage() {
     
     switch(activeTab) {
         case 'inbox':
-            return loadingChats || loadingProfile ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} />;
+            return loadingChats || loadingProfile ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} blockedUsers={profile?.blockedUsers ?? []} />;
         case 'groups':
             return <GroupsPage />;
         case 'stories':
@@ -333,7 +335,7 @@ export default function ChatPage() {
         case 'calls':
             return <CallsPage />;
         default:
-            return <ChatList chats={chats} />;
+            return <ChatList chats={chats} blockedUsers={profile?.blockedUsers ?? []} />;
     }
   }
 
@@ -346,19 +348,26 @@ export default function ChatPage() {
             <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
                 <span>Love Chat</span>
             </h1>
-            <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
-                <Link href="/profile">
-                  <Avatar className="h-10 w-10">
-                    <AvatarImage
-                        src={profile?.photoURL ?? undefined}
-                        alt={profile?.displayName ?? 'user-avatar'}
-                    />
-                    <AvatarFallback>
-                        {getInitials(profile?.displayName)}
-                    </AvatarFallback>
-                  </Avatar>
-                </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+                 <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
+                    <Link href="/settings">
+                      <Settings className="h-5 w-5" />
+                    </Link>
+                </Button>
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
+                    <Link href="/profile">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage
+                            src={profile?.photoURL ?? undefined}
+                            alt={profile?.displayName ?? 'user-avatar'}
+                        />
+                        <AvatarFallback>
+                            {getInitials(profile?.displayName)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Link>
+                </Button>
+            </div>
           </div>
           <form onSubmit={handleSearch} className="relative flex items-center">
             <Input 

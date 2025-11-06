@@ -46,6 +46,13 @@
             "type": "string",
             "format": "date-time",
             "description": "The last time the user was seen online."
+        },
+        "blockedUsers": {
+          "type": "array",
+          "description": "An array of UIDs of users that this user has blocked.",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": ["uid", "displayName", "email", "username"]

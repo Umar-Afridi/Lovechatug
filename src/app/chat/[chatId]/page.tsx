@@ -18,6 +18,8 @@ import {
   writeBatch,
   updateDoc,
   setDoc,
+  arrayUnion,
+  deleteDoc,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -284,6 +286,40 @@ export default function ChatIdPage({
       const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
       return `Last seen ${formatDistanceToNow(date, { addSuffix: true })}`;
   };
+  
+  const handleBlockUser = async () => {
+    if (!firestore || !user || !otherUserId) {
+        toast({ title: "Error", description: "Cannot block user. Please try again.", variant: "destructive" });
+        return;
+    }
+
+    const currentUserRef = doc(firestore, 'users', user.uid);
+    const chatRef = doc(firestore, 'chats', chatId!);
+
+    try {
+        await updateDoc(currentUserRef, {
+            blockedUsers: arrayUnion(otherUserId)
+        });
+        
+        // Optional: Delete the chat locally so it disappears
+        await deleteDoc(chatRef);
+        
+        toast({ title: "User Blocked", description: `${otherUser?.displayName} has been blocked.` });
+        router.push('/chat');
+
+    } catch (error: any) {
+        if (error.code === 'permission-denied') {
+            const permissionError = new FirestorePermissionError({
+                path: currentUserRef.path,
+                operation: 'update',
+                requestResourceData: { blockedUsers: [otherUserId] }
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        } else {
+            toast({ title: "Error", description: "Could not block user.", variant: "destructive" });
+        }
+    }
+  };
 
   if (loading || !otherUser) {
     return (
@@ -330,7 +366,7 @@ export default function ChatIdPage({
                 <DropdownMenuContent align="end">
                 <DropdownMenuItem>View Contact</DropdownMenuItem>
                 <Separator />
-                <DropdownMenuItem className="text-destructive">
+                <DropdownMenuItem className="text-destructive" onClick={handleBlockUser}>
                     Block User
                 </DropdownMenuItem>
                 <DropdownMenuItem>Clear Chat</DropdownMenuItem>

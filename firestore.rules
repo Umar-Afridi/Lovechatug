@@ -41,8 +41,17 @@ service cloud.firestore {
         allow create: if isAuthenticated() && request.resource.data.members.hasAny([request.auth.uid]);
         
         match /messages/{messageId} {
+            function isNotBlocked(chatId) {
+              let receiverId = get(/databases/$(database)/documents/chats/$(chatId)).data.members.remove(request.auth.uid)[0];
+              let receiverProfile = get(/databases/$(database)/documents/users/$(receiverId)).data;
+              return !(request.auth.uid in receiverProfile.blockedUsers);
+            }
+
             allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
-            allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+            allow create: if isAuthenticated() 
+                          && request.resource.data.senderId == request.auth.uid 
+                          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members
+                          && isNotBlocked(chatId);
             
             // Allow receiver to update the status of the message to 'read'.
             allow update: if isAuthenticated() 
