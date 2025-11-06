@@ -43,7 +43,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { getDatabase, ref, onValue, off, goOnline, goOffline, onDisconnect, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
+import { getDatabase, ref, onValue, off, goOnline, goOffline, onDisconnect, serverTimestamp as rtdbServerTimestamp, set } from 'firebase/database';
 
 
 // Custom hook to get user profile data in real-time
@@ -120,7 +120,7 @@ function usePresence() {
         onDisconnect(userStatusDatabaseRef).set(presenceData);
 
         // When the client connects, set their Realtime Database status
-        setDoc(userStatusDatabaseRef as any, { isOnline: true, lastSeen: rtdbServerTimestamp() });
+        set(userStatusDatabaseRef, { isOnline: true, lastSeen: rtdbServerTimestamp() });
         goOnline(db);
       }
     });
