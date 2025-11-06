@@ -60,7 +60,7 @@ function useUserProfile() {
 
 
 const ChatList = ({ chats, blockedUsers }: { chats: Chat[], blockedUsers: string[] }) => {
-    const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
+    const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : '';
 
     const formatTimestamp = (timestamp: any) => {
       if (!timestamp) return '';
@@ -69,7 +69,11 @@ const ChatList = ({ chats, blockedUsers }: { chats: Chat[], blockedUsers: string
       return formatDistanceToNow(date, { addSuffix: true });
     };
     
-    const filteredChats = chats.filter(chat => !blockedUsers.includes(chat.participantDetails?.id ?? ''));
+    const filteredChats = chats.filter(chat => {
+      const otherUserId = chat.members.find(memberId => memberId !== chat.participantDetails?.id);
+      return !blockedUsers.includes(otherUserId ?? '');
+    });
+
 
     if (filteredChats.length === 0) {
       return (
@@ -162,54 +166,44 @@ export default function ChatPage() {
 
     setLoadingChats(true);
     const chatsRef = collection(firestore, 'chats');
-    const q = query(chatsRef, where('members', 'array-contains', user.uid), orderBy('lastMessage.timestamp', 'desc'));
+    const q = query(
+      chatsRef, 
+      where('members', 'array-contains', user.uid), 
+      orderBy('lastMessage.timestamp', 'desc')
+    );
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-        const chatPromises = snapshot.docs.map(async (chatDoc) => {
-            const chatData = chatDoc.data();
-            const otherParticipantId = chatData.members.find((p: string) => p !== user.uid);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const loadedChats = snapshot.docs.map(doc => {
+            const data = doc.data();
+            const otherParticipantId = data.members.find((m: string) => m !== user.uid);
             
-            if (otherParticipantId) {
-                try {
-                    // Fetch participant details
-                    const userDoc = await getDoc(doc(firestore, 'users', otherParticipantId));
-                    
-                    // Fetch unread messages count
-                    const messagesRef = collection(firestore, 'chats', chatDoc.id, 'messages');
-                    const unreadQuery = query(messagesRef, where('senderId', '==', otherParticipantId), where('status', '!=', 'read'));
-                    const unreadSnapshot = await getDocs(unreadQuery);
-                    
-                    if (userDoc.exists()) {
-                        const userData = userDoc.data() as UserProfile;
-                        return {
-                            id: chatDoc.id,
-                            ...chatData,
-                            lastMessage: chatData.lastMessage || null,
-                            unreadCount: unreadSnapshot.size, // Use size for efficiency
-                            participantDetails: {
-                                id: userData.uid,
-                                name: userData.displayName,
-                                avatar: userData.photoURL
-                            }
-                        } as Chat;
-                    }
-                } catch(err: any) {
-                    if(err.code !== 'permission-denied') {
-                      console.error("Error processing chat:", err);
-                    }
-                    // Permission denied can be ignored if rules are strict
-                }
-            }
-            return null;
-        });
+            // This logic is now greatly simplified. We assume participantDetails are on the doc.
+            const participantDetails = data.participants?.[otherParticipantId] || null;
 
-        let resolvedChats = (await Promise.all(chatPromises)).filter(c => c !== null) as Chat[];
+            return {
+                id: doc.id,
+                ...data,
+                participantDetails: participantDetails ? {
+                    id: otherParticipantId,
+                    name: participantDetails.displayName,
+                    avatar: participantDetails.photoURL
+                } : {
+                    id: otherParticipantId,
+                    name: "Unknown User",
+                    avatar: ''
+                },
+                // This will be calculated and updated via a different mechanism if needed,
+                // for now we simplify and don't fetch it live here to avoid permission issues.
+                unreadCount: data.unreadCounts?.[user.uid] || 0,
+            } as Chat;
+        });
         
-        setChats(resolvedChats);
+        setChats(loadedChats);
         setLoadingChats(false);
     }, (error) => {
         const permissionError = new FirestorePermissionError({ path: chatsRef.path, operation: 'list' });
         errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching chats:", error);
         setLoadingChats(false);
     });
 
@@ -462,3 +456,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    

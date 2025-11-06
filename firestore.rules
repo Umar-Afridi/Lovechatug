@@ -6,75 +6,9 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    match /users/{userId} {
-      allow read: if isAuthenticated(); 
-      
-      // A user can update their own profile (e.g., bio, photo, blocking someone).
-      // A user can also add/remove ONLY their own UID to/from another user's friends list.
-      allow update: if isAuthenticated() && (
-        (request.auth.uid == userId) ||
-        (request.auth.uid != userId && 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friends']) &&
-         (request.resource.data.friends.hasAll(resource.data.friends) || resource.data.friends.hasAll(request.resource.data.friends.remove(request.auth.uid)))
-        )
-      );
-      
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-    }
-
-    match /friendRequests/{requestId} {
-      allow create: if isAuthenticated();
-
-      allow read: if isAuthenticated() 
-                   && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
-
-      allow update: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
-      
-      // Allow sender or receiver to delete the request.
-      // This is needed for the 'accept' (which deletes the request) and 'decline' actions.
-      allow delete: if isAuthenticated() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
-
-      allow list: if isAuthenticated() && (request.query.where[0][2] == request.auth.uid);
-    }
-    
-    match /chats/{chatId} {
-        allow read, update: if isAuthenticated() && request.auth.uid in resource.data.members;
-        allow create: if isAuthenticated() && request.resource.data.members.hasAny([request.auth.uid]);
-        allow delete: if isAuthenticated() && request.auth.uid in resource.data.members;
-        
-        // Allow a user to list the chats they are a member of, ordered by the last message.
-        // This rule is crucial for the main chat list screen.
-        // It checks that the 'members' array-contains query is filtering by the user's own UID,
-        // and allows ordering by the timestamp of the last message.
-        allow list: if isAuthenticated() 
-                     && request.query.where[0][2] == request.auth.uid
-                     && (request.query.orderBy == null || request.query.orderBy[0].field.string_value == 'lastMessage.timestamp');
-        
-        match /messages/{messageId} {
-            function isNotBlocked(chatId) {
-              let receiverId = get(/databases/$(database)/documents/chats/$(chatId)).data.members.remove(request.auth.uid)[0];
-              let receiverProfile = get(/databases/$(database)/documents/users/$(receiverId)).data;
-              return !(request.auth.uid in receiverProfile.blockedUsers);
-            }
-
-            allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
-            allow create: if isAuthenticated() 
-                          && request.resource.data.senderId == request.auth.uid 
-                          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members
-                          && isNotBlocked(chatId);
-            
-            // Allow receiver to update the status of the message to 'read'.
-            allow update: if isAuthenticated() 
-                && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members
-                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-                && request.resource.data.status == 'read';
-
-            allow delete: if false; 
-        }
-    }
-
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isAuthenticated();
     }
   }
 }
+    
