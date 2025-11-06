@@ -13,14 +13,9 @@ import {
   serverTimestamp,
   doc,
   getDoc,
-  where,
-  getDocs,
   writeBatch,
   updateDoc,
   setDoc,
-  arrayUnion,
-  deleteDoc,
-  arrayRemove,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -44,18 +39,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
-  DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu';
-import { Separator } from '@/components/ui/separator';
 import type { Message as MessageType, UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { formatDistanceToNow } from 'date-fns';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
+import Link from 'next/link';
 
 // Helper to get or create a chat
 async function getOrCreateChat(
@@ -295,75 +286,6 @@ export default function ChatIdPage({
       return `Last seen ${formatDistanceToNow(date, { addSuffix: true })}`;
   };
   
-  const handleBlockUser = async () => {
-    if (!firestore || !user || !otherUserId) {
-        toast({ title: "Error", description: "Cannot block user. Please try again.", variant: "destructive" });
-        return;
-    }
-
-    const currentUserRef = doc(firestore, 'users', user.uid);
-
-    try {
-        await updateDoc(currentUserRef, {
-            blockedUsers: arrayUnion(otherUserId)
-        });
-        
-        toast({ title: "User Blocked", description: `${otherUser?.displayName} has been blocked.` });
-        router.push('/chat');
-
-    } catch (error: any) {
-        if (error.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-                path: currentUserRef.path,
-                operation: 'update',
-                requestResourceData: { blockedUsers: arrayUnion(otherUserId) }
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        } else {
-            console.error("Error blocking user:", error);
-            toast({ title: "Error", description: "Could not block user.", variant: "destructive" });
-        }
-    }
-  };
-
-  const handleUnfriend = async () => {
-    if (!firestore || !user || !otherUserId || !chatId) {
-      toast({ title: "Error", description: "Cannot unfriend user. Please try again.", variant: "destructive" });
-      return;
-    }
-  
-    const currentUserRef = doc(firestore, 'users', user.uid);
-    const otherUserRef = doc(firestore, 'users', otherUserId);
-    const chatRef = doc(firestore, 'chats', chatId);
-  
-    const batch = writeBatch(firestore);
-  
-    // Remove each other from friends lists
-    batch.update(currentUserRef, { friends: arrayRemove(otherUserId) });
-    batch.update(otherUserRef, { friends: arrayRemove(user.uid) });
-  
-    // Delete the chat document
-    batch.delete(chatRef);
-  
-    try {
-      await batch.commit();
-      toast({ title: "Unfriended", description: `You are no longer friends with ${otherUser?.displayName}.` });
-      router.push('/chat');
-    } catch (error: any) {
-       if (error.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-                path: `batch operation for unfriend`,
-                operation: 'update',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        } else {
-            console.error("Error unfriending user:", error);
-            toast({ title: "Error", description: "Could not unfriend user.", variant: "destructive" });
-        }
-    }
-  };
-
-
   if (loading || !otherUser) {
     return (
       <div className="flex h-screen flex-col items-center justify-center">
@@ -418,27 +340,12 @@ export default function ChatIdPage({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>More settings</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuPortal>
-                    <DropdownMenuSubContent>
-                      <DropdownMenuItem onClick={() => setContactSheetOpen(true)}>
-                        View Contact
-                      </DropdownMenuItem>
-                      <Separator />
-                      <DropdownMenuItem className="text-destructive" onClick={handleBlockUser}>
-                        Block User
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive" onClick={handleUnfriend}>
-                        Unfriend
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>Clear Chat</DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuPortal>
-                </DropdownMenuSub>
+                 <DropdownMenuItem asChild>
+                    <Link href={`/chat/${otherUserId}/settings`}>
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>More settings</span>
+                    </Link>
+                  </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             </div>
