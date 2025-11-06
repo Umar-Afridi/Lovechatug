@@ -15,7 +15,17 @@ service cloud.firestore {
                     && request.resource.data.status == 'pending';
                     
       allow read, update, delete: if request.auth != null && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
-      allow list: if request.auth != null && request.query.where[0][2] == request.auth.uid && request.query.where[1][2] == 'pending';
+      
+      // Allow a user to list pending requests sent to them.
+      // This is for the notification badge.
+      // The query must be `where('to', '==', uid).where('status', '==', 'pending')`
+      allow list: if request.auth != null 
+                  && request.query.where[0][0] == 'to'
+                  && request.query.where[0][1] == '=='
+                  && request.query.where[0][2] == request.auth.uid
+                  && request.query.where[1][0] == 'status'
+                  && request.query.where[1][1] == '=='
+                  && request.query.where[1][2] == 'pending';
     }
   }
 }
