@@ -30,7 +30,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -98,7 +98,7 @@ export default function ChatIdPage({
   const [loading, setLoading] = useState(true);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
 
   // Fetch other user's profile and determine chat ID
@@ -184,7 +184,7 @@ export default function ChatIdPage({
       .join('');
   };
 
-  const handleSendMessage = async (e?: React.MouseEvent<HTMLButtonElement>) => {
+  const handleSendMessage = async (e?: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e) e.preventDefault(); // Prevent button from taking focus and hiding keyboard
     if (inputValue.trim() === '' || !firestore || !user || !chatId) return;
 
@@ -229,10 +229,12 @@ export default function ChatIdPage({
     inputRef.current?.focus();
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSendMessage();
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault(); // Prevent new line on Enter alone
+        handleSendMessage(e);
     }
+    // Shift+Enter will create a new line by default in a textarea
   };
   
   if (loading || !otherUser) {
@@ -301,7 +303,7 @@ export default function ChatIdPage({
                             : 'bg-muted'
                         }`}
                     >
-                        {msg.content}
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
                     </div>
                 </div>
             ))}
@@ -311,19 +313,25 @@ export default function ChatIdPage({
       {/* Message Input */}
       <footer className="border-t bg-muted/40 p-4">
         <div className="relative flex items-center">
-          <Button variant="ghost" size="icon" className="absolute left-1">
+          <Button variant="ghost" size="icon" className="absolute left-1 bottom-3">
             <Smile className="h-5 w-5" />
             <span className="sr-only">Emoji</span>
           </Button>
-          <Input 
+          <Textarea 
             ref={inputRef}
             placeholder="Type a message..." 
-            className="pl-12 pr-24"
+            className="pl-12 pr-24 resize-none min-h-[40px] max-h-[120px] py-2"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
+            rows={1}
+            onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = 'auto';
+                target.style.height = `${target.scrollHeight}px`;
+            }}
           />
-          <div className="absolute right-1 flex items-center">
+          <div className="absolute right-1 bottom-1 flex items-center">
             <Button variant="ghost" size="icon">
               <Paperclip className="h-5 w-5" />
               <span className="sr-only">Attach file</span>
@@ -332,7 +340,7 @@ export default function ChatIdPage({
               <Mic className="h-5 w-5" />
               <span className="sr-only">Record voice message</span>
             </Button>
-            <Button variant="ghost" size="icon" onMouseDown={handleSendMessage}>
+            <Button variant="ghost" size="icon" onMouseDown={(e) => handleSendMessage(e as any)}>
               <Send className="h-5 w-5" />
               <span className="sr-only">Send</span>
             </Button>
@@ -342,3 +350,5 @@ export default function ChatIdPage({
     </div>
   );
 }
+
+    
