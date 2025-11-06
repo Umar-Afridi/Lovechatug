@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, getDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, getDoc, arrayUnion, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -27,42 +27,57 @@ export default function FriendsPage() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (!user || !firestore) return;
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return 'U';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('');
+  };
 
+  const fetchRequestSenders = useCallback(async (requestsData: FriendRequest[]) => {
+      if (!firestore) return;
+      const requestsWithUsers: FriendRequest[] = [];
+      for (const request of requestsData) {
+          const userRef = doc(firestore, 'users', request.from);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists()) {
+              requestsWithUsers.push({ ...request, fromUser: userSnap.data() as UserProfile });
+          } else {
+              // Handle case where sender's profile might not exist
+              requestsWithUsers.push(request);
+          }
+      }
+      setRequests(requestsWithUsers);
+      setLoading(false);
+  }, [firestore]);
+
+
+  useEffect(() => {
+    if (!user || !firestore) {
+      setLoading(false);
+      return;
+    };
+
+    setLoading(true);
     const requestsRef = collection(firestore, 'friendRequests');
     const q = query(requestsRef, where('to', '==', user.uid), where('status', '==', 'pending'));
 
-    const fetchRequests = async () => {
-        try {
-            const querySnapshot = await getDocs(q);
-            const requestsData: FriendRequest[] = [];
-            for (const docSnap of querySnapshot.docs) {
-                const request = { id: docSnap.id, ...docSnap.data() } as FriendRequest;
-                
-                // Fetch sender's profile
-                const userRef = doc(firestore, 'users', request.from);
-                const userSnap = await getDoc(userRef);
-                if(userSnap.exists()){
-                    request.fromUser = userSnap.data() as UserProfile;
-                }
-                requestsData.push(request);
-            }
-            setRequests(requestsData);
-        } catch (serverError: any) {
-            const permissionError = new FirestorePermissionError({
-                path: requestsRef.path,
-                operation: 'list',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        } finally {
-            setLoading(false);
-        }
-    };
-    
-    fetchRequests();
+    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+        const requestsData = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as FriendRequest));
+        await fetchRequestSenders(requestsData);
+    }, (serverError: any) => {
+        const permissionError = new FirestorePermissionError({
+            path: requestsRef.path,
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        setLoading(false);
+    });
 
-  }, [user, firestore, toast]);
+    return () => unsubscribe();
+
+  }, [user, firestore, fetchRequestSenders]);
 
   const handleAccept = async (request: FriendRequest) => {
     if (!firestore || !user) return;
@@ -72,17 +87,17 @@ export default function FriendsPage() {
     const friendUserRef = doc(firestore, 'users', request.from);
 
     try {
-        // Use batch writes for atomicity in a real app, but for now this is fine.
+        // In a real production app, use batched writes or a transaction for atomicity.
         
-        // Update request status
+        // 1. Update request status to 'accepted'
         await updateDoc(requestRef, { status: 'accepted' });
 
-        // Add each user to the other's friend list
+        // 2. Add each user to the other's friend list
         await updateDoc(currentUserRef, { friends: arrayUnion(request.from) });
         await updateDoc(friendUserRef, { friends: arrayUnion(user.uid) });
         
         toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser?.displayName}.` });
-        setRequests(prev => prev.filter(r => r.id !== request.id));
+        // The list will update automatically due to the onSnapshot listener
     } catch(err: any) {
         console.error("Error accepting friend request:", err);
         // More specific error handling could be added here
@@ -95,23 +110,15 @@ export default function FriendsPage() {
     const requestRef = doc(firestore, 'friendRequests', requestId);
     try {
         // You can either delete the request or set its status to 'rejected'
-        await updateDoc(requestRef, { status: 'rejected' });
+        // Setting to rejected can be useful for tracking, but for this app, we'll delete it.
+        await deleteDoc(requestRef);
         toast({ title: 'Request Declined' });
-        setRequests(prev => prev.filter(r => r.id !== requestId));
+         // The list will update automatically due to the onSnapshot listener
     } catch(err: any) {
         console.error("Error declining friend request:", err);
         toast({ title: 'Error', description: 'Could not decline friend request.', variant: 'destructive' });
     }
   };
-
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return 'U';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('');
-  };
-
 
   if (loading) {
     return <div className="flex h-full items-center justify-center text-muted-foreground"><p>Loading requests...</p></div>;

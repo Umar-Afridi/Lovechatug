@@ -16,10 +16,37 @@ import CallsPage from './calls/page';
 import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
+
+// Custom hook to get user profile data in real-time
+function useUserProfile() {
+  const { user, loading: authLoading } = useUser();
+  const firestore = useFirestore();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user || !firestore) {
+      setLoading(false);
+      return;
+    }
+    const unsub = onSnapshot(doc(firestore, 'users', user.uid), (doc) => {
+        if (doc.exists()) {
+            setProfile(doc.data() as UserProfile);
+        }
+        setLoading(false);
+    }, (error) => {
+        console.error("Error fetching user profile:", error);
+        setLoading(false);
+    });
+    return () => unsub();
+  }, [user, firestore]);
+
+  return { profile, loading };
+}
 
 
 const ChatList = ({ chats }: { chats: Chat[] }) => {
@@ -70,55 +97,55 @@ export default function ChatPage() {
   const [activeTab, setActiveTab] = useState('chats');
   const firestore = useFirestore();
   const { user } = useUser();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  const { profile, loading: loadingProfile } = useUserProfile();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [loadingChats, setLoadingChats] = useState(true);
   const { toast } = useToast();
 
-  // Fetch user profile
-  useEffect(() => {
-    if (!user || !firestore) return;
-    const unsub = onSnapshot(doc(firestore, 'users', user.uid), (doc) => {
-        if (doc.exists()) {
-            setProfile(doc.data() as UserProfile);
-        }
-        setLoadingProfile(false);
-    });
-    return () => unsub();
-  }, [user, firestore]);
-
-  // Fetch user's chats
+   // Fetch user's chats based on friends list
    useEffect(() => {
-    if (!user || !firestore || !profile?.friends) return;
+    if (!user || !firestore || !profile) return;
 
+    // If there are no friends, don't proceed.
+    if (!profile.friends || profile.friends.length === 0) {
+        setChats([]);
+        setLoadingChats(false);
+        return;
+    }
+    
     setLoadingChats(true);
-    const friendProfiles: Promise<UserProfile | null>[] = profile.friends.map(async (friendId) => {
-      const userDoc = await getDoc(doc(firestore, 'users', friendId));
-      return userDoc.exists() ? userDoc.data() as UserProfile : null;
-    });
+    
+    const fetchFriendProfiles = async () => {
+        const friendPromises = profile.friends!.map(friendId => getDoc(doc(firestore, 'users', friendId)));
+        const friendDocs = await Promise.all(friendPromises);
+        
+        const validFriends = friendDocs
+            .filter(doc => doc.exists())
+            .map(doc => doc.data() as UserProfile);
 
-    Promise.all(friendProfiles).then(friends => {
-      const validFriends = friends.filter(f => f !== null) as UserProfile[];
-      const chatData: Chat[] = validFriends.map(friend => ({
-        id: friend.uid, // Use friend's UID as chat ID for simplicity
-        participants: [user.uid, friend.uid],
-        messages: [], // In a real app, you'd fetch last message
-        unreadCount: 0, // In a real app, you'd calculate this
-        participantDetails: {
-          id: friend.uid,
-          name: friend.displayName,
-          avatar: friend.photoURL,
-          online: false, // Placeholder
-        },
-      }));
-      setChats(chatData);
-      setLoadingChats(false);
-    });
+        const chatData: Chat[] = validFriends.map(friend => ({
+            id: friend.uid, // Use friend's UID as chat ID for simplicity in this demo
+            participants: [user.uid, friend.uid],
+            messages: [], // In a real app, you'd fetch the last message
+            unreadCount: 0, // In a real app, you'd calculate this
+            participantDetails: {
+                id: friend.uid,
+                name: friend.displayName,
+                avatar: friend.photoURL,
+                online: false, // Placeholder, a real app would use presence
+            },
+        }));
+        
+        setChats(chatData);
+        setLoadingChats(false);
+    };
 
-  }, [user, firestore, profile?.friends]);
+    fetchFriendProfiles();
+    
+    // The dependency array includes profile, so this effect re-runs when the profile (and friends list) changes.
+  }, [user, firestore, profile]);
 
 
   const handleSearch = async () => {
@@ -132,19 +159,20 @@ export default function ChatPage() {
         // Search by username only
         const q = query(usersRef, where('username', '==', searchQuery.toLowerCase()));
         
-        getDocs(q).then((querySnapshot) => {
-            const filteredUsers = querySnapshot.docs
+        try {
+          const querySnapshot = await getDocs(q);
+          const filteredUsers = querySnapshot.docs
                 .map(doc => doc.data() as UserProfile)
                 .filter(u => u.uid !== user.uid); // Exclude self from search results
             
-            setSearchResults(filteredUsers);
-        }).catch((serverError) => {
+          setSearchResults(filteredUsers);
+        } catch (serverError) {
             const permissionError = new FirestorePermissionError({
                 path: usersRef.path,
                 operation: 'list',
             });
             errorEmitter.emit('permission-error', permissionError);
-        });
+        }
       }
     };
 
@@ -162,7 +190,24 @@ export default function ChatPage() {
         return;
     }
 
+    // Check if a request already exists or if they are already friends
+    if (profile?.friends?.includes(receiverId)) {
+        toast({ title: 'Already Friends', description: 'You are already friends with this user.'});
+        return;
+    }
+
     const requestsRef = collection(firestore, 'friendRequests');
+    // Check for existing pending request (either way)
+    const q1 = query(requestsRef, where('from', '==', user.uid), where('to', '==', receiverId), where('status', '==', 'pending'));
+    const q2 = query(requestsRef, where('from', '==', receiverId), where('to', '==', user.uid), where('status', '==', 'pending'));
+
+    const [q1Snap, q2Snap] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
+    if (!q1Snap.empty || !q2Snap.empty) {
+        toast({ title: 'Request Already Sent', description: 'A friend request is already pending between you and this user.'});
+        return;
+    }
+
     const newRequest = {
         from: user.uid,
         to: receiverId,
@@ -230,7 +275,7 @@ export default function ChatPage() {
     
     switch(activeTab) {
         case 'chats':
-            return loadingChats ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} />;
+            return loadingChats || loadingProfile ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} />;
         case 'groups':
             return <GroupsPage />;
         case 'stories':
