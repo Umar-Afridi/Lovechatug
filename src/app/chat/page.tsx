@@ -212,7 +212,6 @@ export default function ChatPage() {
         from: user.uid,
         to: receiverId,
         status: 'pending',
-        createdAt: serverTimestamp(),
     };
 
     try {

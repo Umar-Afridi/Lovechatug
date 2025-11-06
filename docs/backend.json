@@ -58,14 +58,9 @@
           "type": "string",
           "enum": ["pending", "accepted", "rejected"],
           "description": "The status of the friend request."
-        },
-        "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "description": "The timestamp when the request was created."
         }
       },
-      "required": ["from", "to", "status", "createdAt"]
+      "required": ["from", "to", "status"]
     }
   },
   "auth": {

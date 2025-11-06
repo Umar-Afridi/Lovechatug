@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot, getDocs, writeBatch } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -42,38 +42,38 @@ export default function FriendsPage() {
     const requestsRef = collection(firestore, 'friendRequests');
     const q = query(requestsRef, where('to', '==', user.uid), where('status', '==', 'pending'));
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const requestsData: FriendRequestWithUser[] = [];
-        const userProfileUnsubscribers: (() => void)[] = [];
-
+    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
         if (querySnapshot.empty) {
             setRequests([]);
             setLoading(false);
             return;
         }
 
-        querySnapshot.forEach((docSnap) => {
-            const request = { id: docSnap.id, ...docSnap.data() } as FriendRequestWithUser;
-            requestsData.push(request);
+        const requestsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequestWithUser));
+        
+        // Get all unique sender IDs from the requests
+        const senderIds = [...new Set(requestsData.map(req => req.from))];
+        
+        if (senderIds.length > 0) {
+            const usersRef = collection(firestore, 'users');
+            // Use a 'in' query to fetch all sender profiles in one go
+            const usersQuery = query(usersRef, where('uid', 'in', senderIds));
+            const usersSnapshot = await getDocs(usersQuery);
+            const userProfiles = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data() as UserProfile]));
 
-            const userDocRef = doc(firestore, 'users', request.from);
-            const unsub = onSnapshot(userDocRef, (userSnap) => {
-                if (userSnap.exists()) {
-                    request.fromUser = userSnap.data() as UserProfile;
-                }
-                // This will cause a re-render with the user data
-                setRequests([...requestsData]);
-            });
-            userProfileUnsubscribers.push(unsub);
-        });
+            // Map the fetched profiles back to the requests
+            const populatedRequests = requestsData.map(req => ({
+                ...req,
+                fromUser: userProfiles.get(req.from)
+            }));
+            
+            setRequests(populatedRequests);
+        } else {
+            setRequests([]);
+        }
 
-        setRequests(requestsData);
         setLoading(false);
 
-        // Clean up user profile listeners when the component unmounts or query changes
-        return () => {
-            userProfileUnsubscribers.forEach(unsub => unsub());
-        };
     }, (serverError: any) => {
         console.error("Error fetching friend requests:", serverError);
         const permissionError = new FirestorePermissionError({
@@ -91,19 +91,28 @@ export default function FriendsPage() {
   const handleAccept = async (request: FriendRequestWithUser) => {
     if (!firestore || !user || !request.fromUser) return;
     
+    const batch = writeBatch(firestore);
+
     const requestRef = doc(firestore, 'friendRequests', request.id);
     const currentUserRef = doc(firestore, 'users', user.uid);
     const friendUserRef = doc(firestore, 'users', request.from);
 
     try {
-        // Use batched writes or a transaction for atomicity in a real app
-        await updateDoc(requestRef, { status: 'accepted' });
-        await updateDoc(currentUserRef, { friends: arrayUnion(request.from) });
-        await updateDoc(friendUserRef, { friends: arrayUnion(user.uid) });
+        // Use a batch for atomicity
+        batch.delete(requestRef); // Delete the request instead of updating status
+        batch.update(currentUserRef, { friends: arrayUnion(request.from) });
+        batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
+        
+        await batch.commit();
         
         toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
     } catch(err: any) {
         console.error("Error accepting friend request:", err);
+        const permissionError = new FirestorePermissionError({
+            path: requestRef.path, // This is an approximation for batch writes
+            operation: 'update', // Or 'delete'
+        });
+        errorEmitter.emit('permission-error', permissionError);
         toast({ title: 'Error', description: 'Could not accept friend request.', variant: 'destructive' });
     }
   };
@@ -116,6 +125,11 @@ export default function FriendsPage() {
         toast({ title: 'Request Declined' });
     } catch(err: any) {
         console.error("Error declining friend request:", err);
+         const permissionError = new FirestorePermissionError({
+            path: requestRef.path,
+            operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
         toast({ title: 'Error', description: 'Could not decline friend request.', variant: 'destructive' });
     }
   };
