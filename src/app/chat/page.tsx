@@ -65,7 +65,7 @@ const ChatList = ({ chats, blockedUsers }: { chats: Chat[], blockedUsers: string
     const formatTimestamp = (timestamp: any) => {
       if (!timestamp) return '';
       // Convert Firestore Timestamp to JS Date
-      const date = timestamp.toDate();
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
       return formatDistanceToNow(date, { addSuffix: true });
     };
     
@@ -168,8 +168,7 @@ export default function ChatPage() {
     const chatsRef = collection(firestore, 'chats');
     const q = query(
       chatsRef, 
-      where('members', 'array-contains', user.uid), 
-      orderBy('lastMessage.timestamp', 'desc')
+      where('members', 'array-contains', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -196,6 +195,10 @@ export default function ChatPage() {
                 // for now we simplify and don't fetch it live here to avoid permission issues.
                 unreadCount: data.unreadCounts?.[user.uid] || 0,
             } as Chat;
+        }).sort((a, b) => {
+          const aTimestamp = a.lastMessage?.timestamp?.toDate() || 0;
+          const bTimestamp = b.lastMessage?.timestamp?.toDate() || 0;
+          return bTimestamp - aTimestamp;
         });
         
         setChats(loadedChats);
@@ -456,5 +459,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    
