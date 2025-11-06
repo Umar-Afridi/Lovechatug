@@ -33,6 +33,7 @@ import {
   ArrowLeft,
   Check,
   CheckCheck,
+  Settings,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
@@ -43,6 +44,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 import type { Message as MessageType, UserProfile } from '@/lib/types';
@@ -401,25 +406,35 @@ export default function ChatIdPage({
                 <span className="sr-only">Video Call</span>
             </Button>
             <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+              <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon">
-                    <MoreVertical className="h-5 w-5" />
-                    <span className="sr-only">More options</span>
+                  <MoreVertical className="h-5 w-5" />
+                  <span className="sr-only">More options</span>
                 </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setContactSheetOpen(true)}>
-                    View Contact
-                </DropdownMenuItem>
-                <Separator />
-                <DropdownMenuItem className="text-destructive" onClick={handleBlockUser}>
-                    Block User
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive" onClick={handleUnfriend}>
-                    Unfriend
-                </DropdownMenuItem>
-                <DropdownMenuItem>Clear Chat</DropdownMenuItem>
-                </DropdownMenuContent>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>More settings</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuPortal>
+                    <DropdownMenuSubContent>
+                      <DropdownMenuItem onClick={() => setContactSheetOpen(true)}>
+                        View Contact
+                      </DropdownMenuItem>
+                      <Separator />
+                      <DropdownMenuItem className="text-destructive" onClick={handleBlockUser}>
+                        Block User
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive" onClick={handleUnfriend}>
+                        Unfriend
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>Clear Chat</DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuPortal>
+                </DropdownMenuSub>
+              </DropdownMenuContent>
             </DropdownMenu>
             </div>
         </header>
