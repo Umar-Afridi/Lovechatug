@@ -37,9 +37,10 @@ import {
 import { useEffect, useState } from 'react';
 import { getRedirectResult } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import type { UserProfile } from '@/lib/types';
 
 
 const menuItems = [
@@ -66,6 +67,49 @@ const menuItems = [
   },
 ];
 
+// Custom hook to get user profile data in real-time
+function useUserProfile() {
+  const { user, loading: authLoading } = useUser();
+  const firestore = useFirestore();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+    if (!user || !firestore) {
+      setLoading(false);
+      return;
+    }
+
+    const userDocRef = doc(firestore, 'users', user.uid);
+    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setProfile(docSnap.data() as UserProfile);
+      } else {
+        // Fallback to auth data if firestore doc doesn't exist
+        setProfile({
+          uid: user.uid,
+          displayName: user.displayName || 'User',
+          email: user.email || '',
+          photoURL: user.photoURL || '',
+          username: user.email?.split('@')[0] || `user-${Date.now()}`
+        });
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching user profile:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user, firestore, authLoading]);
+
+  return { profile, loading };
+}
+
+
 export default function ChatAppLayout({
   children,
 }: {
@@ -74,7 +118,8 @@ export default function ChatAppLayout({
   const pathname = usePathname();
   const auth = useAuth();
   const firestore = useFirestore();
-  const { user, loading } = useUser();
+  const { user, loading: authLoading } = useUser();
+  const { profile, loading: profileLoading } = useUserProfile();
   const router = useRouter();
   const isMobile = useIsMobile();
   const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2;
@@ -119,10 +164,10 @@ export default function ChatAppLayout({
 
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!authLoading && !user) {
       router.push('/');
     }
-  }, [loading, user, router]);
+  }, [authLoading, user, router]);
 
   const handleSignOut = async () => {
     if (auth) {
@@ -131,7 +176,9 @@ export default function ChatAppLayout({
     }
   };
 
-  if (loading || !user) {
+  const loading = authLoading || profileLoading;
+
+  if (loading || !user || !profile) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <p>Loading...</p>
@@ -163,19 +210,19 @@ export default function ChatAppLayout({
                     <Link href="/profile" className="h-12 w-full justify-start gap-2 px-2 flex items-center">
                         <Avatar className="h-8 w-8">
                         <AvatarImage
-                            src={user?.photoURL ?? undefined}
-                            alt={user?.displayName ?? 'user-avatar'}
+                            src={profile.photoURL ?? undefined}
+                            alt={profile.displayName ?? 'user-avatar'}
                         />
                         <AvatarFallback>
-                            {getInitials(user?.displayName)}
+                            {getInitials(profile.displayName)}
                         </AvatarFallback>
                         </Avatar>
                         <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
                         <span className="truncate text-sm font-medium">
-                            {user?.displayName ?? 'User'}
+                            {profile.displayName ?? 'User'}
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
-                            {user?.email ?? 'No email'}
+                            {profile.email ?? 'No email'}
                         </span>
                         </div>
                     </Link>

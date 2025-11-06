@@ -5,6 +5,7 @@ export type UserProfile = {
   username: string;
   photoURL: string;
   friends?: string[];
+  bio?: string;
 }
 
 export type User = {
