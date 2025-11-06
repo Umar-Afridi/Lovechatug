@@ -19,7 +19,7 @@ import { Label } from '../ui/label';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { ForgotPasswordDialog } from './forgot-password-dialog';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
@@ -45,9 +45,13 @@ export function LoginForm() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // Create user profile in Firestore if it doesn't exist
-       const userDocRef = doc(firestore, 'users', user.uid);
-       const userData = {
+      const userDocRef = doc(firestore, 'users', user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      // Only create the user document if it doesn't already exist.
+      // This prevents overwriting user's custom profile data on each login.
+      if (!userDocSnap.exists()) {
+        const userData = {
           uid: user.uid,
           displayName: user.displayName,
           email: user.email,
@@ -57,20 +61,19 @@ export function LoginForm() {
           bio: '',
         };
 
-        // Use setDoc with merge:true to create or update without overwriting existing fields like friends
-        setDoc(userDocRef, userData, { merge: true })
-          .then(() => {
-            router.push('/chat');
-          })
-          .catch((serverError) => {
+        await setDoc(userDocRef, userData).catch((serverError) => {
             const permissionError = new FirestorePermissionError({
               path: userDocRef.path,
               operation: 'create',
               requestResourceData: userData,
             });
             errorEmitter.emit('permission-error', permissionError);
-            setError('Could not save user profile. Insufficient permissions.');
+            // Throw an error to be caught by the outer catch block
+            throw new Error('Could not save user profile. Insufficient permissions.');
           });
+      }
+      
+      router.push('/chat');
           
     } catch (error: any) {
       console.error('Error signing in with Google', error);
