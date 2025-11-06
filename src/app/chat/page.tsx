@@ -315,7 +315,7 @@ export default function ChatPage() {
         <div className="p-4 space-y-4 border-b">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
-                <span>Love Chat</span>
+                <span>LoveChat</span>
             </h1>
             <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
                 <Link href="/profile">
@@ -332,13 +332,13 @@ export default function ChatPage() {
             </Button>
           </div>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
                 placeholder="Search users..." 
-                className="pl-9"
+                className="pr-9"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
             />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           </div>
         </div>
         
