@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot, getDocs, writeBatch, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -106,29 +106,47 @@ export default function FriendsPage() {
     const requestRef = doc(firestore, 'friendRequests', request.id);
     const currentUserRef = doc(firestore, 'users', user.uid);
     const friendUserRef = doc(firestore, 'users', request.senderId);
+    
+    // Create a new chat document when the request is accepted
+    const chatId = [user.uid, request.senderId].sort().join('_');
+    const chatRef = doc(firestore, 'chats', chatId);
 
     try {
-        // Step 1: Update current user's friend list and delete the request.
-        // This is a batch write that should succeed based on ownership rules.
         const batch = writeBatch(firestore);
+
+        // 1. Update current user's friend list
         batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
+        
+        // 2. Update the other user's friend list
+        batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
+        
+        // 3. Create the chat document
+        batch.set(chatRef, {
+          members: [user.uid, request.senderId],
+          createdAt: serverTimestamp()
+        });
+
+        // 4. Delete the friend request
         batch.delete(requestRef);
+
         await batch.commit();
 
-        // Step 2: Update the other user's friend list.
-        // This requires a separate call to satisfy the security rule.
-        await updateDoc(friendUserRef, { friends: arrayUnion(user.uid) });
-
         toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error accepting friend request: ", error);
-        toast({
-            title: 'Error',
-            description: 'Could not accept friend request. You may not have the required permissions.',
-            variant: 'destructive',
-        });
-        // We can throw a more specific error here if needed in the future,
-        // but for now a toast is sufficient.
+        if (error.code === 'permission-denied') {
+             const permissionError = new FirestorePermissionError({
+                path: `batch write operation for friend accept`,
+                operation: 'update',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        } else {
+            toast({
+                title: 'Error',
+                description: 'Could not accept friend request. Please try again later.',
+                variant: 'destructive',
+            });
+        }
     }
   };
 
