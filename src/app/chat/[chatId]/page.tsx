@@ -212,8 +212,7 @@ export default function ChatIdPage({
       .join('');
   };
 
-  const handleSendMessage = async (e?: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e) e.preventDefault(); // Prevent button from taking focus and hiding keyboard
+  const handleSendMessage = async () => {
     if (inputValue.trim() === '' || !firestore || !user || !chatId) return;
 
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
@@ -263,8 +262,8 @@ export default function ChatIdPage({
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && e.shiftKey) {
-        e.preventDefault(); // Prevent new line on Enter alone
-        handleSendMessage(e);
+        e.preventDefault(); 
+        handleSendMessage();
     }
   };
   
@@ -389,7 +388,7 @@ export default function ChatIdPage({
               <Mic className="h-5 w-5" />
               <span className="sr-only">Record voice message</span>
             </Button>
-            <Button variant="ghost" size="icon" onMouseDown={(e) => handleSendMessage(e as any)}>
+            <Button variant="ghost" size="icon" onClick={handleSendMessage}>
               <Send className="h-5 w-5" />
               <span className="sr-only">Send</span>
             </Button>
