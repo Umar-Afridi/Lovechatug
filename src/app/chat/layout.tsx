@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useEffect, useState } from 'react';
-import { getRedirectResult, User } from 'firebase/auth';
+import { getRedirectResult, signInWithPopup, GoogleAuthProvider, User } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { collection, onSnapshot, query, where, doc, setDoc, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -132,43 +132,39 @@ export default function ChatAppLayout({
   useEffect(() => {
     if (!auth || !firestore) return;
 
-    // This handles the redirect result from Google Sign-In on all devices
     const handleRedirect = async () => {
-        try {
-            const result = await getRedirectResult(auth);
-            if (result && result.user) {
-                const user = result.user;
-                const userDocRef = doc(firestore, 'users', user.uid);
-                const userDocSnap = await getDoc(userDocRef);
+      try {
+        const result = await getRedirectResult(auth);
+        if (result && result.user) {
+          const user = result.user;
+          const userDocRef = doc(firestore, 'users', user.uid);
+          const userDocSnap = await getDoc(userDocRef);
 
-                if (!userDocSnap.exists()) {
-                    const userData = {
-                        uid: user.uid,
-                        displayName: user.displayName,
-                        email: user.email,
-                        username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
-                        photoURL: user.photoURL,
-                        friends: [],
-                        bio: '',
-                    };
-                    // Use setDoc to create the user document
-                    await setDoc(userDocRef, userData);
-                }
-                // Redirect to chat page after sign in is complete
-                router.push('/chat');
-            }
-        } catch (error: any) {
-            console.error('Sign-in redirect error:', error);
-            toast({
-                variant: "destructive",
-                title: "Sign-In Failed",
-                description: "Could not complete sign-in. Please try again.",
-            });
+          if (!userDocSnap.exists()) {
+            const userData: UserProfile = {
+              uid: user.uid,
+              displayName: user.displayName || 'Anonymous User',
+              email: user.email || '',
+              username: user.email?.split('@')[0] || `user-${Date.now()}`,
+              photoURL: user.photoURL || '',
+              friends: [],
+              bio: '',
+            };
+            await setDoc(userDocRef, userData);
+          }
+          router.push('/chat');
         }
+      } catch (error: any) {
+        console.error('Sign-in redirect error:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Sign-In Failed',
+          description: 'Could not complete sign-in. Please try again.',
+        });
+      }
     };
-    
-    handleRedirect();
 
+    handleRedirect();
   }, [auth, firestore, router, toast]);
   
   useEffect(() => {
@@ -229,7 +225,7 @@ export default function ChatAppLayout({
   const showSidebar = !isMobile || !isChatDetailPage;
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-background">
       <SidebarProvider>
         {showSidebar && (
           <Sidebar side="left" collapsible="icon" className="group hidden md:flex">
@@ -289,8 +285,10 @@ export default function ChatAppLayout({
           </Sidebar>
         )}
         <main className={cn(
-          "flex-1 transition-all duration-300",
-          isMobile && isChatDetailPage ? "w-full" : "w-full md:w-auto"
+          "flex-1 transition-all duration-300 w-full",
+          isMobile && isChatDetailPage ? "block" : "md:block",
+          isMobile && !isChatDetailPage ? "block" : "md:block",
+          !isMobile ? "flex" : ""
         )}>
           {children}
         </main>
