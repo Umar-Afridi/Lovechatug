@@ -138,11 +138,12 @@ export default function ChatPage() {
                     
                     // Fetch unread messages count
                     const messagesRef = collection(firestore, 'chats', chatDoc.id, 'messages');
-                    const unreadQuery = query(messagesRef, 
-                        where('senderId', '==', otherParticipantId),
-                        where('status', '!=', 'read')
-                    );
-                    const unreadSnapshot = await getDocs(unreadQuery);
+                    const messagesSnapshot = await getDocs(messagesRef);
+                    const unreadCount = messagesSnapshot.docs.filter(doc => {
+                        const data = doc.data();
+                        return data.senderId === otherParticipantId && data.status !== 'read';
+                    }).length;
+
 
                     if (userDoc.exists()) {
                         const userData = userDoc.data() as UserProfile;
@@ -150,7 +151,7 @@ export default function ChatPage() {
                             id: chatDoc.id,
                             ...chatData,
                             lastMessage: chatData.lastMessage || null,
-                            unreadCount: unreadSnapshot.size, // Set unread count
+                            unreadCount: unreadCount, // Set unread count
                             participantDetails: {
                                 id: userData.uid,
                                 name: userData.displayName,
