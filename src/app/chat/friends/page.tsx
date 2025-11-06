@@ -107,43 +107,29 @@ export default function FriendsPage() {
     const currentUserRef = doc(firestore, 'users', user.uid);
     const friendUserRef = doc(firestore, 'users', request.senderId);
 
-    const batch = writeBatch(firestore);
-    
-    // Add friend to current user's list
-    const currentUserUpdate = { friends: arrayUnion(request.senderId) };
-    batch.update(currentUserRef, currentUserUpdate);
-    
-    // Delete the friend request
-    batch.delete(requestRef); 
+    try {
+        // Step 1: Update current user's friend list and delete the request.
+        // This is a batch write that should succeed based on ownership rules.
+        const batch = writeBatch(firestore);
+        batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
+        batch.delete(requestRef);
+        await batch.commit();
 
-    // Commit the first batch
-    await batch.commit().catch((serverError) => {
-        const permissionError = new FirestorePermissionError({
-            path: 'batch', // Batch writes affect multiple paths
-            operation: 'update',
-            requestResourceData: { 
-                [`users/${user.uid}`]: currentUserUpdate, 
-                [`friendRequests/${request.id}`]: 'DELETE' 
-            }
-        });
-        errorEmitter.emit('permission-error', permissionError);
-        // Re-throw to stop execution if the first part fails
-        throw serverError;
-    });
+        // Step 2: Update the other user's friend list.
+        // This requires a separate call to satisfy the security rule.
+        await updateDoc(friendUserRef, { friends: arrayUnion(user.uid) });
 
-    // Separately, update the other user's friend list to comply with security rules
-    const friendUserUpdate = { friends: arrayUnion(user.uid) };
-    await updateDoc(friendUserRef, friendUserUpdate).catch((serverError) => {
-        const permissionError = new FirestorePermissionError({
-            path: friendUserRef.path,
-            operation: 'update',
-            requestResourceData: friendUserUpdate
+        toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
+    } catch (error) {
+        console.error("Error accepting friend request: ", error);
+        toast({
+            title: 'Error',
+            description: 'Could not accept friend request. You may not have the required permissions.',
+            variant: 'destructive',
         });
-        errorEmitter.emit('permission-error', permissionError);
-         throw serverError;
-    });
-    
-    toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
+        // We can throw a more specific error here if needed in the future,
+        // but for now a toast is sufficient.
+    }
   };
 
   const handleDecline = async (requestId: string) => {
