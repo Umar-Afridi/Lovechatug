@@ -138,6 +138,7 @@ export default function ChatPage() {
                         const userData = userDoc.data() as UserProfile;
                         return {
                             id: docSnapshot.id,
+                            ...chatData,
                             lastMessage: chatData.lastMessage || null,
                             unreadCount: 0, // Placeholder
                             participantDetails: {
@@ -250,7 +251,7 @@ export default function ChatPage() {
                 const permissionError = new FirestorePermissionError({
                     path: requestsRef.path,
                     operation: 'create',
-                    requestResourceData: { senderId: user.uid, receiverId: receiverId, status: 'pending' }
+                    requestResourceData: newRequest
                 });
                 errorEmitter.emit('permission-error', permissionError);
             });

@@ -107,42 +107,59 @@ export default function FriendsPage() {
     const currentUserRef = doc(firestore, 'users', user.uid);
     const friendUserRef = doc(firestore, 'users', request.senderId);
 
-    try {
-        // Step 1: Update current user's friend list and delete the request
-        const batch = writeBatch(firestore);
-        batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
-        batch.delete(requestRef); 
-        await batch.commit();
+    const batch = writeBatch(firestore);
+    
+    // Add friend to current user's list
+    const currentUserUpdate = { friends: arrayUnion(request.senderId) };
+    batch.update(currentUserRef, currentUserUpdate);
+    
+    // Delete the friend request
+    batch.delete(requestRef); 
 
-        // Step 2: Update the other user's friend list.
-        // This is a separate call to comply with security rules that only allow
-        // a user to update their own doc, or add themselves to another's friend list.
-        await updateDoc(friendUserRef, { friends: arrayUnion(user.uid) });
-        
-        toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
-        
-    } catch (error) {
-        console.error("Error accepting friend request: ", error);
-        // The error emitter will be triggered by the specific failing operation's catch block
-        toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Could not accept friend request. You may not have the required permissions."
+    // Commit the first batch
+    await batch.commit().catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: 'batch', // Batch writes affect multiple paths
+            operation: 'update',
+            requestResourceData: { 
+                [`users/${user.uid}`]: currentUserUpdate, 
+                [`friendRequests/${request.id}`]: 'DELETE' 
+            }
         });
-    }
+        errorEmitter.emit('permission-error', permissionError);
+        // Re-throw to stop execution if the first part fails
+        throw serverError;
+    });
+
+    // Separately, update the other user's friend list to comply with security rules
+    const friendUserUpdate = { friends: arrayUnion(user.uid) };
+    await updateDoc(friendUserRef, friendUserUpdate).catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: friendUserRef.path,
+            operation: 'update',
+            requestResourceData: friendUserUpdate
+        });
+        errorEmitter.emit('permission-error', permissionError);
+         throw serverError;
+    });
+    
+    toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
   };
 
   const handleDecline = async (requestId: string) => {
     if (!firestore) return;
     const requestRef = doc(firestore, 'friendRequests', requestId);
-    deleteDoc(requestRef).catch((serverError) => {
-         const permissionError = new FirestorePermissionError({
-            path: requestRef.path,
-            operation: 'delete',
+    deleteDoc(requestRef)
+        .then(() => {
+            toast({ title: 'Request Declined' });
+        })
+        .catch((serverError) => {
+             const permissionError = new FirestorePermissionError({
+                path: requestRef.path,
+                operation: 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
         });
-        errorEmitter.emit('permission-error', permissionError);
-    });
-    toast({ title: 'Request Declined' });
   };
 
   if (loading) {

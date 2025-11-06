@@ -53,24 +53,31 @@ async function getOrCreateChat(
 ) {
   const chatId = [currentUserId, otherUserId].sort().join('_');
   const chatRef = doc(firestore, 'chats', chatId);
-  const chatSnap = await getDoc(chatRef);
+  
+  try {
+    const chatSnap = await getDoc(chatRef);
 
-  if (!chatSnap.exists()) {
-    const chatData = {
-        members: [currentUserId, otherUserId],
-        createdAt: serverTimestamp(),
-    };
-    // Create chat if it doesn't exist
-    setDoc(chatRef, chatData).catch(serverError => {
+    if (!chatSnap.exists()) {
+      const chatData = {
+          members: [currentUserId, otherUserId],
+          createdAt: serverTimestamp(),
+      };
+      // Create chat if it doesn't exist
+      await setDoc(chatRef, chatData);
+    }
+    return chatId;
+  } catch (serverError: any) {
+     if (serverError.code === 'permission-denied') {
         const permissionError = new FirestorePermissionError({
             path: chatRef.path,
-            operation: 'create',
-            requestResourceData: chatData,
+            operation: 'get', // The initial operation is a get
         });
         errorEmitter.emit('permission-error', permissionError);
-    });
+     } else {
+        throw serverError; // Re-throw other errors
+     }
+     return null;
   }
-  return chatId;
 }
 
 export default function ChatIdPage({
@@ -113,11 +120,17 @@ export default function ChatIdPage({
 
         // Get or create the chat and set the ID
         const determinedChatId = await getOrCreateChat(firestore, user.uid, otherUserId);
-        setChatId(determinedChatId);
-      } catch (error) {
-        // This catch block is for general errors, not permission errors which are handled in getOrCreateChat
-        console.error("Error setting up chat page:", error);
-        toast({ title: 'Error', description: 'Could not initialize chat.', variant: 'destructive' });
+        if (determinedChatId) {
+            setChatId(determinedChatId);
+        }
+      } catch (error: any) {
+         if (error.code === 'permission-denied') {
+            const permissionError = new FirestorePermissionError({ path: `users/${otherUserId}`, operation: 'get' });
+            errorEmitter.emit('permission-error', permissionError);
+         } else {
+            console.error("Error setting up chat page:", error);
+            toast({ title: 'Error', description: 'Could not initialize chat.', variant: 'destructive' });
+         }
       } finally {
         setLoading(false);
       }

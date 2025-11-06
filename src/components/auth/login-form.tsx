@@ -47,12 +47,15 @@ export function LoginForm() {
       const userDocRef = doc(firestore, 'users', user.uid);
       
       const userDocSnap = await getDoc(userDocRef).catch((serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: userDocRef.path,
-          operation: 'get',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-        throw new Error('Could not check user profile. Insufficient permissions.');
+        // This is a read operation, so we check for permission error on get
+        if (serverError.code === 'permission-denied') {
+            const permissionError = new FirestorePermissionError({
+              path: userDocRef.path,
+              operation: 'get',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        }
+        throw new Error('Could not check user profile.');
       });
 
       if (!userDocSnap.exists()) {
@@ -80,12 +83,15 @@ export function LoginForm() {
       router.push('/chat');
           
     } catch (error: any) {
-      setError(error.message);
-      toast({
-        variant: "destructive",
-        title: "Google Sign-In Failed",
-        description: error.message,
-      });
+      // Don't emit for auth errors, only firestore
+      if (!(error instanceof FirestorePermissionError)) {
+          setError(error.message);
+          toast({
+            variant: "destructive",
+            title: "Google Sign-In Failed",
+            description: error.message,
+          });
+      }
     }
   };
 
