@@ -37,37 +37,14 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useEffect, useState } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { collection, onSnapshot, query, where, doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { getDatabase, ref, onValue, off, goOnline, goOffline, onDisconnect } from 'firebase/database';
 
-
-const menuItems = [
-  {
-    href: '/chat',
-    icon: MessageSquare,
-    label: 'Chats',
-  },
-  {
-     href: '/chat/groups',
-     icon: Users,
-     label: 'Groups',
-  },
-  {
-     href: '/chat/friends',
-     icon: UserPlus,
-     label: 'Friend Requests',
-     id: 'friend-requests'
-  },
-  {
-     href: '/chat/calls',
-     icon: Phone,
-     label: 'Call History',
-  },
-];
 
 // Custom hook to get user profile data in real-time
 function useUserProfile() {
@@ -111,6 +88,48 @@ function useUserProfile() {
   return { profile, loading };
 }
 
+// Custom hook for presence management
+function usePresence() {
+  const { user } = useUser();
+  const firestore = useFirestore();
+
+  useEffect(() => {
+    if (!user || !firestore) return;
+
+    const db = getDatabase();
+    const myConnectionsRef = ref(db, `users/${user.uid}/connections`);
+    const lastOnlineRef = ref(db, `users/${user.uid}/lastOnline`);
+    const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
+
+    const connectedRef = ref(db, '.info/connected');
+    let con: any = null;
+
+    const unsubscribe = onValue(connectedRef, (snap) => {
+      if (snap.val() === true) {
+        con = myConnectionsRef;
+        goOnline(db);
+        
+        const presenceData = { isOnline: true, lastSeen: serverTimestamp() };
+        updateDoc(userStatusFirestoreRef, presenceData).catch(err => {
+            const permissionError = new FirestorePermissionError({ path: userStatusFirestoreRef.path, operation: 'update', requestResourceData: presenceData });
+            errorEmitter.emit('permission-error', permissionError);
+        });
+
+        onDisconnect(con).remove();
+        onDisconnect(lastOnlineRef).set(serverTimestamp() as any);
+        onDisconnect(userStatusFirestoreRef).update({ isOnline: false, lastSeen: serverTimestamp() });
+      }
+    });
+
+    return () => {
+      off(connectedRef, 'value', unsubscribe);
+      if (con) {
+        goOffline(db);
+      }
+    };
+  }, [user, firestore]);
+}
+
 
 export default function ChatAppLayout({
   children,
@@ -122,6 +141,7 @@ export default function ChatAppLayout({
   const firestore = useFirestore();
   const { user, loading: authLoading } = useUser();
   const { profile, loading: profileLoading } = useUserProfile();
+  usePresence(); // Initialize presence management
   const router = useRouter();
   const isMobile = useIsMobile();
   const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2;
@@ -160,6 +180,10 @@ export default function ChatAppLayout({
 
   const handleSignOut = async () => {
     if (auth) {
+      if (user && firestore) {
+          const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
+          await updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() });
+      }
       await auth.signOut();
       router.push('/');
     }
@@ -261,3 +285,27 @@ export default function ChatAppLayout({
     </div>
   );
 }
+
+const menuItems = [
+  {
+    href: '/chat',
+    icon: MessageSquare,
+    label: 'Chats',
+  },
+  {
+     href: '/chat/groups',
+     icon: Users,
+     label: 'Groups',
+  },
+  {
+     href: '/chat/friends',
+     icon: UserPlus,
+     label: 'Friend Requests',
+     id: 'friend-requests'
+  },
+  {
+     href: '/chat/calls',
+     icon: Phone,
+     label: 'Call History',
+  },
+];

@@ -6,6 +6,8 @@ export type UserProfile = {
   photoURL: string;
   friends?: string[];
   bio?: string;
+  isOnline?: boolean;
+  lastSeen?: any;
 }
 
 export type Message = {
@@ -15,6 +17,7 @@ export type Message = {
   timestamp: any; // Firestore ServerTimestamp
   type: 'text' | 'image' | 'audio';
   mediaUrl?: string;
+  status: 'sent' | 'delivered' | 'read';
 };
 
 export type Chat = {

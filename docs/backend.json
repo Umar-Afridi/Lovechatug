@@ -37,6 +37,15 @@
         "bio": {
           "type": "string",
           "description": "A short user bio."
+        },
+        "isOnline": {
+            "type": "boolean",
+            "description": "Whether the user is currently online."
+        },
+        "lastSeen": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The last time the user was seen online."
         }
       },
       "required": ["uid", "displayName", "email", "username"]
@@ -119,9 +128,14 @@
           "type": "string",
           "enum": ["text", "image", "audio"],
           "description": "The type of the message."
+        },
+        "status": {
+            "type": "string",
+            "enum": ["sent", "delivered", "read"],
+            "description": "The status of the message."
         }
       },
-      "required": ["senderId", "content", "timestamp", "type"]
+      "required": ["senderId", "content", "timestamp", "type", "status"]
     }
   },
   "auth": {
@@ -148,7 +162,8 @@
     },
     "/chats/{chatId}/messages/{messageId}": {
       "schema": {
-        "$ref": "#/entities/Message"
+        "$ref":-
+  "#/entities/Message"
       },
       "description": "Sub-collection for messages within a specific chat."
     }

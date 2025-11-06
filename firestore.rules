@@ -44,7 +44,13 @@ service cloud.firestore {
             allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
             allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
             
-            allow update, delete: if false; 
+            // Allow receiver to update the status of the message to 'read'.
+            allow update: if isAuthenticated() 
+                && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+                && request.resource.data.status == 'read';
+
+            allow delete: if false; 
         }
     }
 

@@ -28,6 +28,8 @@ import {
   Smile,
   Paperclip,
   ArrowLeft,
+  Check,
+  CheckCheck,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
@@ -164,6 +166,32 @@ export default function ChatIdPage({
 
     return () => unsubscribe();
   }, [firestore, chatId]);
+
+  // Mark messages as read
+  useEffect(() => {
+    if (!firestore || !chatId || !user) return;
+    
+    const unreadMessages = messages.filter(
+        (msg) => msg.status !== 'read' && msg.senderId !== user.uid
+    );
+
+    if (unreadMessages.length > 0) {
+        const batch = writeBatch(firestore);
+        unreadMessages.forEach((msg) => {
+            const msgRef = doc(firestore, 'chats', chatId, 'messages', msg.id);
+            batch.update(msgRef, { status: 'read' });
+        });
+        
+        batch.commit().catch((serverError) => {
+             const permissionError = new FirestorePermissionError({
+                path: `chats/${chatId}/messages`,
+                operation: 'update',
+                requestResourceData: { status: 'read' }
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
+    }
+  }, [messages, firestore, chatId, user]);
   
    useEffect(() => {
     // Scroll to bottom when messages change
@@ -194,11 +222,15 @@ export default function ChatIdPage({
     const contentToSend = inputValue.trim();
     setInputValue(''); // Clear input immediately for better UX
     
+    // Determine status based on other user's online status
+    const isOtherUserOnline = otherUser?.isOnline ?? false;
+    
     const newMessage = {
       senderId: user.uid,
       content: contentToSend,
       timestamp: serverTimestamp(),
       type: 'text' as const,
+      status: isOtherUserOnline ? 'delivered' : 'sent'
     };
     
     const lastMessageData = {
@@ -234,9 +266,19 @@ export default function ChatIdPage({
         e.preventDefault(); // Prevent new line on Enter alone
         handleSendMessage(e);
     }
-    // Shift+Enter will create a new line by default in a textarea
   };
   
+  const MessageStatus = ({ status }: { status: MessageType['status'] }) => {
+    if (status === 'read') {
+      return <CheckCheck className="h-4 w-4 text-sky-500" />;
+    }
+    if (status === 'delivered') {
+      return <CheckCheck className="h-4 w-4 text-muted-foreground" />;
+    }
+    // 'sent' status
+    return <Check className="h-4 w-4 text-muted-foreground" />;
+  };
+
   if (loading || !otherUser) {
     return (
       <div className="flex h-screen flex-col items-center justify-center">
@@ -258,7 +300,10 @@ export default function ChatIdPage({
             <AvatarFallback>{getInitials(otherUser.displayName)}</AvatarFallback>
             </Avatar>
             <div className="flex-1">
-            <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
+              <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
+               <p className="text-xs text-muted-foreground">
+                  {otherUser.isOnline ? 'Online' : `Last seen ${new Date(otherUser.lastSeen ?? '').toLocaleTimeString()}`}
+               </p>
             </div>
             <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon">
@@ -294,16 +339,21 @@ export default function ChatIdPage({
             {messages.map((msg) => (
                  <div
                     key={msg.id}
-                    className={`flex ${msg.senderId === user?.uid ? 'justify-end' : 'justify-start'}`}
+                    className={`flex items-end gap-2 ${msg.senderId === user?.uid ? 'justify-end' : 'justify-start'}`}
                 >
                     <div
-                        className={`max-w-xs rounded-lg px-4 py-2 text-sm lg:max-w-md ${
+                        className={`max-w-xs rounded-lg px-3 py-2 text-sm lg:max-w-md flex items-end gap-2 ${
                             msg.senderId === user?.uid
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-muted'
                         }`}
                     >
                         <p className="whitespace-pre-wrap">{msg.content}</p>
+                         {msg.senderId === user?.uid && (
+                            <div className="flex-shrink-0">
+                                <MessageStatus status={msg.status} />
+                            </div>
+                        )}
                     </div>
                 </div>
             ))}
@@ -335,8 +385,7 @@ export default function ChatIdPage({
             <Button variant="ghost" size="icon">
               <Paperclip className="h-5 w-5" />
               <span className="sr-only">Attach file</span>
-            </Button>
-             <Button variant="ghost" size="icon">
+            </Button>             <Button variant="ghost" size="icon">
               <Mic className="h-5 w-5" />
               <span className="sr-only">Record voice message</span>
             </Button>
@@ -350,5 +399,3 @@ export default function ChatIdPage({
     </div>
   );
 }
-
-    
