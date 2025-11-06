@@ -127,7 +127,7 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-sm shadow-2xl shadow-primary/10">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-headline">Welcome to LoveChat</CardTitle>
+        <CardTitle className="text-2xl font-headline">Welcome to Love Chat</CardTitle>
         <CardDescription>
           Sign in to connect with your loved ones
         </CardDescription>
@@ -165,5 +165,3 @@ export function LoginForm() {
     </Card>
   );
 }
-
-    

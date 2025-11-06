@@ -114,7 +114,7 @@ export function SignupForm() {
   return (
     <Card className="w-full max-w-sm shadow-2xl shadow-primary/10">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-headline">Join LoveChat</CardTitle>
+        <CardTitle className="text-2xl font-headline">Join Love Chat</CardTitle>
         <CardDescription>
           Create your account to start chatting
         </CardDescription>

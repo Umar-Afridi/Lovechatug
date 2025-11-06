@@ -4,7 +4,7 @@ import './globals.css';
 import { FirebaseProvider } from '@/firebase/provider';
 
 export const metadata: Metadata = {
-  title: 'LoveChat',
+  title: 'Love Chat',
   description: 'A beautiful chat application created with Firebase Studio.',
 };
 

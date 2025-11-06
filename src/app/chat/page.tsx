@@ -344,7 +344,7 @@ export default function ChatPage() {
         <div className="p-4 space-y-4 border-b">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
-                <span>LoveChat</span>
+                <span>Love Chat</span>
             </h1>
             <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
                 <Link href="/profile">
