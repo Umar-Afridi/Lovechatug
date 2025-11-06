@@ -108,7 +108,7 @@ const ChatList = ({ chats }: { chats: Chat[] }) => {
 
 
 export default function ChatPage() {
-  const [activeTab, setActiveTab] = useState('chats');
+  const [activeTab, setActiveTab] = useState('inbox');
   const firestore = useFirestore();
   const { user } = useUser();
   const { profile, loading: loadingProfile } = useUserProfile();
@@ -266,7 +266,7 @@ export default function ChatPage() {
   };
   
   const navigationItems = [
-    { name: 'Inbox', icon: MessageSquare, content: 'chats' },
+    { name: 'Inbox', icon: MessageSquare, content: 'inbox' },
     { name: 'Groups', icon: Users, content: 'groups' },
     { name: 'Stories', icon: GalleryHorizontal, content: 'stories' },
     { name: 'Requests', icon: UserPlus, content: 'requests' },
@@ -309,7 +309,7 @@ export default function ChatPage() {
     }
     
     switch(activeTab) {
-        case 'chats':
+        case 'inbox':
             return loadingChats || loadingProfile ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} />;
         case 'groups':
             return <GroupsPage />;
