@@ -35,14 +35,22 @@ export function SignupForm() {
 
     const formData = new FormData(event.currentTarget);
     const fullName = formData.get('fullName') as string;
-    const username = (formData.get('username') as string).toLowerCase();
+    const usernameInput = formData.get('username') as string;
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
     
-    if (!username) {
+    if (!usernameInput) {
         setError("Username is required.");
         return;
     }
+    
+    // Enforce lowercase username
+    if (usernameInput !== usernameInput.toLowerCase()) {
+      setError("Username must be all lowercase.");
+      return;
+    }
+
+    const username = usernameInput.toLowerCase();
 
     // Check if username already exists
     const usersRef = collection(firestore, 'users');
@@ -118,7 +126,7 @@ export function SignupForm() {
             <Input id="fullName" name="fullName" placeholder="John Doe" required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
+            <Label htmlFor="username">Username (lowercase only)</Label>
             <Input id="username" name="username" placeholder="johndoe" required />
           </div>
           <div className="space-y-2">

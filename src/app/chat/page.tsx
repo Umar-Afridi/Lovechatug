@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, MessageSquare, Users, UserPlus, Phone, History, GalleryHorizontal } from 'lucide-react';
+import { Search, MessageSquare, Users, UserPlus, Phone, GalleryHorizontal } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,125 +16,22 @@ import CallsPage from './calls/page';
 import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
 
 
-// Mock data, will be replaced with Firebase data
-const chats: Chat[] = [
-  { 
-    id: '1', 
-    participants: ['user1', 'user2'],
-    messages: [
-        { id: 'm1', senderId: 'user2', content: 'See you tomorrow!', timestamp: '10:42 AM', type: 'text' }
-    ],
-    unreadCount: 2,
-    participantDetails: {
-        id: 'user2',
-        name: 'Ayesha Khan',
-        avatar: 'https://picsum.photos/seed/1/40/40',
-        online: true
-    }
-  },
-  { 
-    id: '2', 
-    participants: ['user1', 'user3'],
-    messages: [
-        { id: 'm2', senderId: 'user3', content: 'Haha, that\'s funny.', timestamp: '9:30 AM', type: 'text' }
-    ],
-    unreadCount: 0,
-    participantDetails: {
-        id: 'user3',
-        name: 'Bilal Ahmed',
-        avatar: 'https://picsum.photos/seed/2/40/40',
-        online: false
-    }
-  },
-  { 
-    id: '3', 
-    participants: ['user1', 'user4'],
-    messages: [
-        { id: 'm3', senderId: 'user4', content: 'Okay, sounds good.', timestamp: 'Yesterday', type: 'text' }
-    ],
-    unreadCount: 0,
-    participantDetails: {
-        id: 'user4',
-        name: 'Fatima Ali',
-        avatar: 'https://picsum.photos/seed/3/40/40',
-        online: true
-    }
-   },
-  { 
-    id: '4', 
-    participants: ['user1', 'user5'],
-    messages: [
-        { id: 'm4', senderId: 'user1', content: 'You sent an attachment.', timestamp: 'Yesterday', type: 'text' }
-    ],
-unreadCount: 0,
-    participantDetails: {
-        id: 'user5',
-        name: 'Zainab Omar',
-        avatar: 'https://picsum.photos/seed/4/40/40',
-        online: false
-    }
-  },
-];
-
-// Custom hook to get user profile data in real-time
-function useUserProfile() {
-  const { user, loading: authLoading } = useUser();
-  const firestore = useFirestore();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-    if (!user || !firestore) {
-      setLoading(false);
-      return;
-    }
-
-    const userDocRef = doc(firestore, 'users', user.uid);
-    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setProfile(docSnap.data() as UserProfile);
-      } else {
-        // Fallback to auth data if firestore doc doesn't exist
-        setProfile({
-          uid: user.uid,
-          displayName: user.displayName || 'User',
-          email: user.email || '',
-          photoURL: user.photoURL || '',
-          username: user.email?.split('@')[0] || `user-${Date.now()}`
-        });
-      }
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching user profile:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user, firestore, authLoading]);
-
-  return { profile, loading };
-}
-
-
-const navigationItems = [
-    { name: 'Inbox', icon: MessageSquare, content: 'chats' },
-    { name: 'Groups', icon: Users, content: 'groups' },
-    { name: 'Stories', icon: GalleryHorizontal, content: 'stories' },
-    { name: 'Requests', icon: UserPlus, content: 'requests' },
-    { name: 'Calls', icon: Phone, content: 'calls' },
-];
-
-const ChatList = () => {
+const ChatList = ({ chats }: { chats: Chat[] }) => {
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
+
+    if (chats.length === 0) {
+      return (
+        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+           <p>No chats yet. Find friends and start a conversation!</p>
+        </div>
+      )
+    }
 
     return (
         <ScrollArea className="flex-1">
@@ -150,10 +47,10 @@ const ChatList = () => {
                   </Avatar>
                   <div className="flex-1">
                     <p className="font-semibold">{chat.participantDetails?.name}</p>
-                    <p className="text-sm text-muted-foreground truncate">{chat.messages[chat.messages.length - 1].content}</p>
+                    <p className="text-sm text-muted-foreground truncate">{chat.messages[chat.messages.length - 1]?.content ?? 'No messages yet'}</p>
                   </div>
                   <div className="flex flex-col items-end text-xs text-muted-foreground">
-                    <span>{chat.messages[chat.messages.length - 1].timestamp}</span>
+                    <span>{chat.messages[chat.messages.length - 1]?.timestamp}</span>
                     {chat.unreadCount > 0 && (
                       <span className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                         {chat.unreadCount}
@@ -173,13 +70,58 @@ export default function ChatPage() {
   const [activeTab, setActiveTab] = useState('chats');
   const firestore = useFirestore();
   const { user } = useUser();
-  const { profile, loading: profileLoading } = useUserProfile();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [loadingChats, setLoadingChats] = useState(true);
   const { toast } = useToast();
 
+  // Fetch user profile
   useEffect(() => {
-    const handleSearch = async () => {
+    if (!user || !firestore) return;
+    const unsub = onSnapshot(doc(firestore, 'users', user.uid), (doc) => {
+        if (doc.exists()) {
+            setProfile(doc.data() as UserProfile);
+        }
+        setLoadingProfile(false);
+    });
+    return () => unsub();
+  }, [user, firestore]);
+
+  // Fetch user's chats
+   useEffect(() => {
+    if (!user || !firestore || !profile?.friends) return;
+
+    setLoadingChats(true);
+    const friendProfiles: Promise<UserProfile | null>[] = profile.friends.map(async (friendId) => {
+      const userDoc = await getDoc(doc(firestore, 'users', friendId));
+      return userDoc.exists() ? userDoc.data() as UserProfile : null;
+    });
+
+    Promise.all(friendProfiles).then(friends => {
+      const validFriends = friends.filter(f => f !== null) as UserProfile[];
+      const chatData: Chat[] = validFriends.map(friend => ({
+        id: friend.uid, // Use friend's UID as chat ID for simplicity
+        participants: [user.uid, friend.uid],
+        messages: [], // In a real app, you'd fetch last message
+        unreadCount: 0, // In a real app, you'd calculate this
+        participantDetails: {
+          id: friend.uid,
+          name: friend.displayName,
+          avatar: friend.photoURL,
+          online: false, // Placeholder
+        },
+      }));
+      setChats(chatData);
+      setLoadingChats(false);
+    });
+
+  }, [user, firestore, profile?.friends]);
+
+
+  const handleSearch = async () => {
       if (searchQuery.trim() === '') {
         setSearchResults([]);
         return;
@@ -187,20 +129,13 @@ export default function ChatPage() {
 
       if (firestore && user) {
         const usersRef = collection(firestore, 'users');
+        // Search by username only
+        const q = query(usersRef, where('username', '==', searchQuery.toLowerCase()));
         
-        getDocs(usersRef).then((querySnapshot) => {
-            const allUsers = querySnapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() })) as UserProfile[];
-
-            const lowercasedQuery = searchQuery.toLowerCase();
-
-            const filteredUsers = allUsers.filter(u => 
-                u.uid !== user.uid && 
-                (
-                  u.displayName?.toLowerCase().includes(lowercasedQuery) ||
-                  u.username?.toLowerCase().includes(lowercasedQuery)
-                )
-            );
+        getDocs(q).then((querySnapshot) => {
+            const filteredUsers = querySnapshot.docs
+                .map(doc => doc.data() as UserProfile)
+                .filter(u => u.uid !== user.uid); // Exclude self from search results
             
             setSearchResults(filteredUsers);
         }).catch((serverError) => {
@@ -212,13 +147,6 @@ export default function ChatPage() {
         });
       }
     };
-
-    const debounceTimer = setTimeout(() => {
-      handleSearch();
-    }, 300); // Debounce search to avoid too many queries
-
-    return () => clearTimeout(debounceTimer);
-  }, [searchQuery, firestore, user]);
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
@@ -256,6 +184,14 @@ export default function ChatPage() {
         toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive' });
     }
   };
+  
+  const navigationItems = [
+    { name: 'Inbox', icon: MessageSquare, content: 'chats' },
+    { name: 'Groups', icon: Users, content: 'groups' },
+    { name: 'Stories', icon: GalleryHorizontal, content: 'stories' },
+    { name: 'Requests', icon: UserPlus, content: 'requests' },
+    { name: 'Calls', icon: Phone, content: 'calls' },
+  ];
 
   const renderSearchResults = () => {
       if (searchResults.length > 0) {
@@ -294,7 +230,7 @@ export default function ChatPage() {
     
     switch(activeTab) {
         case 'chats':
-            return <ChatList />;
+            return loadingChats ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} />;
         case 'groups':
             return <GroupsPage />;
         case 'stories':
@@ -304,7 +240,7 @@ export default function ChatPage() {
         case 'calls':
             return <CallsPage />;
         default:
-            return <ChatList />;
+            return <ChatList chats={chats} />;
     }
   }
 
@@ -331,14 +267,17 @@ export default function ChatPage() {
                 </Link>
             </Button>
           </div>
-          <div className="relative">
+          <div className="relative flex items-center">
             <Input 
-                placeholder="Search users..." 
-                className="pr-9"
+                placeholder="Search users by username..." 
+                className="pl-4 pr-10"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             />
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSearch}>
+                <Search className="h-4 w-4 text-muted-foreground" />
+            </Button>
           </div>
         </div>
         
