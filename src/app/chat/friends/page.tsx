@@ -72,13 +72,11 @@ export default function FriendsPage() {
               
               setRequests(populatedRequests);
             } catch (userError) {
-              console.error("Error fetching user profiles for requests:", userError);
               const permissionError = new FirestorePermissionError({
                   path: usersRef.path,
                   operation: 'list',
               });
               errorEmitter.emit('permission-error', permissionError);
-              toast({ title: 'Error', description: 'Could not load user profiles for requests.', variant: 'destructive'});
             }
 
         } else {
@@ -88,19 +86,17 @@ export default function FriendsPage() {
         setLoading(false);
 
     }, (serverError: any) => {
-        console.error("Error fetching friend requests:", serverError);
         const permissionError = new FirestorePermissionError({
-            path: (requestsQuery.path as any), // This is not ideal, path is not on query
+            path: 'friendRequests', // Static path since query path is not available on error
             operation: 'list',
         });
         errorEmitter.emit('permission-error', permissionError);
-        toast({ title: 'Error', description: 'Could not load friend requests.', variant: 'destructive'});
         setLoading(false);
     });
 
     return () => unsubscribe();
 
-  }, [requestsQuery, firestore, toast]);
+  }, [requestsQuery, firestore]);
 
   const handleAccept = async (request: FriendRequestWithUser) => {
     if (!firestore || !user || !request.fromUser) return;
@@ -111,40 +107,32 @@ export default function FriendsPage() {
     const currentUserRef = doc(firestore, 'users', user.uid);
     const friendUserRef = doc(firestore, 'users', request.senderId);
 
-    try {
-        batch.delete(requestRef); 
-        batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
-        batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
-        
-        await batch.commit();
-        
-        toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
-    } catch(err: any) {
-        console.error("Error accepting friend request:", err);
+    batch.delete(requestRef); 
+    batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
+    batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
+    
+    await batch.commit().catch((serverError) => {
         const permissionError = new FirestorePermissionError({
-            path: requestRef.path,
+            path: 'batch', // Batch writes affect multiple paths
             operation: 'update',
         });
         errorEmitter.emit('permission-error', permissionError);
-        toast({ title: 'Error', description: 'Could not accept friend request.', variant: 'destructive' });
-    }
+    });
+        
+    toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
   };
 
   const handleDecline = async (requestId: string) => {
     if (!firestore) return;
     const requestRef = doc(firestore, 'friendRequests', requestId);
-    try {
-        await deleteDoc(requestRef);
-        toast({ title: 'Request Declined' });
-    } catch(err: any) {
-        console.error("Error declining friend request:", err);
+    deleteDoc(requestRef).catch((serverError) => {
          const permissionError = new FirestorePermissionError({
             path: requestRef.path,
             operation: 'delete',
         });
         errorEmitter.emit('permission-error', permissionError);
-        toast({ title: 'Error', description: 'Could not decline friend request.', variant: 'destructive' });
-    }
+    });
+    toast({ title: 'Request Declined' });
   };
 
   if (loading) {

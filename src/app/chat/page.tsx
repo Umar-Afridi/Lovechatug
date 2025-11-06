@@ -35,13 +35,18 @@ function useUserProfile() {
       setLoading(false);
       return;
     }
-    const unsub = onSnapshot(doc(firestore, 'users', user.uid), (doc) => {
+    const userDocRef = doc(firestore, 'users', user.uid);
+    const unsub = onSnapshot(userDocRef, (doc) => {
         if (doc.exists()) {
             setProfile(doc.data() as UserProfile);
         }
         setLoading(false);
     }, (error) => {
-        console.error("Error fetching user profile:", error);
+        const permissionError = new FirestorePermissionError({
+            path: userDocRef.path,
+            operation: 'get',
+        });
+        errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
     return () => unsub();
@@ -127,19 +132,24 @@ export default function ChatPage() {
             const otherParticipantId = chatData.members.find((p: string) => p !== user.uid);
             
             if (otherParticipantId) {
-                const userDoc = await getDoc(doc(firestore, 'users', otherParticipantId));
-                if (userDoc.exists()) {
-                    const userData = userDoc.data() as UserProfile;
-                    return {
-                        id: docSnapshot.id,
-                        lastMessage: chatData.lastMessage || null,
-                        unreadCount: 0, // Placeholder
-                        participantDetails: {
-                            id: userData.uid,
-                            name: userData.displayName,
-                            avatar: userData.photoURL
-                        }
-                    } as Chat;
+                try {
+                    const userDoc = await getDoc(doc(firestore, 'users', otherParticipantId));
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data() as UserProfile;
+                        return {
+                            id: docSnapshot.id,
+                            lastMessage: chatData.lastMessage || null,
+                            unreadCount: 0, // Placeholder
+                            participantDetails: {
+                                id: userData.uid,
+                                name: userData.displayName,
+                                avatar: userData.photoURL
+                            }
+                        } as Chat;
+                    }
+                } catch(err) {
+                    const permissionError = new FirestorePermissionError({ path: doc(firestore, 'users', otherParticipantId).path, operation: 'get' });
+                    errorEmitter.emit('permission-error', permissionError);
                 }
             }
             return null;
@@ -157,10 +167,9 @@ export default function ChatPage() {
         setChats(resolvedChats);
         setLoadingChats(false);
     }, (error) => {
-        console.error("Error fetching chats:", error);
-        setLoadingChats(false);
         const permissionError = new FirestorePermissionError({ path: chatsRef.path, operation: 'list' });
         errorEmitter.emit('permission-error', permissionError);
+        setLoadingChats(false);
     });
 
     return () => unsubscribe();
@@ -176,14 +185,13 @@ export default function ChatPage() {
 
       if (firestore && user) {
         const usersRef = collection(firestore, 'users');
-        // Search by username only
         const q = query(usersRef, where('username', '==', searchQuery.toLowerCase()));
         
         try {
           const querySnapshot = await getDocs(q);
           const filteredUsers = querySnapshot.docs
                 .map(doc => doc.data() as UserProfile)
-                .filter(u => u.uid !== user.uid); // Exclude self from search results
+                .filter(u => u.uid !== user.uid);
             
           setSearchResults(filteredUsers);
         } catch (serverError) {
@@ -231,23 +239,28 @@ export default function ChatPage() {
             senderId: user.uid,
             receiverId: receiverId,
             status: 'pending' as const,
+            createdAt: serverTimestamp()
         };
 
-        const requestDocRef = await addDoc(requestsRef, newRequest);
-        // Using set with merge might be redundant if addDoc creates it, but it ensures createdAt is set.
-        await setDoc(requestDocRef, { ...newRequest, createdAt: serverTimestamp() }, { merge: true });
-        
-        toast({ title: 'Success', description: 'Friend request sent!' });
-
+        addDoc(requestsRef, newRequest)
+            .then(() => {
+                toast({ title: 'Success', description: 'Friend request sent!' });
+            })
+            .catch((serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: requestsRef.path,
+                    operation: 'create',
+                    requestResourceData: { senderId: user.uid, receiverId: receiverId, status: 'pending' }
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
     } catch (err: any) {
-        console.error("Error sending friend request:", err);
+        // This will catch errors from getDocs if any
         const permissionError = new FirestorePermissionError({
             path: requestsRef.path,
-            operation: 'create',
-            requestResourceData: { senderId: user.uid, receiverId: receiverId, status: 'pending' }
+            operation: 'list',
         });
         errorEmitter.emit('permission-error', permissionError);
-        toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive' });
     }
   };
   
@@ -334,15 +347,15 @@ export default function ChatPage() {
             </Button>
           </div>
           <form onSubmit={handleSearch} className="relative flex items-center">
-            <Button type="submit" variant="ghost" size="icon" className="absolute left-1 top-1/2 -translate-y-1/2 h-8 w-8">
-                <Search className="h-4 w-4 text-muted-foreground" />
-            </Button>
             <Input 
                 placeholder="Search users by username..." 
-                className="pl-12 pr-4"
+                className="pr-12 pl-4"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
             />
+            <Button type="submit" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8">
+                <Search className="h-4 w-4 text-muted-foreground" />
+            </Button>
           </form>
         </div>
         

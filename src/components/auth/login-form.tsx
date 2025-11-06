@@ -32,7 +32,6 @@ export function LoginForm() {
 
   const handleGoogleSignIn = async () => {
     if (!auth || !firestore) {
-      setError('Firebase Auth not available.');
       toast({
         variant: "destructive",
         title: "Authentication Error",
@@ -46,10 +45,16 @@ export function LoginForm() {
       const user = result.user;
 
       const userDocRef = doc(firestore, 'users', user.uid);
-      const userDocSnap = await getDoc(userDocRef);
+      
+      const userDocSnap = await getDoc(userDocRef).catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: userDocRef.path,
+          operation: 'get',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        throw new Error('Could not check user profile. Insufficient permissions.');
+      });
 
-      // Only create the user document if it doesn't already exist.
-      // This prevents overwriting user's custom profile data on each login.
       if (!userDocSnap.exists()) {
         const userData = {
           uid: user.uid,
@@ -68,7 +73,6 @@ export function LoginForm() {
               requestResourceData: userData,
             });
             errorEmitter.emit('permission-error', permissionError);
-            // Throw an error to be caught by the outer catch block
             throw new Error('Could not save user profile. Insufficient permissions.');
           });
       }
@@ -76,12 +80,7 @@ export function LoginForm() {
       router.push('/chat');
           
     } catch (error: any) {
-      console.error('Error signing in with Google', error);
-       if (error.code === 'auth/account-exists-with-different-credential') {
-        setError('An account already exists with the same email address but different sign-in credentials.');
-      } else {
-        setError(error.message);
-      }
+      setError(error.message);
       toast({
         variant: "destructive",
         title: "Google Sign-In Failed",

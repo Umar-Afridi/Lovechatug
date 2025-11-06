@@ -56,17 +56,16 @@ async function getOrCreateChat(
   const chatSnap = await getDoc(chatRef);
 
   if (!chatSnap.exists()) {
+    const chatData = {
+        members: [currentUserId, otherUserId],
+        createdAt: serverTimestamp(),
+    };
     // Create chat if it doesn't exist
-    await setDoc(chatRef, {
-      members: [currentUserId, otherUserId],
-      createdAt: serverTimestamp(),
-    }).catch(serverError => {
+    setDoc(chatRef, chatData).catch(serverError => {
         const permissionError = new FirestorePermissionError({
             path: chatRef.path,
             operation: 'create',
-            requestResourceData: {
-                members: [currentUserId, otherUserId],
-            },
+            requestResourceData: chatData,
         });
         errorEmitter.emit('permission-error', permissionError);
     });
@@ -116,6 +115,7 @@ export default function ChatIdPage({
         const determinedChatId = await getOrCreateChat(firestore, user.uid, otherUserId);
         setChatId(determinedChatId);
       } catch (error) {
+        // This catch block is for general errors, not permission errors which are handled in getOrCreateChat
         console.error("Error setting up chat page:", error);
         toast({ title: 'Error', description: 'Could not initialize chat.', variant: 'destructive' });
       } finally {
@@ -145,11 +145,10 @@ export default function ChatIdPage({
             operation: 'list',
         });
         errorEmitter.emit('permission-error', permissionError);
-        toast({ title: 'Error', description: 'Could not load messages.', variant: 'destructive'});
     });
 
     return () => unsubscribe();
-  }, [firestore, chatId, toast]);
+  }, [firestore, chatId]);
   
    useEffect(() => {
     // Scroll to bottom when messages change
@@ -175,6 +174,7 @@ export default function ChatIdPage({
 
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
     const chatRef = doc(firestore, 'chats', chatId);
+    
     const newMessage = {
       senderId: user.uid,
       content: inputValue.trim(),
@@ -182,25 +182,31 @@ export default function ChatIdPage({
       type: 'text' as const,
     };
     
-    try {
-        await addDoc(messagesRef, newMessage);
-        await updateDoc(chatRef, {
-            lastMessage: {
-                content: newMessage.content,
-                timestamp: serverTimestamp(), // Use server timestamp here as well for consistency
-                senderId: newMessage.senderId
-            }
-        });
-        setInputValue('');
-    } catch(err) {
+    const lastMessageData = {
+        content: newMessage.content,
+        timestamp: serverTimestamp(),
+        senderId: newMessage.senderId
+    };
+
+    addDoc(messagesRef, newMessage).catch((serverError) => {
         const permissionError = new FirestorePermissionError({
             path: messagesRef.path,
             operation: 'create',
-            requestResourceData: newMessage
+            requestResourceData: newMessage,
         });
         errorEmitter.emit('permission-error', permissionError);
-        toast({ title: 'Error', description: 'Could not send message.', variant: 'destructive'});
-    }
+    });
+    
+    updateDoc(chatRef, { lastMessage: lastMessageData }).catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: chatRef.path,
+            operation: 'update',
+            requestResourceData: { lastMessage: lastMessageData },
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    });
+
+    setInputValue('');
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
