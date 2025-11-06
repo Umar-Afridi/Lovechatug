@@ -246,8 +246,10 @@ export default function ChatIdPage({
     if (unreadMessages.length > 0) {
         const batch = writeBatch(firestore);
         unreadMessages.forEach((msg) => {
-            const msgRef = doc(firestore, 'chats', chatId, 'messages', msg.id);
-            batch.update(msgRef, { status: 'read' });
+            if(msg.id){
+                const msgRef = doc(firestore, 'chats', chatId, 'messages', msg.id);
+                batch.update(msgRef, { status: 'read' });
+            }
         });
         
         batch.commit().catch((serverError) => {
@@ -481,5 +483,3 @@ export default function ChatIdPage({
     </>
   );
 }
-
-    

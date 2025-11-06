@@ -6,7 +6,7 @@ import { Search, MessageSquare, Users, UserPlus, Phone, GalleryHorizontal, Setti
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { Chat, UserProfile } from '@/lib/types';
+import type { Chat, UserProfile, Message } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import GroupsPage from './groups/page';
@@ -30,6 +30,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
     const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
     const firestore = useFirestore();
     const [participant, setParticipant] = useState<UserProfile | null>(null);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     const formatTimestamp = (timestamp: any) => {
       if (!timestamp) return '';
@@ -57,6 +58,29 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
 
         return () => unsubscribe();
     }, [firestore, participantId]);
+    
+    useEffect(() => {
+        if (!firestore || !chat.id) return;
+        const messagesRef = collection(firestore, 'chats', chat.id, 'messages');
+        const q = query(
+            messagesRef,
+            where('senderId', '!=', currentUserId),
+            where('status', '!=', 'read')
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setUnreadCount(snapshot.size);
+        }, (error) => {
+             const permissionError = new FirestorePermissionError({
+                path: messagesRef.path,
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
+
+        return () => unsubscribe();
+
+    }, [firestore, chat.id, currentUserId]);
 
 
     if (!participant) {
@@ -89,7 +113,9 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
           </div>
           <div className="flex flex-col items-end text-xs text-muted-foreground">
             <span>{formatTimestamp(chat.lastMessage?.timestamp)}</span>
-            {/* Unread count can be added back later if needed */}
+            {unreadCount > 0 && (
+                <Badge className="mt-1">{unreadCount}</Badge>
+            )}
           </div>
         </div>
       </Link>
@@ -466,7 +492,7 @@ export default function ChatPage() {
                     <item.icon className="h-4 w-4" />
                     <span>{item.name}</span>
                     {item.content === 'requests' && requestCount > 0 && (
-                        <Badge variant="secondary" className="absolute top-1 right-1 h-5 w-5 justify-center p-0">{requestCount}</Badge>
+                        <Badge variant="destructive" className="absolute top-1 right-1 h-5 w-5 justify-center p-0">{requestCount}</Badge>
                     )}
                 </Button>
             ))}
