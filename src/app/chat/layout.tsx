@@ -131,28 +131,28 @@ export default function ChatAppLayout({
   useEffect(() => {
     if (!auth || !firestore) return;
 
-    // This is kept for handling potential email/password sign-in flows
-    // or other redirect-based providers in the future.
+    // This handles the redirect result from Google Sign-In on mobile
     getRedirectResult(auth)
-      .then((result) => {
+      .then(async (result) => {
         if (result && result.user) {
            const user = result.user;
            const userDocRef = doc(firestore, 'users', user.uid);
-           getDoc(userDocRef).then(userDocSnap => {
-               if (!userDocSnap.exists()) {
-                   const userData = {
-                       uid: user.uid,
-                       displayName: user.displayName,
-                       email: user.email,
-                       username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
-                       photoURL: user.photoURL,
-                       friends: [],
-                       bio: '',
-                   };
-                   setDoc(userDocRef, userData);
-               }
-               router.push('/chat');
-           });
+           const userDocSnap = await getDoc(userDocRef);
+
+            if (!userDocSnap.exists()) {
+                const userData = {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    email: user.email,
+                    username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
+                    photoURL: user.photoURL,
+                    friends: [],
+                    bio: '',
+                };
+                // Use setDoc to create the user document
+                await setDoc(userDocRef, userData);
+            }
+            router.push('/chat');
         }
       })
       .catch((error) => {
@@ -160,7 +160,7 @@ export default function ChatAppLayout({
         toast({
           variant: "destructive",
           title: "Sign-In Failed",
-          description: "Could not complete sign-in. Please try again.",
+          description: "Could not complete sign-in via redirect. Please try again.",
         });
       });
   }, [auth, firestore, router, toast]);

@@ -11,7 +11,7 @@ import {
 import { GoogleIcon } from '@/components/icons/google-icon';
 import Link from 'next/link';
 import { useAuth, useFirestore } from '@/firebase/provider';
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, signInWithRedirect } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
@@ -20,8 +20,8 @@ import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { ForgotPasswordDialog } from './forgot-password-dialog';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { useIsMobile } from '@/hooks/use-mobile';
+
 
 export function LoginForm() {
   const auth = useAuth();
@@ -29,6 +29,7 @@ export function LoginForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   const handleGoogleSignIn = async () => {
     if (!auth || !firestore) {
@@ -40,37 +41,44 @@ export function LoginForm() {
       return;
     }
     const provider = new GoogleAuthProvider();
-    try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
 
-      // After successful sign-in, check if user exists in Firestore
-      const userDocRef = doc(firestore, 'users', user.uid);
-      const userDocSnap = await getDoc(userDocRef);
+    if (isMobile) {
+        // Use redirect for mobile devices to avoid popup issues
+        await signInWithRedirect(auth, provider);
+    } else {
+        // Use popup for desktop
+        try {
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
 
-      if (!userDocSnap.exists()) {
-        // If user doesn't exist, create a new document
-        const userData = {
-          uid: user.uid,
-          displayName: user.displayName,
-          email: user.email,
-          username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
-          photoURL: user.photoURL,
-          friends: [],
-          bio: '',
-        };
-        await setDoc(userDocRef, userData);
-      }
-      
-      router.push('/chat');
+            // After successful sign-in, check if user exists in Firestore
+            const userDocRef = doc(firestore, 'users', user.uid);
+            const userDocSnap = await getDoc(userDocRef);
 
-    } catch (error: any) {
-      setError(error.message);
-      toast({
-        variant: "destructive",
-        title: "Google Sign-In Failed",
-        description: error.message,
-      });
+            if (!userDocSnap.exists()) {
+                // If user doesn't exist, create a new document
+                const userData = {
+                uid: user.uid,
+                displayName: user.displayName,
+                email: user.email,
+                username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
+                photoURL: user.photoURL,
+                friends: [],
+                bio: '',
+                };
+                await setDoc(userDocRef, userData);
+            }
+            
+            router.push('/chat');
+
+        } catch (error: any) {
+            setError(error.message);
+            toast({
+                variant: "destructive",
+                title: "Google Sign-In Failed",
+                description: error.message,
+            });
+        }
     }
   };
 
