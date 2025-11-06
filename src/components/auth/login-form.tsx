@@ -11,7 +11,7 @@ import {
 import { GoogleIcon } from '@/components/icons/google-icon';
 import Link from 'next/link';
 import { useAuth, useFirestore } from '@/firebase/provider';
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithRedirect, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
@@ -41,57 +41,15 @@ export function LoginForm() {
     }
     const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      const userDocRef = doc(firestore, 'users', user.uid);
-      
-      const userDocSnap = await getDoc(userDocRef).catch((serverError) => {
-        // This is a read operation, so we check for permission error on get
-        if (serverError.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-              path: userDocRef.path,
-              operation: 'get',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        }
-        throw new Error('Could not check user profile.');
-      });
-
-      if (!userDocSnap.exists()) {
-        const userData = {
-          uid: user.uid,
-          displayName: user.displayName,
-          email: user.email,
-          username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
-          photoURL: user.photoURL,
-          friends: [],
-          bio: '',
-        };
-
-        await setDoc(userDocRef, userData).catch((serverError) => {
-            const permissionError = new FirestorePermissionError({
-              path: userDocRef.path,
-              operation: 'create',
-              requestResourceData: userData,
-            });
-            errorEmitter.emit('permission-error', permissionError);
-            throw new Error('Could not save user profile. Insufficient permissions.');
-          });
-      }
-      
-      router.push('/chat');
-          
+      // Use signInWithRedirect instead of signInWithPopup
+      await signInWithRedirect(auth, provider);
     } catch (error: any) {
-      // Don't emit for auth errors, only firestore
-      if (!(error instanceof FirestorePermissionError)) {
-          setError(error.message);
-          toast({
-            variant: "destructive",
-            title: "Google Sign-In Failed",
-            description: error.message,
-          });
-      }
+      setError(error.message);
+      toast({
+        variant: "destructive",
+        title: "Google Sign-In Failed",
+        description: error.message,
+      });
     }
   };
 

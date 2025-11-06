@@ -36,12 +36,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useEffect, useState } from 'react';
-import { getRedirectResult } from 'firebase/auth';
+import { getRedirectResult, User } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { collection, onSnapshot, query, where, doc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, setDoc, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
 
 
 const menuItems = [
@@ -125,20 +126,64 @@ export default function ChatAppLayout({
   const isMobile = useIsMobile();
   const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2;
   const [requestCount, setRequestCount] = useState(0);
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (auth) {
-      getRedirectResult(auth)
-        .then((result) => {
-          if (result) {
-            router.push('/chat');
-          }
-        })
-        .catch((error) => {
-          console.error('Google sign-in redirect error:', error);
+    if (!auth || !firestore) return;
+
+    const handleRedirectResult = async (user: User) => {
+      const userDocRef = doc(firestore, 'users', user.uid);
+      try {
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (!userDocSnap.exists()) {
+          const userData = {
+            uid: user.uid,
+            displayName: user.displayName,
+            email: user.email,
+            username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
+            photoURL: user.photoURL,
+            friends: [],
+            bio: '',
+          };
+
+          await setDoc(userDocRef, userData).catch((serverError) => {
+              const permissionError = new FirestorePermissionError({
+                path: userDocRef.path,
+                operation: 'create',
+                requestResourceData: userData,
+              });
+              errorEmitter.emit('permission-error', permissionError);
+              throw new Error('Could not save user profile. Insufficient permissions.');
+            });
+        }
+        router.push('/chat');
+      } catch (error: any) {
+         if (!(error instanceof FirestorePermissionError)) {
+            toast({
+              variant: "destructive",
+              title: "Sign-In Error",
+              description: "Could not process user profile after sign-in.",
+            });
+         }
+      }
+    };
+
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result && result.user) {
+          handleRedirectResult(result.user);
+        }
+      })
+      .catch((error) => {
+        console.error('Google sign-in redirect error:', error);
+        toast({
+          variant: "destructive",
+          title: "Sign-In Failed",
+          description: "Could not complete sign-in with Google. Please try again.",
         });
-    }
-  }, [auth, router]);
+      });
+  }, [auth, firestore, router, toast]);
   
   useEffect(() => {
     if (!firestore || !user?.uid) return;
