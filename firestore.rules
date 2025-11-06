@@ -4,8 +4,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-      allow list: if request.auth != null;
+      allow read, list: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
 
     match /friendRequests/{requestId} {
@@ -16,9 +16,6 @@ service cloud.firestore {
                     
       allow read, update, delete: if request.auth != null && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
       
-      // Allow a user to list pending requests sent to them.
-      // This is for the notification badge and friends page.
-      // The query must be `where('to', '==', uid).where('status', '==', 'pending')`
       allow list: if request.auth != null 
                   && request.query.where[0][0] == 'to'
                   && request.query.where[0][1] == '=='
