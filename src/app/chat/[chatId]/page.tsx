@@ -386,17 +386,22 @@ export default function ChatIdPage({
                 <ArrowLeft className="h-5 w-5" />
                 <span className="sr-only">Back</span>
             </Button>
-            <Avatar>
-            <AvatarImage src={otherUser.photoURL} />
-            <AvatarFallback>{getInitials(otherUser.displayName)}</AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
-               <p className="text-xs text-muted-foreground">
-                  {otherUser.isOnline ? 'Online' : formatLastSeen(otherUser.lastSeen)}
-               </p>
+            <div 
+                className="flex items-center gap-4 cursor-pointer"
+                onClick={() => setContactSheetOpen(true)}
+            >
+                <Avatar>
+                    <AvatarImage src={otherUser.photoURL} />
+                    <AvatarFallback>{getInitials(otherUser.displayName)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
+                <p className="text-xs text-muted-foreground">
+                    {otherUser.isOnline ? 'Online' : formatLastSeen(otherUser.lastSeen)}
+                </p>
+                </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-1 justify-end items-center gap-2">
             <Button variant="ghost" size="icon">
                 <Phone className="h-5 w-5" />
                 <span className="sr-only">Audio Call</span>
