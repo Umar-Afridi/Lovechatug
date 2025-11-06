@@ -102,7 +102,6 @@ function usePresence() {
     const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
 
     // Realtime Database references for connection status
-    const userStatusDatabaseRef = ref(db, `/status/${user.uid}`);
     const connectedRef = ref(db, '.info/connected');
 
     const unsubscribe = onValue(connectedRef, (snap) => {
@@ -115,13 +114,12 @@ function usePresence() {
             errorEmitter.emit('permission-error', permissionError);
         });
 
-        // When the client disconnects, update the Realtime Database
-        const presenceData = { isOnline: false, lastSeen: rtdbServerTimestamp() };
-        onDisconnect(userStatusDatabaseRef).set(presenceData);
+        // When the client disconnects from the app, update Firestore
+        onDisconnect(userStatusFirestoreRef).update({
+          isOnline: false,
+          lastSeen: serverTimestamp()
+        });
 
-        // When the client connects, set their Realtime Database status
-        set(userStatusDatabaseRef, { isOnline: true, lastSeen: rtdbServerTimestamp() });
-        goOnline(db);
       }
     });
 
@@ -129,8 +127,10 @@ function usePresence() {
       if (typeof unsubscribe === 'function') {
         off(connectedRef, 'value', unsubscribe);
       }
-      // On unmount, go offline
-      goOffline(db);
+      // On unmount/disconnect from this component, explicitly set offline
+       updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() }).catch(err => {
+            // This might fail if the user is already offline, which is fine.
+       });
     };
   }, [user, firestore]);
 }
