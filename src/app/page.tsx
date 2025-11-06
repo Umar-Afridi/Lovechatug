@@ -8,9 +8,9 @@ export default function Home() {
       <div className="w-full max-w-md">
         <div className="flex justify-center items-center gap-2 mb-8">
             <h1 className="text-4xl font-headline font-bold text-primary flex items-center gap-2">
-              <Heart className="text-red-500 animate-pulse w-10 h-10" fill="red"/>
+              U
               LoveChat
-              <Heart className="text-red-500 animate-pulse w-10 h-10" fill="red"/>
+              G
             </h1>
         </div>
         <TooltipProvider>

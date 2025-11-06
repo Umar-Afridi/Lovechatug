@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, MessageSquare, Users, UserPlus, Phone, Heart } from 'lucide-react';
+import { Search, MessageSquare, Users, UserPlus, Phone, History, GalleryHorizontal } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import GroupsPage from './groups/page';
 import FriendsPage from './friends/page';
 import CallsPage from './calls/page';
+import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
 import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc } from 'firebase/firestore';
@@ -125,8 +126,9 @@ function useUserProfile() {
 
 
 const navigationItems = [
-    { name: 'Chats', icon: MessageSquare, content: 'chats' },
+    { name: 'Inbox', icon: MessageSquare, content: 'chats' },
     { name: 'Groups', icon: Users, content: 'groups' },
+    { name: 'Stories', icon: GalleryHorizontal, content: 'stories' },
     { name: 'Requests', icon: UserPlus, content: 'requests' },
     { name: 'Calls', icon: Phone, content: 'calls' },
 ];
@@ -279,7 +281,7 @@ export default function ChatPage() {
       } else {
          return (
            <div className="flex flex-1 items-center justify-center text-muted-foreground">
-             <p>No users found.</p>
+             <p>No users found matching your search.</p>
            </div>
          );
       }
@@ -295,6 +297,8 @@ export default function ChatPage() {
             return <ChatList />;
         case 'groups':
             return <GroupsPage />;
+        case 'stories':
+            return <StoriesPage />;
         case 'requests':
             return <FriendsPage />;
         case 'calls':
@@ -311,9 +315,9 @@ export default function ChatPage() {
         <div className="p-4 space-y-4 border-b">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
-                <Heart className="text-red-500 animate-pulse" fill="red"/>
-                <span>LoveChat</span>
-                <Heart className="text-red-500 animate-pulse" fill="red"/>
+                U
+                <span>Love Chat</span>
+                G
             </h1>
             <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
                 <Link href="/profile">
@@ -348,7 +352,7 @@ export default function ChatPage() {
                     variant="ghost" 
                     className={cn(
                         "flex-1 justify-center gap-2 rounded-none",
-                        activeTab === item.content ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground'
+                        activeTab === item.content ? 'border-b-2 border-primary text-primary bg-primary/10' : 'text-muted-foreground'
                     )}
                     onClick={() => setActiveTab(item.content)}
                 >
