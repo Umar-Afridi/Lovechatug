@@ -73,7 +73,7 @@ const chats: Chat[] = [
     messages: [
         { id: 'm4', senderId: 'user1', content: 'You sent an attachment.', timestamp: 'Yesterday', type: 'text' }
     ],
-    unreadCount: 0,
+unreadCount: 0,
     participantDetails: {
         id: 'user5',
         name: 'Zainab Omar',
@@ -95,7 +95,7 @@ const ChatList = () => {
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
 
     return (
-        <ScrollArea className="h-[calc(100vh-220px)]">
+        <ScrollArea className="flex-1">
           <div className="flex flex-col">
             {chats.map(chat => (
               <Link href={`/chat/${chat.id}`} key={chat.id}>
@@ -158,7 +158,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (api) {
       const activeIndex = navigationItems.findIndex(item => item.content === activeTab);
-      if (activeIndex !== -1) {
+      if (activeIndex !== -1 && activeIndex !== api.selectedScrollSnap()) {
         api.scrollTo(activeIndex);
       }
     }
@@ -247,7 +247,7 @@ export default function ChatPage() {
   const renderSearchResults = () => {
       if (searchResults.length > 0) {
         return (
-          <ScrollArea className="h-[calc(100vh-220px)]">
+          <ScrollArea className="flex-1">
             {searchResults.map(foundUser => (
               <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
                 <div className="flex items-center gap-4">
@@ -267,17 +267,34 @@ export default function ChatPage() {
         );
       } else {
          return (
-           <div className="flex h-[calc(100vh-220px)] items-center justify-center text-muted-foreground">
+           <div className="flex flex-1 items-center justify-center text-muted-foreground">
              <p>No users found.</p>
            </div>
          );
       }
   }
 
+  const renderContent = () => {
+    if (searchQuery.trim() !== '') {
+      return renderSearchResults();
+    }
+    return (
+        <Carousel setApi={setApi} className="w-full flex-1">
+            <CarouselContent className="h-full">
+                <CarouselItem className="h-full"><ChatList /></CarouselItem>
+                <CarouselItem className="h-full"><GroupsPage /></CarouselItem>
+                <CarouselItem className="h-full"><FriendsPage /></CarouselItem>
+                <CarouselItem className="h-full"><CallsPage /></CarouselItem>
+            </CarouselContent>
+        </Carousel>
+    );
+  }
+
   return (
-    <div className="flex h-screen bg-background">
-      <div className="w-full border-r">
-        <div className="p-4 space-y-4">
+    <div className="flex h-screen flex-col bg-background">
+      <div className="w-full border-r flex flex-col h-full">
+        {/* Header */}
+        <div className="p-4 space-y-4 border-b">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
                 <Heart className="text-red-500 animate-pulse" fill="red"/>
@@ -308,6 +325,8 @@ export default function ChatPage() {
             />
           </div>
         </div>
+        
+        {/* Navigation */}
         <div className='flex border-b'>
             {navigationItems.map((item) => (
                 <Button 
@@ -325,16 +344,11 @@ export default function ChatPage() {
             ))}
         </div>
         
-        {searchQuery.trim() !== '' ? renderSearchResults() : (
-            <Carousel setApi={setApi} className="w-full">
-                <CarouselContent>
-                    <CarouselItem><ChatList /></CarouselItem>
-                    <CarouselItem><GroupsPage /></CarouselItem>
-                    <CarouselItem><FriendsPage /></CarouselItem>
-                    <CarouselItem><CallsPage /></CarouselItem>
-                </CarouselContent>
-            </Carousel>
-        )}
+        {/* Content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+            {renderContent()}
+        </div>
+
       </div>
     </div>
   );
