@@ -19,8 +19,6 @@ import { Label } from '../ui/label';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { ForgotPasswordDialog } from './forgot-password-dialog';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
-
 
 export function LoginForm() {
   const auth = useAuth();
@@ -110,20 +108,10 @@ export function LoginForm() {
             Login
           </Button>
           <Separator className="my-4" />
-           <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="w-full">
-                  <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} type="button" disabled>
-                    <GoogleIcon className="mr-2 h-4 w-4" />
-                    Sign in with Google
-                  </Button>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Google Sign-In needs project configuration.</p>
-                <p className="text-muted-foreground">Please configure OAuth in the Firebase Console.</p>
-              </TooltipContent>
-            </Tooltip>
+           <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} type="button">
+            <GoogleIcon className="mr-2 h-4 w-4" />
+            Sign in with Google
+          </Button>
           <div className="mt-4 text-center text-sm">
             Don&apos;t have an account?{' '}
             <Link href="/signup" className="underline">
