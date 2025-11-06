@@ -36,7 +36,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useEffect, useState } from 'react';
-import { getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { collection, onSnapshot, query, where, doc, setDoc, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -128,48 +127,6 @@ export default function ChatAppLayout({
   const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2;
   const [requestCount, setRequestCount] = useState(0);
   const { toast } = useToast();
-
-  useEffect(() => {
-    if (!auth || !firestore) return;
-
-    const handleRedirect = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result && result.user) {
-          // User has successfully signed in via redirect.
-          const user = result.user;
-          const userDocRef = doc(firestore, 'users', user.uid);
-          const userDocSnap = await getDoc(userDocRef);
-
-          if (!userDocSnap.exists()) {
-            // If the user is new, create their profile in Firestore.
-            const userData: UserProfile = {
-              uid: user.uid,
-              displayName: user.displayName || 'Anonymous User',
-              email: user.email || '',
-              username: user.email?.split('@')[0] || `user-${Date.now()}`,
-              photoURL: user.photoURL || '',
-              friends: [],
-              bio: '',
-            };
-            // IMPORTANT: Wait for setDoc to complete before redirecting.
-            await setDoc(userDocRef, userData);
-          }
-          // Now that the user profile is guaranteed to exist, redirect to the chat page.
-          router.push('/chat');
-        }
-      } catch (error: any) {
-        console.error('Sign-in redirect error:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Sign-In Failed',
-          description: 'Could not complete sign-in. Please try again.',
-        });
-      }
-    };
-
-    handleRedirect();
-  }, [auth, firestore, router, toast]);
   
   useEffect(() => {
     if (!firestore || !user?.uid) return;

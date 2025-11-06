@@ -10,8 +10,8 @@ import {
 } from '@/components/ui/card';
 import { GoogleIcon } from '@/components/icons/google-icon';
 import Link from 'next/link';
-import { useAuth } from '@/firebase/provider';
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect } from 'firebase/auth';
+import { useAuth, useFirestore } from '@/firebase/provider';
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
@@ -19,15 +19,20 @@ import { Label } from '../ui/label';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { ForgotPasswordDialog } from './forgot-password-dialog';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import type { UserProfile } from '@/lib/types';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export function LoginForm() {
   const auth = useAuth();
+  const firestore = useFirestore();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleGoogleSignIn = async () => {
-    if (!auth) {
+    if (!auth || !firestore) {
       toast({
         variant: "destructive",
         title: "Authentication Error",
@@ -37,16 +42,50 @@ export function LoginForm() {
     }
     const provider = new GoogleAuthProvider();
     
-    // Always use signInWithRedirect for a consistent and reliable experience
-    // across all devices and environments (including mobile and iframes).
     try {
-        await signInWithRedirect(auth, provider);
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+
+        // After sign-in, check if user exists in Firestore. If not, create them.
+        const userDocRef = doc(firestore, 'users', user.uid);
+        const docSnap = await getDoc(userDocRef);
+
+        if (!docSnap.exists()) {
+            const newUserProfile: UserProfile = {
+                uid: user.uid,
+                displayName: user.displayName || 'Anonymous User',
+                email: user.email || '',
+                username: user.email?.split('@')[0] || `user-${Date.now()}`,
+                photoURL: user.photoURL || '',
+                friends: [],
+                bio: '',
+            };
+            await setDoc(userDocRef, newUserProfile).catch((serverError) => {
+              const permissionError = new FirestorePermissionError({
+                path: userDocRef.path,
+                operation: 'create',
+                requestResourceData: newUserProfile,
+              });
+              errorEmitter.emit('permission-error', permissionError);
+              // Also show a user-facing error
+              throw new Error("Could not save your user profile due to permissions.");
+            });
+        }
+        // Redirect to chat page after ensuring profile exists
+        router.push('/chat');
+
     } catch (error: any) {
+        let friendlyMessage = "An unknown error occurred during sign-in.";
+        if (error.code === 'auth/popup-closed-by-user') {
+            friendlyMessage = "The sign-in window was closed before completion.";
+        } else if (error.code === 'auth/account-exists-with-different-credential') {
+            friendlyMessage = "An account already exists with the same email address but different sign-in credentials.";
+        }
         setError(error.message);
         toast({
             variant: "destructive",
             title: "Google Sign-In Failed",
-            description: "Could not start the sign-in process. Please try again.",
+            description: friendlyMessage,
         });
     }
   };
