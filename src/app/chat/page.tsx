@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { Search, MessageSquare, Users, UserPlus, Phone, GalleryHorizontal, Settings } from 'lucide-react';
+import { Search, MessageSquare, Users, UserPlus, Phone } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { Chat, UserProfile, Message } from '@/lib/types';
+import type { Chat, UserProfile } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import GroupsPage from './groups/page';
@@ -15,7 +15,7 @@ import CallsPage from './calls/page';
 import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, query, where, getDoc, updateDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
@@ -26,10 +26,10 @@ import type { EmblaCarouselType } from 'embla-carousel-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 
-const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: string }) => {
+const ChatListItem = ({ chat }: { chat: Chat, currentUserId: string }) => {
     const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
     const firestore = useFirestore();
-    const [participant, setParticipant] = useState<UserProfile | null>(null);
+    const [participant, setParticipant] = useState<UserProfile | null>(chat.participantDetails || null);
     const [unreadCount, setUnreadCount] = useState(0);
 
     const formatTimestamp = (timestamp: any) => {
@@ -38,7 +38,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
       return formatDistanceToNow(date, { addSuffix: true });
     };
 
-    const participantId = useMemo(() => chat.members.find(id => id !== currentUserId), [chat.members, currentUserId]);
+    const participantId = useMemo(() => chat.members.find(id => id !== chat.currentUserId), [chat.members, chat.currentUserId]);
     
     useEffect(() => {
         if (!firestore || !participantId) return;
@@ -60,11 +60,12 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
     }, [firestore, participantId]);
     
     useEffect(() => {
-        if (!firestore || !chat.id) return;
+        if (!firestore || !chat.id || !participantId) return;
         const messagesRef = collection(firestore, 'chats', chat.id, 'messages');
+        // Corrected Query: Use '==' on senderId and '!=' on status. This is a valid query.
         const q = query(
             messagesRef,
-            where('senderId', '!=', currentUserId),
+            where('senderId', '==', participantId),
             where('status', '!=', 'read')
         );
 
@@ -80,7 +81,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
 
         return () => unsubscribe();
 
-    }, [firestore, chat.id, currentUserId]);
+    }, [firestore, chat.id, participantId]);
 
 
     if (!participant) {
@@ -144,7 +145,7 @@ const ChatList = ({ chats, currentUserId }: { chats: Chat[], currentUserId: stri
         <ScrollArea className="flex-1">
           <div className="flex flex-col">
             {sortedChats.map(chat => (
-              <ChatListItem key={chat.id} chat={chat} currentUserId={currentUserId} />
+              <ChatListItem key={chat.id} chat={{...chat, currentUserId}} currentUserId={currentUserId} />
             ))}
           </div>
         </ScrollArea>
@@ -169,7 +170,7 @@ export default function ChatPage() {
   const navigationItems = [
     { name: 'Inbox', icon: MessageSquare, content: 'inbox' },
     { name: 'Groups', icon: Users, content: 'groups' },
-    { name: 'Stories', icon: GalleryHorizontal, content: 'stories' },
+    { name: 'Stories', icon: Users, content: 'stories' },
     { name: 'Requests', icon: UserPlus, content: 'requests', count: requestCount },
     { name: 'Calls', icon: Phone, content: 'calls' },
   ];
@@ -221,44 +222,29 @@ export default function ChatPage() {
 
   // Fetch chats based on user's chatIds
   useEffect(() => {
-    if (!firestore || !profile?.chatIds || profile.chatIds.length === 0) {
-      setLoadingChats(false);
-      setChats([]);
-      return;
+    if (!firestore || !user?.uid) {
+        setLoadingChats(false);
+        return;
     }
 
     setLoadingChats(true);
-    const chatRefs = profile.chatIds.map(id => doc(firestore, 'chats', id));
+    const chatsRef = collection(firestore, 'chats');
+    const q = query(chatsRef, where('members', 'array-contains', user.uid));
     
-    const unsubscribes = chatRefs.map(chatRef => 
-        onSnapshot(chatRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const newChat = { id: docSnap.id, ...docSnap.data() } as Chat;
-                setChats(currentChats => {
-                    const existingChatIndex = currentChats.findIndex(c => c.id === newChat.id);
-                    if (existingChatIndex > -1) {
-                        const updatedChats = [...currentChats];
-                        updatedChats[existingChatIndex] = newChat;
-                        return updatedChats;
-                    } else {
-                        return [...currentChats, newChat];
-                    }
-                });
-            }
-        }, (error) => {
-             const permissionError = new FirestorePermissionError({
-                path: chatRef.path,
-                operation: 'get',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        })
-    );
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const userChats = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
+        setChats(userChats);
+        setLoadingChats(false);
+    }, (error) => {
+        const permissionError = new FirestorePermissionError({ path: chatsRef.path, operation: 'list' });
+        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching chats:", error);
+        setLoadingChats(false);
+    });
     
-    setLoadingChats(false);
+    return () => unsubscribe();
 
-    return () => unsubscribes.forEach(unsub => unsub());
-
-  }, [firestore, profile?.chatIds]);
+  }, [firestore, user?.uid]);
 
 
    useEffect(() => {
@@ -320,57 +306,6 @@ export default function ChatPage() {
       .map((n) => n[0])
       .join('');
   };
-
-  const handleAddRequest = async (receiverId: string) => {
-    if (!firestore || !user) {
-        toast({ title: 'Error', description: 'You must be logged in to send a friend request.', variant: 'destructive' });
-        return;
-    }
-
-    if (profile?.friends?.includes(receiverId)) {
-        toast({ title: 'Already Friends', description: 'You are already friends with this user.'});
-        return;
-    }
-
-    const requestsRef = collection(firestore, 'friendRequests');
-    const q1 = query(requestsRef, where('senderId', '==', user.uid), where('receiverId', '==', receiverId));
-    const q2 = query(requestsRef, where('senderId', '==', receiverId), where('receiverId', '==', user.uid));
-
-    try {
-        const [q1Snap, q2Snap] = await Promise.all([getDocs(q1), getDocs(q2)]);
-
-        if (!q1Snap.empty || !q2Snap.empty) {
-            toast({ title: 'Request Already Exists', description: 'A friend request is already pending.'});
-            return;
-        }
-
-        const newRequest = {
-            senderId: user.uid,
-            receiverId: receiverId,
-            status: 'pending' as const,
-            createdAt: serverTimestamp()
-        };
-
-        addDoc(requestsRef, newRequest)
-            .then(() => {
-                toast({ title: 'Success', description: 'Friend request sent!' });
-            })
-            .catch((serverError) => {
-                const permissionError = new FirestorePermissionError({
-                    path: requestsRef.path,
-                    operation: 'create',
-                    requestResourceData: newRequest
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            });
-    } catch (err: any) {
-        const permissionError = new FirestorePermissionError({
-            path: requestsRef.path,
-            operation: 'list',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    }
-  };
   
   const renderSearchResults = () => {
     if (searchQuery.trim() !== '' && searchResults.length === 0) {
@@ -402,7 +337,7 @@ export default function ChatPage() {
                         <Link href={`/chat/${foundUser.uid}`}>Message</Link>
                     </Button>
                 ) : (
-                    <Button size="sm" onClick={() => handleAddRequest(foundUser.uid)}>Add Request</Button>
+                    <Button size="sm">Add Request</Button>
                 )}
             </div>
             );
@@ -445,11 +380,6 @@ export default function ChatPage() {
             <div className="flex items-center gap-2">
                  <ThemeToggle />
                  <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
-                    <Link href="/settings">
-                      <Settings className="h-5 w-5" />
-                    </Link>
-                </Button>
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
                     <Link href="/profile">
                       <Avatar className="h-10 w-10">
                         <AvatarImage
@@ -507,3 +437,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
