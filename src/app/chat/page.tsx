@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Search, MessageSquare, Users, UserPlus, Phone, GalleryHorizontal, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -16,7 +15,7 @@ import CallsPage from './calls/page';
 import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc, Timestamp, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
@@ -25,7 +24,6 @@ import { Badge } from '@/components/ui/badge';
 import useEmblaCarousel from 'embla-carousel-react';
 import type { EmblaCarouselType } from 'embla-carousel-react';
 
-// Custom hook to get user profile data in real-time
 function useUserProfile() {
   const { user, loading: authLoading } = useUser();
   const firestore = useFirestore();
@@ -58,22 +56,85 @@ function useUserProfile() {
   return { profile, loading };
 }
 
+const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: string }) => {
+    const firestore = useFirestore();
+    const [participant, setParticipant] = useState<UserProfile | null>(chat.participantDetails ?? null);
+    const participantId = useMemo(() => chat.members.find(id => id !== currentUserId), [chat.members, currentUserId]);
 
-const ChatList = ({ chats, blockedUsers }: { chats: Chat[], blockedUsers: string[] }) => {
+    useEffect(() => {
+        if (!firestore || !participantId) return;
+        if(participant) return; // Already have details
+
+        const unsub = onSnapshot(doc(firestore, 'users', participantId), (doc) => {
+            if (doc.exists()) {
+                setParticipant(doc.data() as UserProfile);
+            }
+        }, (err) => {
+            const permissionError = new FirestorePermissionError({ path: `users/${participantId}`, operation: 'get' });
+            errorEmitter.emit('permission-error', permissionError);
+        });
+
+        return () => unsub();
+    }, [firestore, participantId, participant]);
+
     const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : '';
 
     const formatTimestamp = (timestamp: any) => {
       if (!timestamp) return '';
-      // Convert Firestore Timestamp to JS Date
       const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
       return formatDistanceToNow(date, { addSuffix: true });
     };
-    
-    const filteredChats = chats.filter(chat => {
-      const otherUserId = chat.members.find(memberId => memberId !== chat.participantDetails?.id);
-      return !blockedUsers.includes(otherUserId ?? '');
-    });
 
+    if (!participant) {
+        return ( // Skeleton or minimal loader for this item
+            <div className='flex items-center gap-4 p-4'>
+                <Avatar><AvatarFallback>...</AvatarFallback></Avatar>
+                <div className="flex-1 overflow-hidden space-y-1">
+                    <div className="h-4 bg-muted rounded w-3/4"></div>
+                    <div className="h-3 bg-muted rounded w-1/2"></div>
+                </div>
+            </div>
+        );
+    }
+    
+    return (
+      <Link href={`/chat/${participant.uid}`} key={chat.id}>
+        <div className='flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50'>
+          <Avatar>
+            <AvatarImage src={participant.photoURL} />
+            <AvatarFallback>{getInitials(participant.displayName)}</AvatarFallback>
+          </Avatar>
+          <div className="flex-1 overflow-hidden">
+            <p className="font-semibold truncate">{participant.displayName}</p>
+            <p className="text-sm text-muted-foreground truncate">{chat.lastMessage?.content ?? 'No messages yet'}</p>
+          </div>
+          <div className="flex flex-col items-end text-xs text-muted-foreground">
+            <span>{formatTimestamp(chat.lastMessage?.timestamp)}</span>
+            {chat.unreadCount > 0 && (
+              <span className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                {chat.unreadCount}
+              </span>
+            )}
+          </div>
+        </div>
+      </Link>
+    );
+};
+
+
+const ChatList = ({ chats, blockedUsers, currentUserId }: { chats: Chat[], blockedUsers: string[], currentUserId: string }) => {
+    const filteredChats = useMemo(() => {
+        return chats
+            .filter(chat => {
+                const otherUserId = chat.members.find(memberId => memberId !== currentUserId);
+                return !blockedUsers.includes(otherUserId ?? '');
+            })
+            .sort((a, b) => {
+                const aTime = a.lastMessage?.timestamp?.toDate() || 0;
+                const bTime = b.lastMessage?.timestamp?.toDate() || 0;
+                return bTime - aTime;
+            });
+    }, [chats, blockedUsers, currentUserId]);
 
     if (filteredChats.length === 0) {
       return (
@@ -87,28 +148,7 @@ const ChatList = ({ chats, blockedUsers }: { chats: Chat[], blockedUsers: string
         <ScrollArea className="flex-1">
           <div className="flex flex-col">
             {filteredChats.map(chat => (
-              <Link href={`/chat/${chat.participantDetails?.id}`} key={chat.id}>
-                <div 
-                  className='flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50'
-                >
-                  <Avatar>
-                    <AvatarImage src={chat.participantDetails?.avatar} />
-                    <AvatarFallback>{getInitials(chat.participantDetails?.name ?? '')}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 overflow-hidden">
-                    <p className="font-semibold truncate">{chat.participantDetails?.name}</p>
-                    <p className="text-sm text-muted-foreground truncate">{chat.lastMessage?.content ?? 'No messages yet'}</p>
-                  </div>
-                  <div className="flex flex-col items-end text-xs text-muted-foreground">
-                    <span>{formatTimestamp(chat.lastMessage?.timestamp)}</span>
-                    {chat.unreadCount > 0 && (
-                      <span className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                        {chat.unreadCount}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </Link>
+              <ChatListItem key={chat.id} chat={chat} currentUserId={currentUserId} />
             ))}
           </div>
         </ScrollArea>
@@ -159,9 +199,7 @@ export default function ChatPage() {
     };
   }, [emblaApi, navigationItems]);
   
-
-   // Fetch user's chats in real-time
-   useEffect(() => {
+  useEffect(() => {
     if (!user || !firestore) return;
 
     setLoadingChats(true);
@@ -174,31 +212,12 @@ export default function ChatPage() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const loadedChats = snapshot.docs.map(doc => {
             const data = doc.data();
-            const otherParticipantId = data.members.find((m: string) => m !== user.uid);
-            
-            // This logic is now greatly simplified. We assume participantDetails are on the doc.
-            const participantDetails = data.participants?.[otherParticipantId] || null;
-
             return {
                 id: doc.id,
-                ...data,
-                participantDetails: participantDetails ? {
-                    id: otherParticipantId,
-                    name: participantDetails.displayName,
-                    avatar: participantDetails.photoURL
-                } : {
-                    id: otherParticipantId,
-                    name: "Unknown User",
-                    avatar: ''
-                },
-                // This will be calculated and updated via a different mechanism if needed,
-                // for now we simplify and don't fetch it live here to avoid permission issues.
+                members: data.members,
+                lastMessage: data.lastMessage,
                 unreadCount: data.unreadCounts?.[user.uid] || 0,
             } as Chat;
-        }).sort((a, b) => {
-          const aTimestamp = a.lastMessage?.timestamp?.toDate() || 0;
-          const bTimestamp = b.lastMessage?.timestamp?.toDate() || 0;
-          return bTimestamp - aTimestamp;
         });
         
         setChats(loadedChats);
@@ -374,7 +393,7 @@ export default function ChatPage() {
         <div className="flex h-full">
           {navigationItems.map(item => (
             <div className="flex-[0_0_100%] min-w-0 h-full flex flex-col" key={item.content}>
-               {item.content === 'inbox' && (loadingChats || loadingProfile ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} blockedUsers={profile?.blockedUsers ?? []} />)}
+               {item.content === 'inbox' && (loadingChats || loadingProfile || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} blockedUsers={profile?.blockedUsers ?? []} currentUserId={user.uid} />)}
                {item.content === 'groups' && <GroupsPage />}
                {item.content === 'stories' && <StoriesPage />}
                {item.content === 'requests' && <FriendsPage />}
