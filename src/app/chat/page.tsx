@@ -15,7 +15,7 @@ import FriendsPage from './friends/page';
 import CallsPage from './calls/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
@@ -81,6 +81,49 @@ unreadCount: 0,
   },
 ];
 
+// Custom hook to get user profile data in real-time
+function useUserProfile() {
+  const { user, loading: authLoading } = useUser();
+  const firestore = useFirestore();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+    if (!user || !firestore) {
+      setLoading(false);
+      return;
+    }
+
+    const userDocRef = doc(firestore, 'users', user.uid);
+    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setProfile(docSnap.data() as UserProfile);
+      } else {
+        // Fallback to auth data if firestore doc doesn't exist
+        setProfile({
+          uid: user.uid,
+          displayName: user.displayName || 'User',
+          email: user.email || '',
+          photoURL: user.photoURL || '',
+          username: user.email?.split('@')[0] || `user-${Date.now()}`
+        });
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching user profile:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user, firestore, authLoading]);
+
+  return { profile, loading };
+}
+
+
 const navigationItems = [
     { name: 'Chats', icon: MessageSquare, content: 'chats' },
     { name: 'Groups', icon: Users, content: 'groups' },
@@ -128,6 +171,7 @@ export default function ChatPage() {
   const [activeTab, setActiveTab] = useState('chats');
   const firestore = useFirestore();
   const { user } = useUser();
+  const { profile, loading: profileLoading } = useUserProfile();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const { toast } = useToast();
@@ -275,11 +319,11 @@ export default function ChatPage() {
                 <Link href="/profile">
                   <Avatar className="h-10 w-10">
                     <AvatarImage
-                        src={user?.photoURL ?? undefined}
-                        alt={user?.displayName ?? 'user-avatar'}
+                        src={profile?.photoURL ?? undefined}
+                        alt={profile?.displayName ?? 'user-avatar'}
                     />
                     <AvatarFallback>
-                        {getInitials(user?.displayName)}
+                        {getInitials(profile?.displayName)}
                     </AvatarFallback>
                   </Avatar>
                 </Link>
