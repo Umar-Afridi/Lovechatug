@@ -50,13 +50,11 @@ export default function FriendsPage() {
             }
             setRequests(requestsData);
         } catch (serverError: any) {
-            console.error("Error fetching friend requests:", serverError);
             const permissionError = new FirestorePermissionError({
                 path: requestsRef.path,
                 operation: 'list',
             });
             errorEmitter.emit('permission-error', permissionError);
-            toast({ title: 'Error', description: 'Could not fetch friend requests.', variant: 'destructive' });
         } finally {
             setLoading(false);
         }
