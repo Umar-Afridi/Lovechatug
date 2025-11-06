@@ -97,17 +97,12 @@ function usePresence() {
     if (!user || !firestore) return;
 
     const db = getDatabase();
-    
-    // Firestore reference to update isOnline and lastSeen
     const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
-
-    // Realtime Database references for connection status
     const connectedRef = ref(db, '.info/connected');
 
     const unsubscribe = onValue(connectedRef, (snap) => {
       if (snap.val() === true) {
-        // We're connected (or reconnected).
-        // Update Firestore with online status
+        // User is connected.
         const firestoreUpdateData = { isOnline: true, lastSeen: serverTimestamp() };
         updateDoc(userStatusFirestoreRef, firestoreUpdateData).catch(err => {
             const permissionError = new FirestorePermissionError({ path: userStatusFirestoreRef.path, operation: 'update', requestResourceData: firestoreUpdateData });
