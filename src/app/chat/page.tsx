@@ -21,6 +21,8 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
+
 
 // Custom hook to get user profile data in real-time
 function useUserProfile() {
@@ -118,6 +120,7 @@ export default function ChatPage() {
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [loadingChats, setLoadingChats] = useState(true);
+  const [requestCount, setRequestCount] = useState(0);
   const { toast } = useToast();
 
    // Fetch user's chats in real-time
@@ -190,6 +193,29 @@ export default function ChatPage() {
 
     return () => unsubscribe();
   }, [user, firestore]);
+
+   useEffect(() => {
+    if (!firestore || !user?.uid) return;
+
+    const requestsRef = collection(firestore, 'friendRequests');
+    const q = query(requestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
+
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        setRequestCount(snapshot.size);
+      },
+      (serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: requestsRef.path,
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching friend request count:", serverError);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [firestore, user]);
 
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -284,7 +310,7 @@ export default function ChatPage() {
     { name: 'Inbox', icon: MessageSquare, content: 'inbox' },
     { name: 'Groups', icon: Users, content: 'groups' },
     { name: 'Stories', icon: GalleryHorizontal, content: 'stories' },
-    { name: 'Requests', icon: UserPlus, content: 'requests' },
+    { name: 'Requests', icon: UserPlus, content: 'requests', count: requestCount },
     { name: 'Calls', icon: Phone, content: 'calls' },
   ];
 
@@ -389,13 +415,16 @@ export default function ChatPage() {
                     key={item.name}
                     variant="ghost" 
                     className={cn(
-                        "flex-1 justify-center gap-2 rounded-none",
+                        "flex-1 justify-center gap-2 rounded-none relative",
                         activeTab === item.content ? 'border-b-2 border-primary text-primary bg-primary/10' : 'text-muted-foreground'
                     )}
                     onClick={() => setActiveTab(item.content)}
                 >
                     <item.icon className="h-4 w-4" />
                     <span>{item.name}</span>
+                    {item.count && item.count > 0 && (
+                        <Badge variant="secondary" className="absolute top-1 right-1 h-5 w-5 justify-center p-0">{item.count}</Badge>
+                    )}
                 </Button>
             ))}
         </div>
