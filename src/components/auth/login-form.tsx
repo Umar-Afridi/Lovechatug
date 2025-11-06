@@ -11,7 +11,7 @@ import {
 import { GoogleIcon } from '@/components/icons/google-icon';
 import Link from 'next/link';
 import { useAuth, useFirestore } from '@/firebase/provider';
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
@@ -46,7 +46,6 @@ export function LoginForm() {
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
 
-        // After sign-in, check if user exists in Firestore. If not, create them.
         const userDocRef = doc(firestore, 'users', user.uid);
         const docSnap = await getDoc(userDocRef);
 
@@ -59,6 +58,8 @@ export function LoginForm() {
                 photoURL: user.photoURL || '',
                 friends: [],
                 bio: '',
+                isOnline: true,
+                lastSeen: new Date().toISOString(),
             };
             await setDoc(userDocRef, newUserProfile).catch((serverError) => {
               const permissionError = new FirestorePermissionError({
@@ -67,11 +68,9 @@ export function LoginForm() {
                 requestResourceData: newUserProfile,
               });
               errorEmitter.emit('permission-error', permissionError);
-              // Also show a user-facing error
               throw new Error("Could not save your user profile due to permissions.");
             });
         }
-        // Redirect to chat page after ensuring profile exists
         router.push('/chat');
 
     } catch (error: any) {
@@ -107,7 +106,7 @@ export function LoginForm() {
     const password = formData.get('password') as string;
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithPopup(auth, new GoogleAuthProvider());
       router.push('/chat');
     } catch (err: any) {
       setError(err.message);
@@ -148,17 +147,17 @@ export function LoginForm() {
           <Button type="submit" className="w-full">
             Login
           </Button>
-          <Separator className="my-4" />
-           <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} type="button">
-            <GoogleIcon className="mr-2 h-4 w-4" />
-            Sign in with Google
-          </Button>
-          <div className="mt-4 text-center text-sm">
+           <div className="mt-4 text-center text-sm">
             Don&apos;t have an account?{' '}
             <Link href="/signup" className="underline">
               Sign up
             </Link>
           </div>
+          <Separator className="my-4" />
+           <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} type="button">
+            <GoogleIcon className="mr-2 h-4 w-4" />
+            Sign in with Google
+          </Button>
         </form>
       </CardContent>
     </Card>
