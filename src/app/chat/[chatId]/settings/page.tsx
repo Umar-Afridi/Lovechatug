@@ -33,7 +33,7 @@ export default function ChatSettingsPage({
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const otherUserId = params.chatId;
+  const otherUserId = React.use(params as any).chatId;
 
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [isContactSheetOpen, setContactSheetOpen] = useState(false);

@@ -84,7 +84,7 @@ async function getOrCreateChat(
 }
 
 export default function ChatIdPage({
-  params: paramsProp,
+  params,
 }: {
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
@@ -92,12 +92,11 @@ export default function ChatIdPage({
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const otherUserId = React.use(paramsProp as any).chatId;
+  const otherUserId = React.use(params as any).chatId;
 
   const [chatId, setChatId] = useState<string | null>(null);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
-  const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [isContactSheetOpen, setContactSheetOpen] = useState(false);
 
