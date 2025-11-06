@@ -126,43 +126,33 @@ export function LoginForm() {
   };
 
   return (
-    <Card className="w-full max-w-sm shadow-2xl shadow-primary/10">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-headline">Welcome to Love Chat</CardTitle>
-        <CardDescription>
-          Sign in to connect with your loved ones
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" placeholder="m@example.com" required />
-          </div>
-          <div className="space-y-2">
-             <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <ForgotPasswordDialog />
-             </div>
-            <Input id="password" name="password" type="password" required />
-          </div>
-           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full">
-            Login
-          </Button>
-          <div className="mt-4 text-center text-sm">
-            Don&apos;t have an account?{' '}
-            <Link href="/signup" className="underline">
-              Sign up
-            </Link>
-          </div>
-          <Separator className="my-4" />
-           <Button className="w-full bg-red-600 text-white hover:bg-red-700" onClick={handleGoogleSignIn} type="button">
-            <GoogleIcon className="mr-2 h-5 w-5" />
-            Sign in with Google
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <>
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold">Welcome Back</h2>
+        <p className="text-muted-foreground text-sm">Enter your credentials to access your account.</p>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" placeholder="you@example.com" required />
+        </div>
+        <div className="space-y-2">
+           <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <ForgotPasswordDialog />
+           </div>
+          <Input id="password" name="password" type="password" required />
+        </div>
+         {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" className="w-full">
+          Login
+        </Button>
+        <Separator className="my-4" />
+         <Button className="w-full bg-red-600 text-white hover:bg-red-700" onClick={handleGoogleSignIn} type="button">
+          <GoogleIcon className="mr-2 h-5 w-5" />
+          Sign in with Google
+        </Button>
+      </form>
+    </>
   );
 }

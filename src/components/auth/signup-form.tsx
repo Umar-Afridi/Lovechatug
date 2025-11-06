@@ -116,43 +116,33 @@ export function SignupForm() {
   };
 
   return (
-    <Card className="w-full max-w-sm shadow-2xl shadow-primary/10">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-headline">Join Love Chat</CardTitle>
-        <CardDescription>
-          Create your account to start chatting
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="fullName">Full Name</Label>
-            <Input id="fullName" name="fullName" placeholder="John Doe" required />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="username">Username (lowercase only)</Label>
-            <Input id="username" name="username" placeholder="johndoe" required />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" placeholder="m@example.com" required />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" name="password" type="password" required />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full">
-            Create Account
-          </Button>
-          <div className="mt-4 text-center text-sm">
-            Already have an account?{' '}
-            <Link href="/" className="underline">
-              Login
-            </Link>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+    <>
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold">Create an Account</h2>
+        <p className="text-muted-foreground text-sm">Join the community and start chatting!</p>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="fullName">Full Name</Label>
+          <Input id="fullName" name="fullName" placeholder="John Doe" required />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="username">Username (lowercase only)</Label>
+          <Input id="username" name="username" placeholder="johndoe" required />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" placeholder="m@example.com" required />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <Input id="password" name="password" type="password" required />
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" className="w-full">
+          Create Account
+        </Button>
+      </form>
+    </>
   );
 }
