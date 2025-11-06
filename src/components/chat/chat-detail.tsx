@@ -99,9 +99,7 @@ export function ChatDetail({ chat }: ChatDetailProps) {
         </Avatar>
         <div className="flex-1">
           <p className="font-semibold">{chat.participantDetails?.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {chat.participantDetails?.online ? 'Online' : 'Offline'}
-          </p>
+          {/* Online status removed for simplicity with real-time backend */}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon">

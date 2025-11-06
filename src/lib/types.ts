@@ -8,20 +8,11 @@ export type UserProfile = {
   bio?: string;
 }
 
-export type User = {
-  id: string;
-  name: string;
-  email: string;
-  username: string;
-  avatar: string;
-  online: boolean;
-};
-
 export type Message = {
   id: string;
   senderId: string;
   content: string;
-  timestamp: string;
+  timestamp: any; // Firestore ServerTimestamp
   type: 'text' | 'image' | 'audio';
   mediaUrl?: string;
 };
@@ -29,14 +20,17 @@ export type Message = {
 export type Chat = {
   id: string;
   participants: string[]; // array of user ids
-  messages: Message[];
+  lastMessage?: {
+    content: string;
+    timestamp: any; // Firestore ServerTimestamp
+    senderId: string;
+  } | null;
   unreadCount: number;
   // This is a temporary field for mock data to hold the other user's details
   participantDetails?: {
     id: string;
     name: string;
     avatar: string;
-    online: boolean;
   }
 };
 

@@ -61,6 +61,67 @@
         }
       },
       "required": ["from", "to", "status"]
+    },
+    "Chat": {
+      "title": "Chat Room",
+      "description": "Represents a conversation between two or more users.",
+      "type": "object",
+      "properties": {
+        "participants": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "An array of user UIDs who are part of the chat."
+        },
+        "lastMessage": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "senderId": {
+              "type": "string"
+            }
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the chat was created."
+        }
+      },
+      "required": ["participants", "createdAt"]
+    },
+    "Message": {
+      "title": "Chat Message",
+      "description": "Represents a single message within a chat.",
+      "type": "object",
+      "properties": {
+        "senderId": {
+          "type": "string",
+          "description": "The UID of the user who sent the message."
+        },
+        "content": {
+          "type": "string",
+          "description": "The text content of the message."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the message was sent."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["text", "image", "audio"],
+          "description": "The type of the message."
+        }
+      },
+      "required": ["senderId", "content", "timestamp", "type"]
     }
   },
   "auth": {
@@ -78,6 +139,18 @@
         "$ref": "#/entities/FriendRequest"
       },
       "description": "Stores all friend requests between users."
+    },
+    "/chats/{chatId}": {
+      "schema": {
+        "$ref": "#/entities/Chat"
+      },
+      "description": "Top-level collection for chat rooms."
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/Message"
+      },
+      "description": "Sub-collection for messages within a specific chat."
     }
   }
 }

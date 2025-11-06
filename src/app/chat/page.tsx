@@ -16,10 +16,11 @@ import CallsPage from './calls/page';
 import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc, Timestamp, orderBy } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
+import { formatDistanceToNow } from 'date-fns';
 
 // Custom hook to get user profile data in real-time
 function useUserProfile() {
@@ -29,6 +30,7 @@ function useUserProfile() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!user || !firestore) {
       setLoading(false);
       return;
@@ -43,7 +45,7 @@ function useUserProfile() {
         setLoading(false);
     });
     return () => unsub();
-  }, [user, firestore]);
+  }, [user, firestore, authLoading]);
 
   return { profile, loading };
 }
@@ -51,6 +53,13 @@ function useUserProfile() {
 
 const ChatList = ({ chats }: { chats: Chat[] }) => {
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
+
+    const formatTimestamp = (timestamp: any) => {
+      if (!timestamp) return '';
+      // Convert Firestore Timestamp to JS Date
+      const date = timestamp.toDate();
+      return formatDistanceToNow(date, { addSuffix: true });
+    };
 
     if (chats.length === 0) {
       return (
@@ -64,7 +73,7 @@ const ChatList = ({ chats }: { chats: Chat[] }) => {
         <ScrollArea className="flex-1">
           <div className="flex flex-col">
             {chats.map(chat => (
-              <Link href={`/chat/${chat.id}`} key={chat.id}>
+              <Link href={`/chat/${chat.participantDetails?.id}`} key={chat.id}>
                 <div 
                   className='flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50'
                 >
@@ -72,12 +81,12 @@ const ChatList = ({ chats }: { chats: Chat[] }) => {
                     <AvatarImage src={chat.participantDetails?.avatar} />
                     <AvatarFallback>{getInitials(chat.participantDetails?.name ?? '')}</AvatarFallback>
                   </Avatar>
-                  <div className="flex-1">
-                    <p className="font-semibold">{chat.participantDetails?.name}</p>
-                    <p className="text-sm text-muted-foreground truncate">{chat.messages[chat.messages.length - 1]?.content ?? 'No messages yet'}</p>
+                  <div className="flex-1 overflow-hidden">
+                    <p className="font-semibold truncate">{chat.participantDetails?.name}</p>
+                    <p className="text-sm text-muted-foreground truncate">{chat.lastMessage?.content ?? 'No messages yet'}</p>
                   </div>
                   <div className="flex flex-col items-end text-xs text-muted-foreground">
-                    <span>{chat.messages[chat.messages.length - 1]?.timestamp}</span>
+                    <span>{formatTimestamp(chat.lastMessage?.timestamp)}</span>
                     {chat.unreadCount > 0 && (
                       <span className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                         {chat.unreadCount}
@@ -104,51 +113,54 @@ export default function ChatPage() {
   const [loadingChats, setLoadingChats] = useState(true);
   const { toast } = useToast();
 
-   // Fetch user's chats based on friends list
+   // Fetch user's chats in real-time
    useEffect(() => {
-    if (!user || !firestore || !profile) return;
+    if (!user || !firestore) return;
 
-    // If there are no friends, don't proceed.
-    if (!profile.friends || profile.friends.length === 0) {
-        setChats([]);
-        setLoadingChats(false);
-        return;
-    }
-    
     setLoadingChats(true);
-    
-    const fetchFriendProfiles = async () => {
-        const friendPromises = profile.friends!.map(friendId => getDoc(doc(firestore, 'users', friendId)));
-        const friendDocs = await Promise.all(friendPromises);
-        
-        const validFriends = friendDocs
-            .filter(doc => doc.exists())
-            .map(doc => doc.data() as UserProfile);
+    const chatsRef = collection(firestore, 'chats');
+    const q = query(chatsRef, where('participants', 'array-contains', user.uid), orderBy('lastMessage.timestamp', 'desc'));
 
-        const chatData: Chat[] = validFriends.map(friend => ({
-            id: friend.uid, // Use friend's UID as chat ID for simplicity in this demo
-            participants: [user.uid, friend.uid],
-            messages: [], // In a real app, you'd fetch the last message
-            unreadCount: 0, // In a real app, you'd calculate this
-            participantDetails: {
-                id: friend.uid,
-                name: friend.displayName,
-                avatar: friend.photoURL,
-                online: false, // Placeholder, a real app would use presence
-            },
-        }));
-        
-        setChats(chatData);
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+        const chatPromises = snapshot.docs.map(async (docSnapshot) => {
+            const chatData = docSnapshot.data();
+            const otherParticipantId = chatData.participants.find((p: string) => p !== user.uid);
+            
+            if (otherParticipantId) {
+                const userDoc = await getDoc(doc(firestore, 'users', otherParticipantId));
+                if (userDoc.exists()) {
+                    const userData = userDoc.data() as UserProfile;
+                    return {
+                        id: docSnapshot.id,
+                        lastMessage: chatData.lastMessage || null,
+                        unreadCount: 0, // Placeholder
+                        participantDetails: {
+                            id: userData.uid,
+                            name: userData.displayName,
+                            avatar: userData.photoURL
+                        }
+                    } as Chat;
+                }
+            }
+            return null;
+        });
+
+        const resolvedChats = (await Promise.all(chatPromises)).filter(c => c !== null) as Chat[];
+        setChats(resolvedChats);
         setLoadingChats(false);
-    };
+    }, (error) => {
+        console.error("Error fetching chats:", error);
+        setLoadingChats(false);
+        const permissionError = new FirestorePermissionError({ path: chatsRef.path, operation: 'list' });
+        errorEmitter.emit('permission-error', permissionError);
+    });
 
-    fetchFriendProfiles();
-    
-    // The dependency array includes profile, so this effect re-runs when the profile (and friends list) changes.
-  }, [user, firestore, profile]);
+    return () => unsubscribe();
+  }, [user, firestore]);
 
 
-  const handleSearch = async () => {
+  const handleSearch = async (e: React.FormEvent) => {
+      e.preventDefault();
       if (searchQuery.trim() === '') {
         setSearchResults([]);
         return;
@@ -190,7 +202,7 @@ export default function ChatPage() {
         return;
     }
 
-    // Check if a request already exists or if they are already friends
+    // Check if they are already friends
     if (profile?.friends?.includes(receiverId)) {
         toast({ title: 'Already Friends', description: 'You are already friends with this user.'});
         return;
@@ -198,13 +210,13 @@ export default function ChatPage() {
 
     const requestsRef = collection(firestore, 'friendRequests');
     // Check for existing pending request (either way)
-    const q1 = query(requestsRef, where('from', '==', user.uid), where('to', '==', receiverId), where('status', '==', 'pending'));
-    const q2 = query(requestsRef, where('from', '==', receiverId), where('to', '==', user.uid), where('status', '==', 'pending'));
+    const q1 = query(requestsRef, where('from', '==', user.uid), where('to', '==', receiverId));
+    const q2 = query(requestsRef, where('from', '==', receiverId), where('to', '==', user.uid));
 
     const [q1Snap, q2Snap] = await Promise.all([getDocs(q1), getDocs(q2)]);
 
     if (!q1Snap.empty || !q2Snap.empty) {
-        toast({ title: 'Request Already Sent', description: 'A friend request is already pending between you and this user.'});
+        toast({ title: 'Request Already Exists', description: 'A friend request is already pending or has been dealt with.'});
         return;
     }
 
@@ -215,9 +227,19 @@ export default function ChatPage() {
     };
 
     try {
-        await addDoc(requestsRef, newRequest);
+        const requestDocRef = await addDoc(requestsRef, newRequest);
+        setDoc(requestDocRef, { ...newRequest, createdAt: serverTimestamp() }, { merge: true })
+        .catch(serverError => {
+            const permissionError = new FirestorePermissionError({
+                path: requestDocRef.path,
+                operation: 'create',
+                requestResourceData: { ...newRequest, createdAt: "SERVER_TIMESTAMP" }
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
         toast({ title: 'Success', description: 'Friend request sent!' });
     } catch(err) {
+        // This catch block might be redundant if the one inside setDoc handles it, but good for safety.
         console.error("Error sending friend request:", err);
         const permissionError = new FirestorePermissionError({
             path: requestsRef.path,
@@ -311,18 +333,17 @@ export default function ChatPage() {
                 </Link>
             </Button>
           </div>
-          <div className="relative flex items-center">
+          <form onSubmit={handleSearch} className="relative flex items-center">
             <Input 
                 placeholder="Search users by username..." 
-                className="pl-4 pr-10"
+                className="pr-12 pl-4"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             />
-            <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSearch}>
+            <Button type="submit" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8">
                 <Search className="h-4 w-4 text-muted-foreground" />
             </Button>
-          </div>
+          </form>
         </div>
         
         {/* Navigation */}

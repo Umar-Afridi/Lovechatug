@@ -7,39 +7,32 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Allow any authenticated user to read any user's profile. This is needed to display user information for friend requests.
-    // Only the user themselves can write to their own profile.
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Rules for friend requests
     match /friendRequests/{requestId} {
-      // Allow creation of a friend request if the sender is the authenticated user.
-      allow create: if isAuthenticated() 
-                    && request.resource.data.from == request.auth.uid;
-                    
-      // Allow read access if the user is either the sender or the receiver of the request.
-      allow read: if isAuthenticated() 
-                  && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
-
-      // Allow the receiver to update the status (accept/reject). In this app, we delete on reject.
+      allow create: if isAuthenticated() && request.resource.data.from == request.auth.uid;
+      allow read: if isAuthenticated() && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
       allow update: if isAuthenticated() && resource.data.to == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+      allow list: if isAuthenticated() && request.query.where[0][2] == request.auth.uid;
+    }
+    
+    match /chats/{chatId} {
+      function isChatMember() {
+        return isAuthenticated() && resource.data.participants.hasAny([request.auth.uid]);
+      }
       
-      // Allow either user to delete the request (e.g., decline or cancel).
-      allow delete: if isAuthenticated() 
-                    && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
-      
-      // Allow a user to query for friend requests sent to them.
-      // This is used for the notification badge and the requests page.
-      allow list: if isAuthenticated() 
-                  && request.query.where[0][0] == 'to'
-                  && request.query.where[0][1] == '=='
-                  && request.query.where[0][2] == request.auth.uid;
+      allow read, create, update: if isChatMember();
+
+      match /messages/{messageId} {
+        allow read, create: if isChatMember() && request.resource.data.senderId == request.auth.uid;
+        allow update, delete: if false;
+      }
     }
 
-    // A catch-all rule to deny access to any other collections by default.
     match /{document=**} {
       allow read, write: if false;
     }
