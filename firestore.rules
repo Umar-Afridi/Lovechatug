@@ -42,6 +42,11 @@ service cloud.firestore {
         allow create: if isAuthenticated() && request.resource.data.members.hasAny([request.auth.uid]);
         allow delete: if isAuthenticated() && request.auth.uid in resource.data.members;
         
+        // Allow a user to list the chats they are a member of.
+        // This rule is crucial for the main chat list screen.
+        // It checks that the 'members' array-contains query is filtering by the user's own UID.
+        allow list: if isAuthenticated() && request.query.where[0][2] == request.auth.uid;
+        
         match /messages/{messageId} {
             function isNotBlocked(chatId) {
               let receiverId = get(/databases/$(database)/documents/chats/$(chatId)).data.members.remove(request.auth.uid)[0];
