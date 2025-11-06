@@ -132,38 +132,43 @@ export default function ChatAppLayout({
   useEffect(() => {
     if (!auth || !firestore) return;
 
-    // This handles the redirect result from Google Sign-In on mobile
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (result && result.user) {
-           const user = result.user;
-           const userDocRef = doc(firestore, 'users', user.uid);
-           const userDocSnap = await getDoc(userDocRef);
+    // This handles the redirect result from Google Sign-In on all devices
+    const handleRedirect = async () => {
+        try {
+            const result = await getRedirectResult(auth);
+            if (result && result.user) {
+                const user = result.user;
+                const userDocRef = doc(firestore, 'users', user.uid);
+                const userDocSnap = await getDoc(userDocRef);
 
-            if (!userDocSnap.exists()) {
-                const userData = {
-                    uid: user.uid,
-                    displayName: user.displayName,
-                    email: user.email,
-                    username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
-                    photoURL: user.photoURL,
-                    friends: [],
-                    bio: '',
-                };
-                // Use setDoc to create the user document
-                await setDoc(userDocRef, userData);
+                if (!userDocSnap.exists()) {
+                    const userData = {
+                        uid: user.uid,
+                        displayName: user.displayName,
+                        email: user.email,
+                        username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
+                        photoURL: user.photoURL,
+                        friends: [],
+                        bio: '',
+                    };
+                    // Use setDoc to create the user document
+                    await setDoc(userDocRef, userData);
+                }
+                // Redirect to chat page after sign in is complete
+                router.push('/chat');
             }
-            router.push('/chat');
+        } catch (error: any) {
+            console.error('Sign-in redirect error:', error);
+            toast({
+                variant: "destructive",
+                title: "Sign-In Failed",
+                description: "Could not complete sign-in. Please try again.",
+            });
         }
-      })
-      .catch((error) => {
-        console.error('Sign-in redirect error:', error);
-        toast({
-          variant: "destructive",
-          title: "Sign-In Failed",
-          description: "Could not complete sign-in via redirect. Please try again.",
-        });
-      });
+    };
+    
+    handleRedirect();
+
   }, [auth, firestore, router, toast]);
   
   useEffect(() => {
