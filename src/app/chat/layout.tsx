@@ -43,6 +43,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 
 const menuItems = [
@@ -220,74 +221,75 @@ export default function ChatAppLayout({
       .join('');
   };
 
-  // On mobile, if we are on a chat detail page, we don't want to show the sidebar.
-  // The main layout for mobile will be handled by the pages themselves.
-  if (isMobile && (isChatDetailPage || pathname === '/profile')) {
-      return (
-        <main>{children}</main>
-      )
-  }
+  const showSidebar = !isMobile || !isChatDetailPage;
 
   return (
-    <div className="flex">
-        <SidebarProvider>
-            <Sidebar side="left" collapsible="icon" className="group">
-                <SidebarHeader>
-                    <Link href="/profile" className="h-12 w-full justify-start gap-2 px-2 flex items-center">
-                        <Avatar className="h-8 w-8">
-                        <AvatarImage
-                            src={profile.photoURL ?? undefined}
-                            alt={profile.displayName ?? 'user-avatar'}
-                        />
-                        <AvatarFallback>
-                            {getInitials(profile.displayName)}
-                        </AvatarFallback>
-                        </Avatar>
-                        <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
-                        <span className="truncate text-sm font-medium">
-                            {profile.displayName ?? 'User'}
-                        </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                            {profile.email ?? 'No email'}
-                        </span>
-                        </div>
-                    </Link>
-                </SidebarHeader>
-                <SidebarContent>
-                <SidebarMenu>
-                    {menuItems.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                        <Link href={item.href}>
-                        <SidebarMenuButton
-                            isActive={pathname.startsWith(item.href) && (item.href === '/chat' ? pathname.split('/').length <= 2 : true)}
-                            tooltip={item.label}
-                        >
-                            <item.icon />
-                            <span>{item.label}</span>
-                             {item.id === 'friend-requests' && requestCount > 0 && (
-                                <SidebarMenuBadge>{requestCount}</SidebarMenuBadge>
-                            )}
-                        </SidebarMenuButton>
-                        </Link>
-                    </SidebarMenuItem>
-                    ))}
-                </SidebarMenu>
-                </SidebarContent>
-                <SidebarFooter>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                      <Link href="/profile" className="w-full">
-                        <SidebarMenuButton tooltip="Settings">
-                            <Settings />
-                            <span>Settings</span>
-                        </SidebarMenuButton>
+    <div className="flex h-screen">
+      <SidebarProvider>
+        {showSidebar && (
+          <Sidebar side="left" collapsible="icon" className="group hidden md:flex">
+              <SidebarHeader>
+                  <Link href="/profile" className="h-12 w-full justify-start gap-2 px-2 flex items-center">
+                      <Avatar className="h-8 w-8">
+                      <AvatarImage
+                          src={profile.photoURL ?? undefined}
+                          alt={profile.displayName ?? 'user-avatar'}
+                      />
+                      <AvatarFallback>
+                          {getInitials(profile.displayName)}
+                      </AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
+                      <span className="truncate text-sm font-medium">
+                          {profile.displayName ?? 'User'}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                          {profile.email ?? 'No email'}
+                      </span>
+                      </div>
+                  </Link>
+              </SidebarHeader>
+              <SidebarContent>
+              <SidebarMenu>
+                  {menuItems.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                      <Link href={item.href}>
+                      <SidebarMenuButton
+                          isActive={pathname.startsWith(item.href) && (item.href === '/chat' ? pathname.split('/').length <= 2 : true)}
+                          tooltip={item.label}
+                      >
+                          <item.icon />
+                          <span>{item.label}</span>
+                           {item.id === 'friend-requests' && requestCount > 0 && (
+                              <SidebarMenuBadge>{requestCount}</SidebarMenuBadge>
+                          )}
+                      </SidebarMenuButton>
                       </Link>
-                    </SidebarMenuItem>
-                </SidebarMenu>
-                </SidebarFooter>
-            </Sidebar>
-            <main className="flex-1">{children}</main>
-        </SidebarProvider>
+                  </SidebarMenuItem>
+                  ))}
+              </SidebarMenu>
+              </SidebarContent>
+              <SidebarFooter>
+              <SidebarMenu>
+                  <SidebarMenuItem>
+                    <Link href="/profile" className="w-full">
+                      <SidebarMenuButton tooltip="Settings">
+                          <Settings />
+                          <span>Settings</span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SidebarMenuItem>
+              </SidebarMenu>
+              </SidebarFooter>
+          </Sidebar>
+        )}
+        <main className={cn(
+          "flex-1 transition-all duration-300",
+          isMobile && isChatDetailPage ? "w-full" : "w-full md:w-auto"
+        )}>
+          {children}
+        </main>
+      </SidebarProvider>
     </div>
   );
 }

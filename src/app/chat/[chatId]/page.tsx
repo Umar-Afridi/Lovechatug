@@ -238,13 +238,12 @@ export default function ChatIdPage({
 
   return (
     <div className="flex h-screen flex-col">
-       <div className="md:hidden p-2 border-b">
-         <Button variant="ghost" size="icon" onClick={() => router.push('/chat')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-       </div>
        {/* Chat Header */}
-        <header className="flex items-center gap-4 border-b bg-muted/40 px-6 py-3">
+        <header className="flex items-center gap-4 border-b bg-muted/40 px-4 py-3">
+            <Button variant="ghost" size="icon" className="md:hidden" onClick={() => router.push('/chat')}>
+                <ArrowLeft className="h-5 w-5" />
+                <span className="sr-only">Back</span>
+            </Button>
             <Avatar>
             <AvatarImage src={otherUser.photoURL} />
             <AvatarFallback>{getInitials(otherUser.displayName)}</AvatarFallback>
