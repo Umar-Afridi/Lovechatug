@@ -15,7 +15,7 @@ import CallsPage from './calls/page';
 import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
@@ -57,27 +57,10 @@ function useUserProfile() {
 }
 
 const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: string }) => {
+    const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
     const firestore = useFirestore();
-    const [participant, setParticipant] = useState<UserProfile | null>(chat.participantDetails ?? null);
-    const participantId = useMemo(() => chat.members.find(id => id !== currentUserId), [chat.members, currentUserId]);
+    const [participant, setParticipant] = useState<UserProfile | null>(null);
 
-    useEffect(() => {
-        if (!firestore || !participantId) return;
-        if(participant) return; // Already have details
-
-        const unsub = onSnapshot(doc(firestore, 'users', participantId), (doc) => {
-            if (doc.exists()) {
-                setParticipant(doc.data() as UserProfile);
-            }
-        }, (err) => {
-            const permissionError = new FirestorePermissionError({ path: `users/${participantId}`, operation: 'get' });
-            errorEmitter.emit('permission-error', permissionError);
-        });
-
-        return () => unsub();
-    }, [firestore, participantId, participant]);
-
-    const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : '';
 
     const formatTimestamp = (timestamp: any) => {
       if (!timestamp) return '';
@@ -85,11 +68,33 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
       return formatDistanceToNow(date, { addSuffix: true });
     };
 
+    const participantId = useMemo(() => chat.members.find(id => id !== currentUserId), [chat.members, currentUserId]);
+    
+    useEffect(() => {
+        if (!firestore || !participantId) return;
+
+        const userDocRef = doc(firestore, 'users', participantId);
+        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setParticipant(docSnap.data() as UserProfile);
+            }
+        }, (error) => {
+            const permissionError = new FirestorePermissionError({
+                path: userDocRef.path,
+                operation: 'get',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
+
+        return () => unsubscribe();
+    }, [firestore, participantId]);
+
+
     if (!participant) {
-        return ( // Skeleton or minimal loader for this item
-            <div className='flex items-center gap-4 p-4'>
-                <Avatar><AvatarFallback>...</AvatarFallback></Avatar>
-                <div className="flex-1 overflow-hidden space-y-1">
+        return (
+             <div className='flex items-center gap-4 p-4 animate-pulse'>
+                <div className='h-12 w-12 rounded-full bg-muted'></div>
+                <div className="flex-1 overflow-hidden space-y-2">
                     <div className="h-4 bg-muted rounded w-3/4"></div>
                     <div className="h-3 bg-muted rounded w-1/2"></div>
                 </div>
@@ -98,23 +103,24 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
     }
     
     return (
-      <Link href={`/chat/${participant.uid}`} key={chat.id}>
+      <Link href={`/chat/${participantId}`} key={chat.id}>
         <div className='flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50'>
-          <Avatar>
-            <AvatarImage src={participant.photoURL} />
-            <AvatarFallback>{getInitials(participant.displayName)}</AvatarFallback>
-          </Avatar>
+          <div className="relative">
+            <Avatar>
+                <AvatarImage src={participant.photoURL} />
+                <AvatarFallback>{getInitials(participant.displayName)}</AvatarFallback>
+            </Avatar>
+            {participant.isOnline && (
+                <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background"></div>
+            )}
+          </div>
           <div className="flex-1 overflow-hidden">
             <p className="font-semibold truncate">{participant.displayName}</p>
             <p className="text-sm text-muted-foreground truncate">{chat.lastMessage?.content ?? 'No messages yet'}</p>
           </div>
           <div className="flex flex-col items-end text-xs text-muted-foreground">
             <span>{formatTimestamp(chat.lastMessage?.timestamp)}</span>
-            {chat.unreadCount > 0 && (
-              <span className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                {chat.unreadCount}
-              </span>
-            )}
+            {/* Unread count can be added back later if needed */}
           </div>
         </div>
       </Link>
@@ -122,21 +128,16 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
 };
 
 
-const ChatList = ({ chats, blockedUsers, currentUserId }: { chats: Chat[], blockedUsers: string[], currentUserId: string }) => {
-    const filteredChats = useMemo(() => {
-        return chats
-            .filter(chat => {
-                const otherUserId = chat.members.find(memberId => memberId !== currentUserId);
-                return !blockedUsers.includes(otherUserId ?? '');
-            })
-            .sort((a, b) => {
-                const aTime = a.lastMessage?.timestamp?.toDate() || 0;
-                const bTime = b.lastMessage?.timestamp?.toDate() || 0;
-                return bTime - aTime;
-            });
-    }, [chats, blockedUsers, currentUserId]);
+const ChatList = ({ chats, currentUserId }: { chats: Chat[], currentUserId: string }) => {
+    const sortedChats = useMemo(() => {
+        return [...chats].sort((a, b) => {
+            const aTime = a.lastMessage?.timestamp?.toDate?.()?.getTime() || a.createdAt?.toDate?.()?.getTime() || 0;
+            const bTime = b.lastMessage?.timestamp?.toDate?.()?.getTime() || b.createdAt?.toDate?.()?.getTime() || 0;
+            return bTime - aTime;
+        });
+    }, [chats]);
 
-    if (filteredChats.length === 0) {
+    if (sortedChats.length === 0) {
       return (
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
            <p>No chats yet. Find friends and start a conversation!</p>
@@ -147,7 +148,7 @@ const ChatList = ({ chats, blockedUsers, currentUserId }: { chats: Chat[], block
     return (
         <ScrollArea className="flex-1">
           <div className="flex flex-col">
-            {filteredChats.map(chat => (
+            {sortedChats.map(chat => (
               <ChatListItem key={chat.id} chat={chat} currentUserId={currentUserId} />
             ))}
           </div>
@@ -200,27 +201,18 @@ export default function ChatPage() {
   }, [emblaApi, navigationItems]);
   
   useEffect(() => {
-    if (!user || !firestore) return;
-
+    if (!user || !firestore) {
+        setLoadingChats(false);
+        return;
+    }
+    
     setLoadingChats(true);
     const chatsRef = collection(firestore, 'chats');
-    const q = query(
-      chatsRef, 
-      where('members', 'array-contains', user.uid)
-    );
+    const q = query(chatsRef, where('members', 'array-contains', user.uid));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        const loadedChats = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                members: data.members,
-                lastMessage: data.lastMessage,
-                unreadCount: data.unreadCounts?.[user.uid] || 0,
-            } as Chat;
-        });
-        
-        setChats(loadedChats);
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const chatsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
+        setChats(chatsData);
         setLoadingChats(false);
     }, (error) => {
         const permissionError = new FirestorePermissionError({ path: chatsRef.path, operation: 'list' });
@@ -230,7 +222,9 @@ export default function ChatPage() {
     });
 
     return () => unsubscribe();
-  }, [user, firestore]);
+
+}, [user, firestore]);
+
 
    useEffect(() => {
     if (!firestore || !user?.uid) return;
@@ -271,7 +265,7 @@ export default function ChatPage() {
           const querySnapshot = await getDocs(q);
           const filteredUsers = querySnapshot.docs
                 .map(doc => doc.data() as UserProfile)
-                .filter(u => u.uid !== user.uid); // Exclude self from search results
+                .filter(u => u.uid !== user.uid);
             
           setSearchResults(filteredUsers);
         } catch (serverError) {
@@ -335,7 +329,6 @@ export default function ChatPage() {
                 errorEmitter.emit('permission-error', permissionError);
             });
     } catch (err: any) {
-        // This will catch errors from getDocs if any
         const permissionError = new FirestorePermissionError({
             path: requestsRef.path,
             operation: 'list',
@@ -393,7 +386,7 @@ export default function ChatPage() {
         <div className="flex h-full">
           {navigationItems.map(item => (
             <div className="flex-[0_0_100%] min-w-0 h-full flex flex-col" key={item.content}>
-               {item.content === 'inbox' && (loadingChats || loadingProfile || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} blockedUsers={profile?.blockedUsers ?? []} currentUserId={user.uid} />)}
+               {item.content === 'inbox' && (loadingChats || loadingProfile || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} currentUserId={user.uid} />)}
                {item.content === 'groups' && <GroupsPage />}
                {item.content === 'stories' && <StoriesPage />}
                {item.content === 'requests' && <FriendsPage />}

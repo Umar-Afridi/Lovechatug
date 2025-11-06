@@ -16,6 +16,7 @@ import {
   writeBatch,
   updateDoc,
   setDoc,
+  arrayUnion,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -51,33 +52,53 @@ import Link from 'next/link';
 // Helper to get or create a chat
 async function getOrCreateChat(
   firestore: any,
-  currentUserId: string,
-  otherUserId: string
+  currentUser: UserProfile,
+  otherUser: UserProfile
 ) {
-  const chatId = [currentUserId, otherUserId].sort().join('_');
+  const chatId = [currentUser.uid, otherUser.uid].sort().join('_');
   const chatRef = doc(firestore, 'chats', chatId);
   
   try {
     const chatSnap = await getDoc(chatRef);
 
     if (!chatSnap.exists()) {
-      const chatData = {
-          members: [currentUserId, otherUserId],
-          createdAt: serverTimestamp(),
-      };
-      // Create chat if it doesn't exist
-      await setDoc(chatRef, chatData);
+        const batch = writeBatch(firestore);
+
+        // 1. Create the chat document
+        const chatData = {
+            members: [currentUser.uid, otherUser.uid],
+            createdAt: serverTimestamp(),
+            participantDetails: {
+                [currentUser.uid]: {
+                    displayName: currentUser.displayName,
+                    photoURL: currentUser.photoURL,
+                },
+                [otherUser.uid]: {
+                    displayName: otherUser.displayName,
+                    photoURL: otherUser.photoURL,
+                }
+            }
+        };
+        batch.set(chatRef, chatData);
+        
+        // 2. Add chatId to both users' profiles
+        const currentUserRef = doc(firestore, 'users', currentUser.uid);
+        const otherUserRef = doc(firestore, 'users', otherUser.uid);
+        batch.update(currentUserRef, { chatIds: arrayUnion(chatId) });
+        batch.update(otherUserRef, { chatIds: arrayUnion(chatId) });
+
+        await batch.commit();
     }
     return chatId;
   } catch (serverError: any) {
      if (serverError.code === 'permission-denied') {
         const permissionError = new FirestorePermissionError({
             path: chatRef.path,
-            operation: 'get', // The initial operation is a get
+            operation: 'get', 
         });
         errorEmitter.emit('permission-error', permissionError);
      } else {
-        throw serverError; // Re-throw other errors
+        throw serverError; 
      }
      return null;
   }
@@ -89,12 +110,13 @@ export default function ChatIdPage({
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
   const router = useRouter();
-  const { user } = useUser();
+  const { user: authUser } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const otherUserId = React.use(params as any).chatId;
 
   const [chatId, setChatId] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,7 +141,6 @@ export default function ChatIdPage({
     };
 
     const handleTouchEnd = () => {
-      // Check if it's a swipe from left to right and it's significant
       if (touchStartX.current < 50 && touchEndX.current > touchStartX.current + 100) {
         router.back();
       }
@@ -136,45 +157,60 @@ export default function ChatIdPage({
     };
   }, [router]);
 
-  // Fetch other user's profile and determine chat ID
+  // Fetch users' profiles and determine chat ID
   useEffect(() => {
-    if (!firestore || !user || !otherUserId) return;
+    if (!firestore || !authUser || !otherUserId) return;
 
-    // Real-time listener for other user's profile
-    const userDocRef = doc(firestore, 'users', otherUserId);
-    const unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setOtherUser(docSnap.data() as UserProfile);
-      } else {
-        toast({ title: 'Error', description: 'User not found.', variant: 'destructive' });
-        router.push('/chat');
-      }
-    }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'get' });
-        errorEmitter.emit('permission-error', permissionError);
-    });
-
-    const setupChat = async () => {
+    const fetchProfilesAndSetupChat = async () => {
         setLoading(true);
         try {
-            // Get or create the chat and set the ID
-            const determinedChatId = await getOrCreateChat(firestore, user.uid, otherUserId);
+            const currentUserDocRef = doc(firestore, 'users', authUser.uid);
+            const otherUserDocRef = doc(firestore, 'users', otherUserId);
+
+            const [currentUserSnap, otherUserSnap] = await Promise.all([
+                getDoc(currentUserDocRef),
+                getDoc(otherUserDocRef)
+            ]);
+
+            if (!currentUserSnap.exists() || !otherUserSnap.exists()) {
+                toast({ title: 'Error', description: 'User not found.', variant: 'destructive' });
+                router.push('/chat');
+                return;
+            }
+            
+            const currentUserData = currentUserSnap.data() as UserProfile;
+            const otherUserData = otherUserSnap.data() as UserProfile;
+
+            setCurrentUser(currentUserData);
+            setOtherUser(otherUserData);
+
+            const determinedChatId = await getOrCreateChat(firestore, currentUserData, otherUserData);
             if (determinedChatId) {
                 setChatId(determinedChatId);
             }
         } catch (error: any) {
             console.error("Error setting up chat page:", error);
+            const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' });
+            errorEmitter.emit('permission-error', permissionError);
             toast({ title: 'Error', description: 'Could not initialize chat.', variant: 'destructive' });
         } finally {
             setLoading(false);
         }
     };
     
-    setupChat();
+    fetchProfilesAndSetupChat();
+    
+    // Real-time listener for other user's profile changes (like online status)
+    const unsubscribeUser = onSnapshot(doc(firestore, 'users', otherUserId), (docSnap) => {
+      if (docSnap.exists()) {
+        setOtherUser(docSnap.data() as UserProfile);
+      }
+    });
+
 
     return () => unsubscribeUser();
 
-  }, [firestore, user, otherUserId, router, toast]);
+  }, [firestore, authUser, otherUserId, router, toast]);
 
   // Real-time listener for messages
   useEffect(() => {
@@ -201,10 +237,10 @@ export default function ChatIdPage({
 
   // Mark messages as read
   useEffect(() => {
-    if (!firestore || !chatId || !user) return;
+    if (!firestore || !chatId || !authUser) return;
     
     const unreadMessages = messages.filter(
-        (msg) => msg.status !== 'read' && msg.senderId !== user.uid
+        (msg) => msg.status !== 'read' && msg.senderId !== authUser.uid
     );
 
     if (unreadMessages.length > 0) {
@@ -223,7 +259,7 @@ export default function ChatIdPage({
             errorEmitter.emit('permission-error', permissionError);
         });
     }
-  }, [messages, firestore, chatId, user]);
+  }, [messages, firestore, chatId, authUser]);
   
    useEffect(() => {
     // Scroll to bottom when messages change
@@ -245,7 +281,7 @@ export default function ChatIdPage({
   };
 
   const handleSendMessage = () => {
-    if (inputValue.trim() === '' || !firestore || !user || !chatId) return;
+    if (inputValue.trim() === '' || !firestore || !authUser || !chatId) return;
 
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
     const chatRef = doc(firestore, 'chats', chatId);
@@ -253,11 +289,10 @@ export default function ChatIdPage({
     const contentToSend = inputValue.trim();
     setInputValue(''); // Clear input immediately for better UX
     
-    // Determine status based on other user's online status
     const isOtherUserOnline = otherUser?.isOnline ?? false;
     
     const newMessage = {
-      senderId: user.uid,
+      senderId: authUser.uid,
       content: contentToSend,
       timestamp: serverTimestamp(),
       type: 'text' as const,
@@ -288,7 +323,6 @@ export default function ChatIdPage({
         errorEmitter.emit('permission-error', permissionError);
     });
     
-    // Refocus the input to keep the keyboard open
     inputRef.current?.focus();
   };
 
@@ -306,18 +340,16 @@ export default function ChatIdPage({
     if (status === 'delivered') {
       return <CheckCheck className="h-4 w-4 text-muted-foreground" />;
     }
-    // 'sent' status
     return <Check className="h-4 w-4 text-muted-foreground" />;
   };
   
   const formatLastSeen = (timestamp: any) => {
       if (!timestamp) return 'Offline';
-      // Firestore server timestamp can be null before it's set, or it might be a Date object
       const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
       return `Last seen ${formatDistanceToNow(date, { addSuffix: true })}`;
   };
   
-  if (loading || !otherUser) {
+  if (loading || !otherUser || !authUser) {
     return (
       <div className="flex h-screen flex-col items-center justify-center">
         <p className="text-lg">Loading chat...</p>
@@ -388,17 +420,17 @@ export default function ChatIdPage({
             {messages.map((msg) => (
                  <div
                     key={msg.id}
-                    className={`flex items-end gap-2 ${msg.senderId === user?.uid ? 'justify-end' : 'justify-start'}`}
+                    className={`flex items-end gap-2 ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
                 >
                     <div
                         className={`max-w-xs rounded-lg px-3 py-2 text-sm lg:max-w-md flex items-end gap-2 ${
-                            msg.senderId === user?.uid
+                            msg.senderId === authUser?.uid
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-muted'
                         }`}
                     >
                         <p className="whitespace-pre-wrap">{msg.content}</p>
-                         {msg.senderId === user?.uid && (
+                         {msg.senderId === authUser?.uid && (
                             <div className="flex-shrink-0">
                                 <MessageStatus status={msg.status} />
                             </div>
@@ -449,3 +481,5 @@ export default function ChatIdPage({
     </>
   );
 }
+
+    

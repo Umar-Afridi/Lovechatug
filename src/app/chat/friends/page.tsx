@@ -62,8 +62,6 @@ export default function FriendsPage() {
         
         if (senderIds.length > 0) {
             const usersRef = collection(firestore, 'users');
-            // Firestore 'in' queries are limited to 30 items. 
-            // If you expect more, you'll need to chunk this.
             const usersQuery = query(usersRef, where('uid', 'in', senderIds));
             
             try {
@@ -110,26 +108,39 @@ export default function FriendsPage() {
     const currentUserRef = doc(firestore, 'users', user.uid);
     const friendUserRef = doc(firestore, 'users', request.senderId);
     
-    // Create a new chat document when the request is accepted
     const chatId = [user.uid, request.senderId].sort().join('_');
     const chatRef = doc(firestore, 'chats', chatId);
 
     try {
         const batch = writeBatch(firestore);
 
-        // 1. Update current user's friend list
         batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
-        
-        // 2. Update the other user's friend list
         batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
         
-        // 3. Create the chat document
+        // Add chatId to both users' profiles
+        batch.update(currentUserRef, { chatIds: arrayUnion(chatId) });
+        batch.update(friendUserRef, { chatIds: arrayUnion(chatId) });
+
+        const currentUserSnap = await getDoc(currentUserRef);
+        const friendUserSnap = await getDoc(friendUserRef);
+        const currentUserProfile = currentUserSnap.data() as UserProfile;
+        const friendUserProfile = friendUserSnap.data() as UserProfile;
+
         batch.set(chatRef, {
           members: [user.uid, request.senderId],
-          createdAt: serverTimestamp()
+          createdAt: serverTimestamp(),
+          participantDetails: {
+            [user.uid]: {
+              displayName: currentUserProfile.displayName,
+              photoURL: currentUserProfile.photoURL,
+            },
+            [request.senderId]: {
+              displayName: friendUserProfile.displayName,
+              photoURL: friendUserProfile.photoURL,
+            },
+          },
         });
 
-        // 4. Delete the friend request
         batch.delete(requestRef);
 
         await batch.commit();
@@ -203,3 +214,5 @@ export default function FriendsPage() {
     </ScrollArea>
   );
 }
+
+    

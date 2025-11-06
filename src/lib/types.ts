@@ -9,6 +9,7 @@ export type UserProfile = {
   isOnline?: boolean;
   lastSeen?: any;
   blockedUsers?: string[];
+  chatIds?: string[]; // New field to store user's chat IDs
 }
 
 export type Message = {
@@ -24,13 +25,18 @@ export type Message = {
 export type Chat = {
   id: string;
   members: string[]; // array of user ids
+  createdAt: any;
   lastMessage?: {
     content: string;
     timestamp: any; // Firestore ServerTimestamp
     senderId: string;
   } | null;
-  unreadCount: number;
-  participantDetails?: UserProfile;
+  participantDetails?: {
+    [key: string]: {
+        displayName: string;
+        photoURL: string;
+    }
+  }
 };
 
 export type Group = {
@@ -56,3 +62,5 @@ export type Call = {
     status: 'missed' | 'answered' | 'declined';
     timestamp: string;
 }
+
+    
