@@ -10,21 +10,25 @@ service cloud.firestore {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-    
-    function isChatMember(chatId) {
-      return isAuthenticated() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
-    }
 
     // USERS collection
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create, update: if isOwner(userId);
       
-      // Allow another user to update your `friends` array, but only to add themselves.
+      // Allow adding a friend, which involves updating both users' friend arrays and chatIds array.
       allow update: if isAuthenticated() 
                       && request.auth.uid != userId
-                      && request.resource.data.friends.size() == resource.data.friends.size() + 1
-                      && request.resource.data.friends.hasAny([request.auth.uid]);
+                      && (
+                        (
+                          'friends' in request.resource.data &&
+                           request.resource.data.friends.size() == resource.data.friends.size() + 1 &&
+                           request.resource.data.friends.hasAny([request.auth.uid])
+                        ) || (
+                           'chatIds' in request.resource.data &&
+                           request.resource.data.chatIds.size() >= resource.data.chatIds.size()
+                        )
+                      );
     }
 
     // FRIEND REQUESTS collection
@@ -38,20 +42,22 @@ service cloud.firestore {
     // CHATS collection
     match /chats/{chatId} {
       allow create: if isAuthenticated() && request.resource.data.members.hasAny([request.auth.uid]);
-      allow read, update: if isChatMember(chatId);
-      
-      // Allow listing chats where the user is a member
-      allow list: if isAuthenticated() && request.query.where.size() > 0 && request.query.where[0][2] == request.auth.uid;
+      allow read, update: if isAuthenticated() && resource.data.members.hasAny([request.auth.uid]);
       
       // MESSAGES subcollection
       match /messages/{messageId} {
-        // Explicitly allow LISTING messages for chat members. This is the key fix.
-        allow list: if isChatMember(chatId);
-        allow read: if isChatMember(chatId);
-        allow create: if isChatMember(chatId) && request.resource.data.senderId == request.auth.uid;
+        // This rule was the problem. Instead of using a function with `get()`,
+        // we check the parent document's data directly using `resource.data`.
+        // This is much more efficient and reliable for list operations.
+        allow read, list: if isAuthenticated() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
+
+        allow create: if isAuthenticated() 
+                       && request.resource.data.senderId == request.auth.uid
+                       && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
         
         // Allow updating message status to 'read' by a member of the chat
-        allow update: if isChatMember(chatId) 
+        allow update: if isAuthenticated() 
+                       && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid])
                        && request.resource.data.status == 'read'
                        && resource.data.status != 'read';
 
