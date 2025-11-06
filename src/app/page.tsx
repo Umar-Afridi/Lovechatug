@@ -1,4 +1,5 @@
 import { LoginForm } from '@/components/auth/login-form';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { Heart } from 'lucide-react';
 
 export default function Home() {
@@ -12,7 +13,9 @@ export default function Home() {
               <Heart className="text-red-500 animate-pulse w-10 h-10" fill="red"/>
             </h1>
         </div>
-        <LoginForm />
+        <TooltipProvider>
+          <LoginForm />
+        </TooltipProvider>
       </div>
        <footer className="absolute bottom-4 text-center text-sm text-muted-foreground">
           <p>Powered by Firebase and Google AI</p>
