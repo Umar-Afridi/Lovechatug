@@ -103,7 +103,38 @@ export default function ChatIdPage({
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
 
+  // Swipe to go back logic
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX.current = e.targetTouches[0].clientX;
+      touchEndX.current = e.targetTouches[0].clientX; // Reset on new touch
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      touchEndX.current = e.targetTouches[0].clientX;
+    };
+
+    const handleTouchEnd = () => {
+      // Check if it's a swipe from left to right and it's significant
+      if (touchStartX.current < 50 && touchEndX.current > touchStartX.current + 100) {
+        router.back();
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart);
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [router]);
 
   // Fetch other user's profile and determine chat ID
   useEffect(() => {

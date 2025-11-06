@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, MessageSquare, Users, UserPlus, Phone, GalleryHorizontal, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { Chat, UserProfile, Message } from '@/lib/types';
+import type { Chat, UserProfile } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import GroupsPage from './groups/page';
@@ -16,13 +16,14 @@ import CallsPage from './calls/page';
 import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc, Timestamp, orderBy, setDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, onSnapshot, doc, query, where, getDoc, Timestamp, orderBy } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-
+import useEmblaCarousel from 'embla-carousel-react';
+import type { EmblaCarouselType } from 'embla-carousel-react';
 
 // Custom hook to get user profile data in real-time
 function useUserProfile() {
@@ -112,6 +113,7 @@ const ChatList = ({ chats, blockedUsers }: { chats: Chat[], blockedUsers: string
 
 
 export default function ChatPage() {
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
   const [activeTab, setActiveTab] = useState('inbox');
   const firestore = useFirestore();
   const { user } = useUser();
@@ -122,8 +124,37 @@ export default function ChatPage() {
   const [loadingChats, setLoadingChats] = useState(true);
   const [requestCount, setRequestCount] = useState(0);
   const { toast } = useToast();
-  const router = useRouter();
+  
+  const navigationItems = [
+    { name: 'Inbox', icon: MessageSquare, content: 'inbox' },
+    { name: 'Groups', icon: Users, content: 'groups' },
+    { name: 'Stories', icon: GalleryHorizontal, content: 'stories' },
+    { name: 'Requests', icon: UserPlus, content: 'requests', count: requestCount },
+    { name: 'Calls', icon: Phone, content: 'calls' },
+  ];
 
+  const handleTabSelect = useCallback((tabContent: string) => {
+    const tabIndex = navigationItems.findIndex(item => item.content === tabContent);
+    if (emblaApi && tabIndex !== -1) {
+      emblaApi.scrollTo(tabIndex);
+      setActiveTab(tabContent);
+    }
+  }, [emblaApi, navigationItems]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    
+    const onSelect = (emblaApi: EmblaCarouselType) => {
+      const selectedIndex = emblaApi.selectedScrollSnap();
+      setActiveTab(navigationItems[selectedIndex].content);
+    };
+
+    emblaApi.on('select', onSelect);
+    return () => {
+      emblaApi.off('select', onSelect);
+    };
+  }, [emblaApi, navigationItems]);
+  
 
    // Fetch user's chats in real-time
    useEffect(() => {
@@ -131,7 +162,7 @@ export default function ChatPage() {
 
     setLoadingChats(true);
     const chatsRef = collection(firestore, 'chats');
-    const q = query(chatsRef, where('members', 'array-contains', user.uid));
+    const q = query(chatsRef, where('members', 'array-contains', user.uid), orderBy('lastMessage.timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
         const chatPromises = snapshot.docs.map(async (chatDoc) => {
@@ -145,20 +176,16 @@ export default function ChatPage() {
                     
                     // Fetch unread messages count
                     const messagesRef = collection(firestore, 'chats', chatDoc.id, 'messages');
-                    const messagesSnapshot = await getDocs(messagesRef);
-                    const unreadCount = messagesSnapshot.docs.filter(doc => {
-                        const data = doc.data();
-                        return data.senderId === otherParticipantId && data.status !== 'read';
-                    }).length;
-
-
+                    const unreadQuery = query(messagesRef, where('senderId', '==', otherParticipantId), where('status', '!=', 'read'));
+                    const unreadSnapshot = await getDocs(unreadQuery);
+                    
                     if (userDoc.exists()) {
                         const userData = userDoc.data() as UserProfile;
                         return {
                             id: chatDoc.id,
                             ...chatData,
                             lastMessage: chatData.lastMessage || null,
-                            unreadCount: unreadCount, // Set unread count
+                            unreadCount: unreadSnapshot.size, // Use size for efficiency
                             participantDetails: {
                                 id: userData.uid,
                                 name: userData.displayName,
@@ -178,13 +205,6 @@ export default function ChatPage() {
 
         let resolvedChats = (await Promise.all(chatPromises)).filter(c => c !== null) as Chat[];
         
-        // Sort chats by last message timestamp on the client
-        resolvedChats.sort((a, b) => {
-            const timeA = a.lastMessage?.timestamp?.toMillis() || 0;
-            const timeB = b.lastMessage?.timestamp?.toMillis() || 0;
-            return timeB - timeA;
-        });
-
         setChats(resolvedChats);
         setLoadingChats(false);
     }, (error) => {
@@ -235,7 +255,7 @@ export default function ChatPage() {
           const querySnapshot = await getDocs(q);
           const filteredUsers = querySnapshot.docs
                 .map(doc => doc.data() as UserProfile)
-                .filter(u => u.uid !== user.uid);
+                .filter(u => u.uid !== user.uid); // Exclude self from search results
             
           setSearchResults(filteredUsers);
         } catch (serverError) {
@@ -308,14 +328,6 @@ export default function ChatPage() {
     }
   };
   
-  const navigationItems = [
-    { name: 'Inbox', icon: MessageSquare, content: 'inbox' },
-    { name: 'Groups', icon: Users, content: 'groups' },
-    { name: 'Stories', icon: GalleryHorizontal, content: 'stories' },
-    { name: 'Requests', icon: UserPlus, content: 'requests', count: requestCount },
-    { name: 'Calls', icon: Phone, content: 'calls' },
-  ];
-
   const renderSearchResults = () => {
     if (searchQuery.trim() !== '' && searchResults.length === 0) {
         return (
@@ -357,23 +369,24 @@ export default function ChatPage() {
 
   const renderContent = () => {
     if (searchQuery.trim() !== '') {
-      return renderSearchResults();
+      return <div className="flex-1 flex flex-col overflow-hidden">{renderSearchResults()}</div>;
     }
     
-    switch(activeTab) {
-        case 'inbox':
-            return loadingChats || loadingProfile ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} blockedUsers={profile?.blockedUsers ?? []} />;
-        case 'groups':
-            return <GroupsPage />;
-        case 'stories':
-            return <StoriesPage />;
-        case 'requests':
-            return <FriendsPage />;
-        case 'calls':
-            return <CallsPage />;
-        default:
-            return <ChatList chats={chats} blockedUsers={profile?.blockedUsers ?? []} />;
-    }
+    return (
+      <div className="overflow-hidden flex-1" ref={emblaRef}>
+        <div className="flex h-full">
+          {navigationItems.map(item => (
+            <div className="flex-[0_0_100%] min-w-0 h-full flex flex-col" key={item.content}>
+               {item.content === 'inbox' && (loadingChats || loadingProfile ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} blockedUsers={profile?.blockedUsers ?? []} />)}
+               {item.content === 'groups' && <GroupsPage />}
+               {item.content === 'stories' && <StoriesPage />}
+               {item.content === 'requests' && <FriendsPage />}
+               {item.content === 'calls' && <CallsPage />}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -423,18 +436,18 @@ export default function ChatPage() {
         <div className='flex border-b'>
             {navigationItems.map((item) => (
                 <Button 
-                    key={item.name}
+                    key={item.content}
                     variant="ghost" 
                     className={cn(
                         "flex-1 justify-center gap-2 rounded-none relative",
                         activeTab === item.content ? 'border-b-2 border-primary text-primary bg-primary/10' : 'text-muted-foreground'
                     )}
-                    onClick={() => setActiveTab(item.content)}
+                    onClick={() => handleTabSelect(item.content)}
                 >
                     <item.icon className="h-4 w-4" />
                     <span>{item.name}</span>
-                    {item.count && item.count > 0 && (
-                        <Badge variant="secondary" className="absolute top-1 right-1 h-5 w-5 justify-center p-0">{item.count}</Badge>
+                    {item.content === 'requests' && requestCount > 0 && (
+                        <Badge variant="secondary" className="absolute top-1 right-1 h-5 w-5 justify-center p-0">{requestCount}</Badge>
                     )}
                 </Button>
             ))}

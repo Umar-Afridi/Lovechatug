@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
@@ -38,6 +38,39 @@ export default function ChatSettingsPage({
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [isContactSheetOpen, setContactSheetOpen] = useState(false);
   const [isClearChatDialogOpen, setClearChatDialogOpen] = useState(false);
+
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+
+  // Swipe to go back logic
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX.current = e.targetTouches[0].clientX;
+      touchEndX.current = e.targetTouches[0].clientX;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      touchEndX.current = e.targetTouches[0].clientX;
+    };
+
+    const handleTouchEnd = () => {
+      // Check if it's a swipe from left to right and it's significant
+      if (touchStartX.current < 50 && touchEndX.current > touchStartX.current + 100) {
+        router.back();
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart);
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [router]);
+
 
   useEffect(() => {
     if (!firestore || !otherUserId) return;
