@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot, getDocs, writeBatch } from 'firebase/firestore';
@@ -32,17 +32,21 @@ export default function FriendsPage() {
       .join('');
   };
   
+  const requestsQuery = useMemo(() => {
+    if (!user || !firestore) return null;
+    const requestsRef = collection(firestore, 'friendRequests');
+    return query(requestsRef, where('to', '==', user.uid), where('status', '==', 'pending'));
+  }, [user, firestore]);
+  
   useEffect(() => {
-    if (!user || !firestore) {
+    if (!requestsQuery || !firestore) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    const requestsRef = collection(firestore, 'friendRequests');
-    const q = query(requestsRef, where('to', '==', user.uid), where('status', '==', 'pending'));
 
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+    const unsubscribe = onSnapshot(requestsQuery, async (querySnapshot) => {
         if (querySnapshot.empty) {
             setRequests([]);
             setLoading(false);
@@ -58,16 +62,28 @@ export default function FriendsPage() {
             const usersRef = collection(firestore, 'users');
             // Use a 'in' query to fetch all sender profiles in one go
             const usersQuery = query(usersRef, where('uid', 'in', senderIds));
-            const usersSnapshot = await getDocs(usersQuery);
-            const userProfiles = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data() as UserProfile]));
-
-            // Map the fetched profiles back to the requests
-            const populatedRequests = requestsData.map(req => ({
-                ...req,
-                fromUser: userProfiles.get(req.from)
-            }));
             
-            setRequests(populatedRequests);
+            try {
+              const usersSnapshot = await getDocs(usersQuery);
+              const userProfiles = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data() as UserProfile]));
+              
+              // Map the fetched profiles back to the requests
+              const populatedRequests = requestsData.map(req => ({
+                  ...req,
+                  fromUser: userProfiles.get(req.from)
+              }));
+              
+              setRequests(populatedRequests);
+            } catch (userError) {
+              console.error("Error fetching user profiles for requests:", userError);
+              const permissionError = new FirestorePermissionError({
+                  path: usersRef.path,
+                  operation: 'list',
+              });
+              errorEmitter.emit('permission-error', permissionError);
+              toast({ title: 'Error', description: 'Could not load user profiles for requests.', variant: 'destructive'});
+            }
+
         } else {
             setRequests([]);
         }
@@ -77,16 +93,17 @@ export default function FriendsPage() {
     }, (serverError: any) => {
         console.error("Error fetching friend requests:", serverError);
         const permissionError = new FirestorePermissionError({
-            path: requestsRef.path,
+            path: requestsQuery.path,
             operation: 'list',
         });
         errorEmitter.emit('permission-error', permissionError);
+        toast({ title: 'Error', description: 'Could not load friend requests.', variant: 'destructive'});
         setLoading(false);
     });
 
     return () => unsubscribe();
 
-  }, [user, firestore]);
+  }, [requestsQuery, firestore, toast]);
 
   const handleAccept = async (request: FriendRequestWithUser) => {
     if (!firestore || !user || !request.fromUser) return;
