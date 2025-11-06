@@ -131,56 +131,36 @@ export default function ChatAppLayout({
   useEffect(() => {
     if (!auth || !firestore) return;
 
-    const handleRedirectResult = async (user: User) => {
-      const userDocRef = doc(firestore, 'users', user.uid);
-      try {
-        const userDocSnap = await getDoc(userDocRef);
-
-        if (!userDocSnap.exists()) {
-          const userData = {
-            uid: user.uid,
-            displayName: user.displayName,
-            email: user.email,
-            username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
-            photoURL: user.photoURL,
-            friends: [],
-            bio: '',
-          };
-
-          await setDoc(userDocRef, userData).catch((serverError) => {
-              const permissionError = new FirestorePermissionError({
-                path: userDocRef.path,
-                operation: 'create',
-                requestResourceData: userData,
-              });
-              errorEmitter.emit('permission-error', permissionError);
-              throw new Error('Could not save user profile. Insufficient permissions.');
-            });
-        }
-        router.push('/chat');
-      } catch (error: any) {
-         if (!(error instanceof FirestorePermissionError)) {
-            toast({
-              variant: "destructive",
-              title: "Sign-In Error",
-              description: "Could not process user profile after sign-in.",
-            });
-         }
-      }
-    };
-
+    // This is kept for handling potential email/password sign-in flows
+    // or other redirect-based providers in the future.
     getRedirectResult(auth)
       .then((result) => {
         if (result && result.user) {
-          handleRedirectResult(result.user);
+           const user = result.user;
+           const userDocRef = doc(firestore, 'users', user.uid);
+           getDoc(userDocRef).then(userDocSnap => {
+               if (!userDocSnap.exists()) {
+                   const userData = {
+                       uid: user.uid,
+                       displayName: user.displayName,
+                       email: user.email,
+                       username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
+                       photoURL: user.photoURL,
+                       friends: [],
+                       bio: '',
+                   };
+                   setDoc(userDocRef, userData);
+               }
+               router.push('/chat');
+           });
         }
       })
       .catch((error) => {
-        console.error('Google sign-in redirect error:', error);
+        console.error('Sign-in redirect error:', error);
         toast({
           variant: "destructive",
           title: "Sign-In Failed",
-          description: "Could not complete sign-in with Google. Please try again.",
+          description: "Could not complete sign-in. Please try again.",
         });
       });
   }, [auth, firestore, router, toast]);

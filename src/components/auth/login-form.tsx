@@ -11,7 +11,7 @@ import {
 import { GoogleIcon } from '@/components/icons/google-icon';
 import Link from 'next/link';
 import { useAuth, useFirestore } from '@/firebase/provider';
-import { GoogleAuthProvider, signInWithRedirect, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
@@ -41,8 +41,29 @@ export function LoginForm() {
     }
     const provider = new GoogleAuthProvider();
     try {
-      // Use signInWithRedirect instead of signInWithPopup
-      await signInWithRedirect(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // After successful sign-in, check if user exists in Firestore
+      const userDocRef = doc(firestore, 'users', user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        // If user doesn't exist, create a new document
+        const userData = {
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+          username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
+          photoURL: user.photoURL,
+          friends: [],
+          bio: '',
+        };
+        await setDoc(userDocRef, userData);
+      }
+      
+      router.push('/chat');
+
     } catch (error: any) {
       setError(error.message);
       toast({
