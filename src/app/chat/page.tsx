@@ -119,7 +119,7 @@ export default function ChatPage() {
 
     setLoadingChats(true);
     const chatsRef = collection(firestore, 'chats');
-    const q = query(chatsRef, where('members', 'array-contains', user.uid), orderBy('lastMessage.timestamp', 'desc'));
+    const q = query(chatsRef, where('members', 'array-contains', user.uid));
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
         const chatPromises = snapshot.docs.map(async (docSnapshot) => {
@@ -145,7 +145,15 @@ export default function ChatPage() {
             return null;
         });
 
-        const resolvedChats = (await Promise.all(chatPromises)).filter(c => c !== null) as Chat[];
+        let resolvedChats = (await Promise.all(chatPromises)).filter(c => c !== null) as Chat[];
+        
+        // Sort chats by last message timestamp on the client
+        resolvedChats.sort((a, b) => {
+            const timeA = a.lastMessage?.timestamp?.toMillis() || 0;
+            const timeB = b.lastMessage?.timestamp?.toMillis() || 0;
+            return timeB - timeA;
+        });
+
         setChats(resolvedChats);
         setLoadingChats(false);
     }, (error) => {
@@ -308,7 +316,7 @@ export default function ChatPage() {
         {/* Header */}
         <div className="p-4 space-y-4 border-b">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold flex items-center gap-2 text-green-500">
+            <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
                 <span>LoveChat</span>
             </h1>
             <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
@@ -326,15 +334,15 @@ export default function ChatPage() {
             </Button>
           </div>
           <form onSubmit={handleSearch} className="relative flex items-center">
+            <Button type="submit" variant="ghost" size="icon" className="absolute left-1 top-1/2 -translate-y-1/2 h-8 w-8">
+                <Search className="h-4 w-4 text-muted-foreground" />
+            </Button>
             <Input 
                 placeholder="Search users by username..." 
-                className="pr-12 pl-4"
+                className="pl-12 pr-4"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
             />
-            <Button type="submit" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8">
-                <Search className="h-4 w-4 text-muted-foreground" />
-            </Button>
           </form>
         </div>
         
