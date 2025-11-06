@@ -43,7 +43,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { getDatabase, ref, onValue, off, goOnline, goOffline, onDisconnect } from 'firebase/database';
+import { getDatabase, ref, onValue, off, goOnline, goOffline, onDisconnect, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 
 
 // Custom hook to get user profile data in real-time
@@ -97,35 +97,40 @@ function usePresence() {
     if (!user || !firestore) return;
 
     const db = getDatabase();
-    const myConnectionsRef = ref(db, `users/${user.uid}/connections`);
-    const lastOnlineRef = ref(db, `users/${user.uid}/lastOnline`);
+    
+    // Firestore reference to update isOnline and lastSeen
     const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
 
+    // Realtime Database references for connection status
+    const userStatusDatabaseRef = ref(db, `/status/${user.uid}`);
     const connectedRef = ref(db, '.info/connected');
-    let con: any = null;
 
     const unsubscribe = onValue(connectedRef, (snap) => {
       if (snap.val() === true) {
-        con = myConnectionsRef;
-        goOnline(db);
-        
-        const presenceData = { isOnline: true, lastSeen: serverTimestamp() };
-        updateDoc(userStatusFirestoreRef, presenceData).catch(err => {
-            const permissionError = new FirestorePermissionError({ path: userStatusFirestoreRef.path, operation: 'update', requestResourceData: presenceData });
+        // We're connected (or reconnected).
+        // Update Firestore with online status
+        const firestoreUpdateData = { isOnline: true, lastSeen: serverTimestamp() };
+        updateDoc(userStatusFirestoreRef, firestoreUpdateData).catch(err => {
+            const permissionError = new FirestorePermissionError({ path: userStatusFirestoreRef.path, operation: 'update', requestResourceData: firestoreUpdateData });
             errorEmitter.emit('permission-error', permissionError);
         });
 
-        onDisconnect(con).remove();
-        onDisconnect(lastOnlineRef).set(serverTimestamp() as any);
-        onDisconnect(userStatusFirestoreRef).update({ isOnline: false, lastSeen: serverTimestamp() });
+        // When the client disconnects, update the Realtime Database
+        const presenceData = { isOnline: false, lastSeen: rtdbServerTimestamp() };
+        onDisconnect(userStatusDatabaseRef).set(presenseData);
+
+        // When the client connects, set their Realtime Database status
+        setDoc(userStatusDatabaseRef as any, { isOnline: true, lastSeen: rtdbServerTimestamp() });
+        goOnline(db);
       }
     });
 
     return () => {
-      off(connectedRef, 'value', unsubscribe);
-      if (con) {
-        goOffline(db);
+      if (typeof unsubscribe === 'function') {
+        off(connectedRef, 'value', unsubscribe);
       }
+      // On unmount, go offline
+      goOffline(db);
     };
   }, [user, firestore]);
 }
