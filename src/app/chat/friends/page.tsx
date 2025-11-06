@@ -55,7 +55,7 @@ export default function FriendsPage() {
 
         const requestsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequestWithUser));
         
-        const senderIds = [...new Set(requestsData.map(req => req.senderId))];
+        const senderIds = [...new Set(requestsData.map(req => req.senderId))].filter(Boolean);
         
         if (senderIds.length > 0) {
             const usersRef = collection(firestore, 'users');
@@ -63,7 +63,7 @@ export default function FriendsPage() {
             
             try {
               const usersSnapshot = await getDocs(usersQuery);
-              const userProfiles = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data() as UserProfile]));
+              const userProfiles = new Map(usersSnapshot.docs.map(doc => [doc.data().uid, doc.data() as UserProfile]));
               
               const populatedRequests = requestsData.map(req => ({
                   ...req,
@@ -87,7 +87,7 @@ export default function FriendsPage() {
 
     }, (serverError: any) => {
         const permissionError = new FirestorePermissionError({
-            path: 'friendRequests', // Static path since query path is not available on error
+            path: requestsQuery.path,
             operation: 'list',
         });
         errorEmitter.emit('permission-error', permissionError);
