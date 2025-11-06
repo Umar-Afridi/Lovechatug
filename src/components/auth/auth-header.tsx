@@ -9,7 +9,7 @@ export function AuthHeader({ activeTab }: { activeTab: 'login' | 'signup' }) {
     <div className="flex flex-col items-center text-center mb-8">
       <div className="relative mb-4">
         <svg
-          className="w-24 h-24 text-red-500"
+          className="w-24 h-24 text-primary"
           fill="currentColor"
           viewBox="0 0 24 24"
         >
@@ -26,10 +26,10 @@ export function AuthHeader({ activeTab }: { activeTab: 'login' | 'signup' }) {
       
       <div className="mt-8 w-full max-w-xs">
         <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted p-1">
-          <Button asChild variant={activeTab === 'login' ? 'secondary' : 'ghost'} className={cn(activeTab === 'login' && 'bg-background shadow-sm')}>
+          <Button asChild variant={activeTab === 'login' ? 'default' : 'ghost'} className={cn(activeTab === 'login' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground')}>
             <Link href="/">Login</Link>
           </Button>
-          <Button asChild variant={activeTab === 'signup' ? 'secondary' : 'ghost'} className={cn(activeTab === 'signup' && 'bg-background shadow-sm')}>
+          <Button asChild variant={activeTab === 'signup' ? 'default' : 'ghost'} className={cn(activeTab === 'signup' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground')}>
             <Link href="/signup">Sign Up</Link>
           </Button>
         </div>
