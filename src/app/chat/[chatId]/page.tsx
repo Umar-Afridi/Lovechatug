@@ -46,6 +46,7 @@ import type { Message as MessageType, UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { formatDistanceToNow } from 'date-fns';
 
 // Helper to get or create a chat
 async function getOrCreateChat(
@@ -107,40 +108,39 @@ export default function ChatIdPage({
   useEffect(() => {
     if (!firestore || !user || !otherUserId) return;
 
-    const performSetup = async () => {
-      setLoading(true);
-      try {
-        // Fetch other user's profile
-        const userDocRef = doc(firestore, 'users', otherUserId);
-        const docSnap = await getDoc(userDocRef);
+    // Real-time listener for other user's profile
+    const userDocRef = doc(firestore, 'users', otherUserId);
+    const unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setOtherUser(docSnap.data() as UserProfile);
+      } else {
+        toast({ title: 'Error', description: 'User not found.', variant: 'destructive' });
+        router.push('/chat');
+      }
+    }, (error) => {
+        const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'get' });
+        errorEmitter.emit('permission-error', permissionError);
+    });
 
-        if (docSnap.exists()) {
-          setOtherUser(docSnap.data() as UserProfile);
-        } else {
-          toast({ title: 'Error', description: 'User not found.', variant: 'destructive' });
-          router.push('/chat');
-          return;
-        }
-
-        // Get or create the chat and set the ID
-        const determinedChatId = await getOrCreateChat(firestore, user.uid, otherUserId);
-        if (determinedChatId) {
-            setChatId(determinedChatId);
-        }
-      } catch (error: any) {
-         if (error.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({ path: `users/${otherUserId}`, operation: 'get' });
-            errorEmitter.emit('permission-error', permissionError);
-         } else {
+    const setupChat = async () => {
+        setLoading(true);
+        try {
+            // Get or create the chat and set the ID
+            const determinedChatId = await getOrCreateChat(firestore, user.uid, otherUserId);
+            if (determinedChatId) {
+                setChatId(determinedChatId);
+            }
+        } catch (error: any) {
             console.error("Error setting up chat page:", error);
             toast({ title: 'Error', description: 'Could not initialize chat.', variant: 'destructive' });
-         }
-      } finally {
-        setLoading(false);
-      }
+        } finally {
+            setLoading(false);
+        }
     };
     
-    performSetup();
+    setupChat();
+
+    return () => unsubscribeUser();
 
   }, [firestore, user, otherUserId, router, toast]);
 
@@ -277,6 +277,13 @@ export default function ChatIdPage({
     // 'sent' status
     return <Check className="h-4 w-4 text-muted-foreground" />;
   };
+  
+  const formatLastSeen = (timestamp: any) => {
+      if (!timestamp) return 'Offline';
+      // Firestore server timestamp can be null before it's set, or it might be a Date object
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      return `Last seen ${formatDistanceToNow(date, { addSuffix: true })}`;
+  };
 
   if (loading || !otherUser) {
     return (
@@ -301,7 +308,7 @@ export default function ChatIdPage({
             <div className="flex-1">
               <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
                <p className="text-xs text-muted-foreground">
-                  {otherUser.isOnline ? 'Online' : `Last seen ${new Date(otherUser.lastSeen ?? '').toLocaleTimeString()}`}
+                  {otherUser.isOnline ? 'Online' : formatLastSeen(otherUser.lastSeen)}
                </p>
             </div>
             <div className="flex items-center gap-2">
