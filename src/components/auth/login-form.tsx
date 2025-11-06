@@ -10,8 +10,8 @@ import {
 } from '@/components/ui/card';
 import { GoogleIcon } from '@/components/icons/google-icon';
 import Link from 'next/link';
-import { useAuth } from '@/firebase/provider';
-import { GoogleAuthProvider, signInWithRedirect, signInWithEmailAndPassword } from 'firebase/auth';
+import { useAuth, useFirestore } from '@/firebase/provider';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
@@ -19,15 +19,19 @@ import { Label } from '../ui/label';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { ForgotPasswordDialog } from './forgot-password-dialog';
+import { doc, setDoc } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export function LoginForm() {
   const auth = useAuth();
+  const firestore = useFirestore();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleGoogleSignIn = async () => {
-    if (!auth) {
+    if (!auth || !firestore) {
       setError('Firebase Auth not available.');
       toast({
         variant: "destructive",
@@ -38,13 +42,43 @@ export function LoginForm() {
     }
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithRedirect(auth, provider);
-      // The user will be redirected to the Google sign-in page.
-      // After successful sign-in, they will be redirected back to the app.
-      // The redirect result is handled in the chat page or layout.
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Create user profile in Firestore if it doesn't exist
+       const userDocRef = doc(firestore, 'users', user.uid);
+       const userData = {
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+          username: user.email?.split('@')[0] ?? `user-${Date.now()}`,
+          photoURL: user.photoURL,
+          friends: [],
+          bio: '',
+        };
+
+        // Use setDoc with merge:true to create or update without overwriting existing fields like friends
+        setDoc(userDocRef, userData, { merge: true })
+          .then(() => {
+            router.push('/chat');
+          })
+          .catch((serverError) => {
+            const permissionError = new FirestorePermissionError({
+              path: userDocRef.path,
+              operation: 'create',
+              requestResourceData: userData,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            setError('Could not save user profile. Insufficient permissions.');
+          });
+          
     } catch (error: any) {
       console.error('Error signing in with Google', error);
-      setError(error.message);
+       if (error.code === 'auth/account-exists-with-different-credential') {
+        setError('An account already exists with the same email address but different sign-in credentials.');
+      } else {
+        setError(error.message);
+      }
       toast({
         variant: "destructive",
         title: "Google Sign-In Failed",
