@@ -34,8 +34,11 @@ export default function FriendsPage() {
   
   const requestsQuery = useMemo(() => {
     if (!user || !firestore) return null;
-    const requestsRef = collection(firestore, 'friendRequests');
-    return query(requestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
+    return query(
+        collection(firestore, 'friendRequests'), 
+        where('receiverId', '==', user.uid), 
+        where('status', '==', 'pending')
+    );
   }, [user, firestore]);
   
   useEffect(() => {

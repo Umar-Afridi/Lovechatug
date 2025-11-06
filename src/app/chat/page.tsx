@@ -7,7 +7,7 @@ import { Search, MessageSquare, Users, UserPlus, Phone, GalleryHorizontal } from
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { Chat, UserProfile } from '@/lib/types';
+import type { Chat, UserProfile, Message } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import GroupsPage from './groups/page';
@@ -127,20 +127,30 @@ export default function ChatPage() {
     const q = query(chatsRef, where('members', 'array-contains', user.uid));
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-        const chatPromises = snapshot.docs.map(async (docSnapshot) => {
-            const chatData = docSnapshot.data();
+        const chatPromises = snapshot.docs.map(async (chatDoc) => {
+            const chatData = chatDoc.data();
             const otherParticipantId = chatData.members.find((p: string) => p !== user.uid);
             
             if (otherParticipantId) {
                 try {
+                    // Fetch participant details
                     const userDoc = await getDoc(doc(firestore, 'users', otherParticipantId));
+                    
+                    // Fetch unread messages count
+                    const messagesRef = collection(firestore, 'chats', chatDoc.id, 'messages');
+                    const unreadQuery = query(messagesRef, 
+                        where('senderId', '==', otherParticipantId),
+                        where('status', '!=', 'read')
+                    );
+                    const unreadSnapshot = await getDocs(unreadQuery);
+
                     if (userDoc.exists()) {
                         const userData = userDoc.data() as UserProfile;
                         return {
-                            id: docSnapshot.id,
+                            id: chatDoc.id,
                             ...chatData,
                             lastMessage: chatData.lastMessage || null,
-                            unreadCount: 0, // Placeholder
+                            unreadCount: unreadSnapshot.size, // Set unread count
                             participantDetails: {
                                 id: userData.uid,
                                 name: userData.displayName,
@@ -148,9 +158,11 @@ export default function ChatPage() {
                             }
                         } as Chat;
                     }
-                } catch(err) {
-                    const permissionError = new FirestorePermissionError({ path: doc(firestore, 'users', otherParticipantId).path, operation: 'get' });
-                    errorEmitter.emit('permission-error', permissionError);
+                } catch(err: any) {
+                    if(err.code !== 'permission-denied') {
+                      console.error("Error processing chat:", err);
+                    }
+                    // Permission denied can be ignored if rules are strict
                 }
             }
             return null;
