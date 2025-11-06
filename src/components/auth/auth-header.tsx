@@ -9,7 +9,7 @@ export function AuthHeader({ activeTab }: { activeTab: 'login' | 'signup' }) {
     <div className="flex flex-col items-center text-center mb-8">
       <div className="relative mb-4">
         <svg
-          className="w-24 h-24 text-primary"
+          className="w-24 h-24 text-red-500"
           fill="currentColor"
           viewBox="0 0 24 24"
         >
@@ -20,7 +20,7 @@ export function AuthHeader({ activeTab }: { activeTab: 'login' | 'signup' }) {
         </span>
       </div>
 
-      <h1 className="text-4xl font-headline font-bold text-primary">
+      <h1 className="text-4xl font-headline font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate pointer-events-none">
         Love Chat
       </h1>
       
