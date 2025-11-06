@@ -34,25 +34,7 @@ export default function FriendsPage() {
       .map((n) => n[0])
       .join('');
   };
-
-  const fetchRequestSenders = useCallback(async (requestsData: FriendRequest[]) => {
-      if (!firestore) return;
-      const requestsWithUsers: FriendRequest[] = [];
-      for (const request of requestsData) {
-          const userRef = doc(firestore, 'users', request.from);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-              requestsWithUsers.push({ ...request, fromUser: userSnap.data() as UserProfile });
-          } else {
-              // Handle case where sender's profile might not exist
-              requestsWithUsers.push(request);
-          }
-      }
-      setRequests(requestsWithUsers);
-      setLoading(false);
-  }, [firestore]);
-
-
+  
   useEffect(() => {
     if (!user || !firestore) {
       setLoading(false);
@@ -65,7 +47,39 @@ export default function FriendsPage() {
 
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
         const requestsData = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as FriendRequest));
-        await fetchRequestSenders(requestsData);
+        
+        if (requestsData.length === 0) {
+            setRequests([]);
+            setLoading(false);
+            return;
+        }
+
+        // Optimized fetching of user profiles
+        const senderIds = requestsData.map(req => req.from);
+        const usersRef = collection(firestore, 'users');
+        const usersQuery = query(usersRef, where('uid', 'in', senderIds));
+        
+        try {
+            const usersSnapshot = await getDocs(usersQuery);
+            const sendersMap = new Map<string, UserProfile>();
+            usersSnapshot.forEach(docSnap => {
+                sendersMap.set(docSnap.id, docSnap.data() as UserProfile);
+            });
+
+            const requestsWithUsers = requestsData.map(request => ({
+                ...request,
+                fromUser: sendersMap.get(request.from)
+            }));
+            
+            setRequests(requestsWithUsers);
+        } catch (usersError) {
+             console.error("Error fetching request senders:", usersError);
+             // Still show requests even if profiles fail to load
+             setRequests(requestsData);
+        }
+
+        setLoading(false);
+
     }, (serverError: any) => {
         const permissionError = new FirestorePermissionError({
             path: requestsRef.path,
@@ -77,7 +91,7 @@ export default function FriendsPage() {
 
     return () => unsubscribe();
 
-  }, [user, firestore, fetchRequestSenders]);
+  }, [user, firestore]);
 
   const handleAccept = async (request: FriendRequest) => {
     if (!firestore || !user) return;
