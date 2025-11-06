@@ -37,16 +37,12 @@ service cloud.firestore {
     }
     
     match /chats/{chatId} {
-        function isChatMember() {
-            return isAuthenticated() && request.auth.uid in resource.data.members;
-        }
-        
-        allow read, update: if isChatMember();
+        allow read, update: if isAuthenticated() && request.auth.uid in resource.data.members;
         allow create: if isAuthenticated() && request.resource.data.members.hasAny([request.auth.uid]);
         
         match /messages/{messageId} {
-            allow read: if isChatMember();
-            allow create: if isChatMember() && request.resource.data.senderId == request.auth.uid;
+            allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+            allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
             
             allow update, delete: if false; 
         }
