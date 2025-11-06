@@ -14,7 +14,7 @@ service cloud.firestore {
                     && request.resource.data.to != request.auth.uid
                     && request.resource.data.status == 'pending';
                     
-      allow read, update, delete: if request.auth != null && resource.data.to == request.auth.uid;
+      allow read, update, delete: if request.auth != null && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
       allow list: if request.auth != null && request.query.where.to == request.auth.uid && request.query.where.status == 'pending';
     }
   }
