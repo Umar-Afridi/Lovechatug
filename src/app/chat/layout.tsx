@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useEffect, useState } from 'react';
-import { getRedirectResult, signInWithPopup, GoogleAuthProvider, User } from 'firebase/auth';
+import { getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { collection, onSnapshot, query, where, doc, setDoc, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -136,11 +136,13 @@ export default function ChatAppLayout({
       try {
         const result = await getRedirectResult(auth);
         if (result && result.user) {
+          // User has successfully signed in via redirect.
           const user = result.user;
           const userDocRef = doc(firestore, 'users', user.uid);
           const userDocSnap = await getDoc(userDocRef);
 
           if (!userDocSnap.exists()) {
+            // If the user is new, create their profile in Firestore.
             const userData: UserProfile = {
               uid: user.uid,
               displayName: user.displayName || 'Anonymous User',
@@ -150,8 +152,10 @@ export default function ChatAppLayout({
               friends: [],
               bio: '',
             };
+            // IMPORTANT: Wait for setDoc to complete before redirecting.
             await setDoc(userDocRef, userData);
           }
+          // Now that the user profile is guaranteed to exist, redirect to the chat page.
           router.push('/chat');
         }
       } catch (error: any) {
@@ -192,10 +196,10 @@ export default function ChatAppLayout({
 
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !user && pathname !== '/') {
       router.push('/');
     }
-  }, [authLoading, user, router]);
+  }, [authLoading, user, router, pathname]);
 
   const handleSignOut = async () => {
     if (auth) {
@@ -206,12 +210,16 @@ export default function ChatAppLayout({
 
   const loading = authLoading || profileLoading;
 
-  if (loading || !user || !profile) {
+  if (loading || (!user && pathname !== '/')) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <p>Loading...</p>
       </div>
     );
+  }
+  
+  if (!user) {
+    return <>{children}</>;
   }
 
   const getInitials = (name: string | null | undefined) => {
@@ -233,19 +241,19 @@ export default function ChatAppLayout({
                   <Link href="/profile" className="h-12 w-full justify-start gap-2 px-2 flex items-center">
                       <Avatar className="h-8 w-8">
                       <AvatarImage
-                          src={profile.photoURL ?? undefined}
-                          alt={profile.displayName ?? 'user-avatar'}
+                          src={profile?.photoURL ?? undefined}
+                          alt={profile?.displayName ?? 'user-avatar'}
                       />
                       <AvatarFallback>
-                          {getInitials(profile.displayName)}
+                          {getInitials(profile?.displayName)}
                       </AvatarFallback>
                       </Avatar>
                       <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
                       <span className="truncate text-sm font-medium">
-                          {profile.displayName ?? 'User'}
+                          {profile?.displayName ?? 'User'}
                       </span>
                       <span className="truncate text-xs text-muted-foreground">
-                          {profile.email ?? 'No email'}
+                          {profile?.email ?? 'No email'}
                       </span>
                       </div>
                   </Link>

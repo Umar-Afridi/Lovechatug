@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/card';
 import { GoogleIcon } from '@/components/icons/google-icon';
 import Link from 'next/link';
-import { useAuth, useFirestore } from '@/firebase/provider';
+import { useAuth } from '@/firebase/provider';
 import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '../ui/separator';
@@ -22,13 +22,12 @@ import { ForgotPasswordDialog } from './forgot-password-dialog';
 
 export function LoginForm() {
   const auth = useAuth();
-  const firestore = useFirestore();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleGoogleSignIn = async () => {
-    if (!auth || !firestore) {
+    if (!auth) {
       toast({
         variant: "destructive",
         title: "Authentication Error",
@@ -38,8 +37,8 @@ export function LoginForm() {
     }
     const provider = new GoogleAuthProvider();
     
-    // Always use redirect for a consistent and reliable experience on all devices.
-    // This avoids all popup-related issues.
+    // Always use signInWithRedirect for a consistent and reliable experience
+    // across all devices and environments (including mobile and iframes).
     try {
         await signInWithRedirect(auth, provider);
     } catch (error: any) {
