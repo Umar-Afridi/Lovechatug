@@ -99,6 +99,7 @@ export default function ChatIdPage({
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [loading, setLoading] = useState(true);
   const [isContactSheetOpen, setContactSheetOpen] = useState(false);
+  const [inputValue, setInputValue] = useState('');
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
