@@ -37,13 +37,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useEffect, useState } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { collection, onSnapshot, query, where, doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { getDatabase, ref, onValue, off, goOnline, goOffline, onDisconnect, serverTimestamp as rtdbServerTimestamp, set } from 'firebase/database';
+import { getDatabase, ref, onValue, off, onDisconnect, serverTimestamp as rtdbServerTimestamp, set } from 'firebase/database';
 
 
 // Custom hook to get user profile data in real-time
@@ -96,33 +96,45 @@ function usePresence() {
   useEffect(() => {
     if (!user || !firestore) return;
 
+    // Get a reference to the Realtime Database
     const db = getDatabase();
+    // Create a reference for this user's presence status in the Realtime Database.
+    const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
+    // Create a reference to this user's document in Firestore.
     const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
+
+    // Get a reference to the special '.info/connected' path in Realtime Database.
+    // This path is true when the client is connected and false when it's not.
     const connectedRef = ref(db, '.info/connected');
 
     const unsubscribe = onValue(connectedRef, (snap) => {
       if (snap.val() === true) {
-        // User is connected.
+        // The client is connected.
+        // 1. Set the Realtime Database presence status.
+        const presenceData = { isOnline: true, lastSeen: rtdbServerTimestamp() };
+        set(userStatusDatabaseRef, presenceData);
+
+        // 2. When the client disconnects, update the Realtime Database.
+        // THIS IS THE CRITICAL PART: `onDisconnect` is a Realtime Database feature.
+        onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
+
+        // 3. Also update the Firestore document to show the user is online.
         const firestoreUpdateData = { isOnline: true, lastSeen: serverTimestamp() };
         updateDoc(userStatusFirestoreRef, firestoreUpdateData).catch(err => {
+          if (err.code === 'permission-denied') {
             const permissionError = new FirestorePermissionError({ path: userStatusFirestoreRef.path, operation: 'update', requestResourceData: firestoreUpdateData });
             errorEmitter.emit('permission-error', permissionError);
+          }
         });
-
-        // When the client disconnects from the app, update Firestore
-        onDisconnect(userStatusFirestoreRef).update({
-          isOnline: false,
-          lastSeen: serverTimestamp()
-        });
-
       }
     });
 
     return () => {
+       // On unmount/cleanup, explicitly set offline in both databases.
       if (typeof unsubscribe === 'function') {
         off(connectedRef, 'value', unsubscribe);
       }
-      // On unmount/disconnect from this component, explicitly set offline
+       set(userStatusDatabaseRef, { isOnline: false, lastSeen: rtdbServerTimestamp() });
        updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() }).catch(err => {
             // This might fail if the user is already offline, which is fine.
        });
@@ -179,11 +191,15 @@ export default function ChatAppLayout({
   }, [authLoading, user, router, pathname]);
 
   const handleSignOut = async () => {
-    if (auth) {
-      if (user && firestore) {
-          const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
-          await updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() });
-      }
+    if (auth && user && firestore) {
+      const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
+      const db = getDatabase();
+      const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
+
+      // Set offline in both databases before signing out
+      await updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() });
+      await set(userStatusDatabaseRef, { isOnline: false, lastSeen: rtdbServerTimestamp() });
+
       await auth.signOut();
       router.push('/');
     }
@@ -269,6 +285,12 @@ export default function ChatAppLayout({
                       </SidebarMenuButton>
                     </Link>
                   </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton tooltip="Logout" onClick={handleSignOut}>
+                            <LogOut />
+                            <span>Logout</span>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
               </SidebarMenu>
               </SidebarFooter>
           </Sidebar>
@@ -309,3 +331,5 @@ const menuItems = [
      label: 'Call History',
   },
 ];
+
+    

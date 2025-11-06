@@ -11,7 +11,7 @@ import {
 import { GoogleIcon } from '@/components/icons/google-icon';
 import Link from 'next/link';
 import { useAuth, useFirestore } from '@/firebase/provider';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
@@ -68,7 +68,7 @@ export function LoginForm() {
                 requestResourceData: newUserProfile,
               });
               errorEmitter.emit('permission-error', permissionError);
-              throw new Error("Could not save your user profile due to permissions.");
+              // Don't re-throw, let the user proceed. The error will show in dev overlay.
             });
         }
         router.push('/chat');
@@ -92,6 +92,7 @@ export function LoginForm() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setError(null);
     if (!auth) {
        setError('Firebase Auth not available.');
        toast({
@@ -107,7 +108,7 @@ export function LoginForm() {
     const password = formData.get('password') as string;
 
     try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
+      await signInWithEmailAndPassword(auth, email, password);
       router.push('/chat');
     } catch (err: any) {
       setError(err.message);
@@ -164,3 +165,5 @@ export function LoginForm() {
     </Card>
   );
 }
+
+    
