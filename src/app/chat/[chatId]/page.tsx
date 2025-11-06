@@ -262,7 +262,7 @@ export default function ChatIdPage({
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault(); // Prevent new line on Enter alone
         handleSendMessage(e);
     }
