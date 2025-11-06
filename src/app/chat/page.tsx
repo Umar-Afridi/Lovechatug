@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, MessageSquare, Users, UserPlus, Phone, Heart, LogOut } from 'lucide-react';
+import { Search, MessageSquare, Users, UserPlus, Phone, Heart } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,14 +13,12 @@ import { cn } from '@/lib/utils';
 import GroupsPage from './groups/page';
 import FriendsPage from './friends/page';
 import CallsPage from './calls/page';
-import { useAuth, useFirestore } from '@/firebase/provider';
+import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
-import type { User as FirebaseUserType } from 'firebase/auth';
+import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
-import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '@/components/ui/carousel';
 
 
 // Mock data, will be replaced with Firebase data
@@ -91,7 +89,6 @@ const navigationItems = [
 ];
 
 const ChatList = () => {
-    const router = useRouter();
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('');
 
     return (
@@ -130,40 +127,10 @@ const ChatList = () => {
 export default function ChatPage() {
   const [activeTab, setActiveTab] = useState('chats');
   const firestore = useFirestore();
-  const { user, loading } = useUser();
+  const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const { toast } = useToast();
-  const [api, setApi] = useState<CarouselApi>();
-  const [current, setCurrent] = useState(0);
-
-  useEffect(() => {
-    if (!api) {
-      return;
-    }
-
-    const onSelect = () => {
-      setCurrent(api.selectedScrollSnap());
-      const newActiveTab = navigationItems[api.selectedScrollSnap()].content;
-      setActiveTab(newActiveTab);
-    };
-
-    api.on('select', onSelect);
-
-    return () => {
-      api.off('select', onSelect);
-    };
-  }, [api]);
-
-  useEffect(() => {
-    if (api) {
-      const activeIndex = navigationItems.findIndex(item => item.content === activeTab);
-      if (activeIndex !== -1 && activeIndex !== api.selectedScrollSnap()) {
-        api.scrollTo(activeIndex);
-      }
-    }
-  }, [activeTab, api]);
-
 
   useEffect(() => {
     const handleSearch = async () => {
@@ -278,16 +245,19 @@ export default function ChatPage() {
     if (searchQuery.trim() !== '') {
       return renderSearchResults();
     }
-    return (
-        <Carousel setApi={setApi} className="w-full flex-1">
-            <CarouselContent className="h-full">
-                <CarouselItem className="h-full"><ChatList /></CarouselItem>
-                <CarouselItem className="h-full"><GroupsPage /></CarouselItem>
-                <CarouselItem className="h-full"><FriendsPage /></CarouselItem>
-                <CarouselItem className="h-full"><CallsPage /></CarouselItem>
-            </CarouselContent>
-        </Carousel>
-    );
+    
+    switch(activeTab) {
+        case 'chats':
+            return <ChatList />;
+        case 'groups':
+            return <GroupsPage />;
+        case 'requests':
+            return <FriendsPage />;
+        case 'calls':
+            return <CallsPage />;
+        default:
+            return <ChatList />;
+    }
   }
 
   return (
