@@ -59,6 +59,8 @@ export default function FriendsPage() {
         
         if (senderIds.length > 0) {
             const usersRef = collection(firestore, 'users');
+            // Firestore 'in' queries are limited to 30 items. 
+            // If you expect more, you'll need to chunk this.
             const usersQuery = query(usersRef, where('uid', 'in', senderIds));
             
             try {
@@ -87,7 +89,7 @@ export default function FriendsPage() {
 
     }, (serverError: any) => {
         const permissionError = new FirestorePermissionError({
-            path: requestsQuery.path,
+            path: 'friendRequests',
             operation: 'list',
         });
         errorEmitter.emit('permission-error', permissionError);
@@ -101,25 +103,33 @@ export default function FriendsPage() {
   const handleAccept = async (request: FriendRequestWithUser) => {
     if (!firestore || !user || !request.fromUser) return;
     
-    const batch = writeBatch(firestore);
-
     const requestRef = doc(firestore, 'friendRequests', request.id);
     const currentUserRef = doc(firestore, 'users', user.uid);
     const friendUserRef = doc(firestore, 'users', request.senderId);
 
-    batch.delete(requestRef); 
-    batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
-    batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
-    
-    await batch.commit().catch((serverError) => {
-        const permissionError = new FirestorePermissionError({
-            path: 'batch', // Batch writes affect multiple paths
-            operation: 'update',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    });
+    try {
+        // Step 1: Update current user's friend list and delete the request
+        const batch = writeBatch(firestore);
+        batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
+        batch.delete(requestRef); 
+        await batch.commit();
+
+        // Step 2: Update the other user's friend list.
+        // This is a separate call to comply with security rules that only allow
+        // a user to update their own doc, or add themselves to another's friend list.
+        await updateDoc(friendUserRef, { friends: arrayUnion(user.uid) });
         
-    toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
+        toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
+        
+    } catch (error) {
+        console.error("Error accepting friend request: ", error);
+        // The error emitter will be triggered by the specific failing operation's catch block
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Could not accept friend request. You may not have the required permissions."
+        });
+    }
   };
 
   const handleDecline = async (requestId: string) => {

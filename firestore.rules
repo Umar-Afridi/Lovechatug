@@ -9,8 +9,8 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated(); 
       
-      // ایک صارف اپنی پروفائل اپ ڈیٹ کر سکتا ہے۔
-      // ایک صارف دوسرے صارف کی فرینڈ لسٹ میں صرف اپنا UID شامل کر سکتا ہے۔
+      // A user can update their own profile.
+      // A user can also add ONLY their own UID to another user's friends list.
       allow update: if isAuthenticated() && (
         (request.auth.uid == userId) ||
         (request.auth.uid != userId && 
@@ -29,8 +29,11 @@ service cloud.firestore {
 
       allow update: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
       
+      // Allow sender or receiver to delete the request.
+      // This is needed for the 'accept' (which deletes the request) and 'decline' actions.
       allow delete: if isAuthenticated() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
-      allow list: if isAuthenticated() && (request.query.where[0][2] == request.auth.uid || request.query.where[2] == request.auth.uid);
+
+      allow list: if isAuthenticated() && (request.query.where[0][2] == request.auth.uid);
     }
     
     match /chats/{chatId} {
