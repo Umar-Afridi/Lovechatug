@@ -61,7 +61,7 @@ export function LoginForm() {
                 isOnline: true,
                 lastSeen: new Date().toISOString(),
             };
-            await setDoc(userDocRef, newUserProfile).catch((serverError) => {
+            setDoc(userDocRef, newUserProfile).catch((serverError) => {
               const permissionError = new FirestorePermissionError({
                 path: userDocRef.path,
                 operation: 'create',
@@ -74,10 +74,11 @@ export function LoginForm() {
         router.push('/chat');
 
     } catch (error: any) {
+        if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+          return; // Do nothing if user closes the popup
+        }
         let friendlyMessage = "An unknown error occurred during sign-in.";
-        if (error.code === 'auth/popup-closed-by-user') {
-            friendlyMessage = "The sign-in window was closed before completion.";
-        } else if (error.code === 'auth/account-exists-with-different-credential') {
+        if (error.code === 'auth/account-exists-with-different-credential') {
             friendlyMessage = "An account already exists with the same email address but different sign-in credentials.";
         }
         setError(error.message);
@@ -147,15 +148,15 @@ export function LoginForm() {
           <Button type="submit" className="w-full">
             Login
           </Button>
-           <div className="mt-4 text-center text-sm">
+          <div className="mt-4 text-center text-sm">
             Don&apos;t have an account?{' '}
             <Link href="/signup" className="underline">
               Sign up
             </Link>
           </div>
           <Separator className="my-4" />
-           <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} type="button">
-            <GoogleIcon className="mr-2 h-4 w-4" />
+           <Button className="w-full bg-red-600 text-white hover:bg-red-700" onClick={handleGoogleSignIn} type="button">
+            <GoogleIcon className="mr-2 h-5 w-5" />
             Sign in with Google
           </Button>
         </form>
