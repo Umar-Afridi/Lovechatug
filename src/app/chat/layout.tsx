@@ -117,7 +117,7 @@ function usePresence() {
 
         // When the client disconnects, update the Realtime Database
         const presenceData = { isOnline: false, lastSeen: rtdbServerTimestamp() };
-        onDisconnect(userStatusDatabaseRef).set(presenseData);
+        onDisconnect(userStatusDatabaseRef).set(presenceData);
 
         // When the client connects, set their Realtime Database status
         setDoc(userStatusDatabaseRef as any, { isOnline: true, lastSeen: rtdbServerTimestamp() });
