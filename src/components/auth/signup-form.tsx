@@ -18,6 +18,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import type { UserProfile } from '@/lib/types';
 
 export function SignupForm() {
   const auth = useAuth();
@@ -70,14 +71,17 @@ export function SignupForm() {
         });
         
         const userDocRef = doc(firestore, 'users', userCredential.user.uid);
-        const userData = {
+        const userData: UserProfile = {
           uid: userCredential.user.uid,
           displayName: fullName,
           email: email,
           username: username,
-          photoURL: userCredential.user.photoURL,
+          photoURL: userCredential.user.photoURL ?? '',
           friends: [],
           bio: '',
+          isOnline: true,
+          lastSeen: new Date().toISOString(),
+          blockedUsers: [],
         };
 
         setDoc(userDocRef, userData)

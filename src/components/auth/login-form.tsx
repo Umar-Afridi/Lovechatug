@@ -60,6 +60,7 @@ export function LoginForm() {
                 bio: '',
                 isOnline: true,
                 lastSeen: new Date().toISOString(),
+                blockedUsers: [],
             };
             setDoc(userDocRef, newUserProfile).catch((serverError) => {
               const permissionError = new FirestorePermissionError({

@@ -122,6 +122,8 @@ export default function ChatPage() {
   const [loadingChats, setLoadingChats] = useState(true);
   const [requestCount, setRequestCount] = useState(0);
   const { toast } = useToast();
+  const router = useRouter();
+
 
    // Fetch user's chats in real-time
    useEffect(() => {
@@ -315,33 +317,42 @@ export default function ChatPage() {
   ];
 
   const renderSearchResults = () => {
-      if (searchResults.length > 0) {
+    if (searchQuery.trim() !== '' && searchResults.length === 0) {
         return (
-          <ScrollArea className="flex-1">
-            {searchResults.map(foundUser => (
-              <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
+          <div className="flex flex-1 items-center justify-center text-muted-foreground">
+            <p>No users found matching your search.</p>
+          </div>
+        );
+    }
+
+    return (
+        <ScrollArea className="flex-1">
+        {searchResults.map(foundUser => {
+            const isFriend = profile?.friends?.includes(foundUser.uid);
+            return (
+            <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
                 <div className="flex items-center gap-4">
-                  <Avatar>
+                <Avatar>
                     <AvatarImage src={foundUser.photoURL} />
                     <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
-                  </Avatar>
-                  <div>
+                </Avatar>
+                <div>
                     <p className="font-semibold">{foundUser.displayName}</p>
                     <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
-                  </div>
                 </div>
-                <Button size="sm" onClick={() => handleAddRequest(foundUser.uid)}>Add Request</Button>
-              </div>
-            ))}
-          </ScrollArea>
-        );
-      } else {
-         return (
-           <div className="flex flex-1 items-center justify-center text-muted-foreground">
-             <p>No users found matching your search.</p>
-           </div>
-         );
-      }
+                </div>
+                {isFriend ? (
+                    <Button asChild size="sm">
+                        <Link href={`/chat/${foundUser.uid}`}>Message</Link>
+                    </Button>
+                ) : (
+                    <Button size="sm" onClick={() => handleAddRequest(foundUser.uid)}>Add Request</Button>
+                )}
+            </div>
+            );
+        })}
+        </ScrollArea>
+    );
   }
 
   const renderContent = () => {
