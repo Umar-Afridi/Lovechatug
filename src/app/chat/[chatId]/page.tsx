@@ -40,6 +40,7 @@ import {
   Lock,
   ArrowUp,
   ChevronLeft,
+  AlertCircle,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
@@ -58,6 +59,7 @@ import { format } from 'date-fns';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // Helper to get or create a chat
 async function getOrCreateChat(
@@ -280,8 +282,17 @@ export default function ChatIdPage({
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const msgs = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as MessageType)
-      );
-      setMessages(msgs);
+      ).filter(msg => !msg.isUploading); // Filter out temp messages that are now confirmed
+      
+      // Merge with local-only messages (for optimistic UI)
+      setMessages(prev => {
+          const localOnly = prev.filter(m => m.isUploading);
+          const serverMsgs = msgs;
+          // Avoid duplicates
+          const uniqueServerMsgs = serverMsgs.filter(sm => !localOnly.some(lm => lm.id === sm.id));
+          return [...uniqueServerMsgs, ...localOnly];
+      });
+
       setLoading(false);
     }, (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -306,7 +317,7 @@ export default function ChatIdPage({
     if (unreadMessages.length > 0) {
         const batch = writeBatch(firestore);
         unreadMessages.forEach((msg) => {
-            if(msg.id){
+            if(msg.id && !msg.isUploading){ // Dont try to update local-only messages
                 const msgRef = doc(firestore, 'chats', chatId, 'messages', msg.id);
                 batch.update(msgRef, { status: 'read' });
             }
@@ -466,19 +477,36 @@ export default function ChatIdPage({
                 resolve();
             }
         });
-    }, []);
+    }, [sendAudioMessage]);
 
-    const sendAudioMessage = async (audioBlob: Blob) => {
+    const sendAudioMessage = useCallback(async (audioBlob: Blob) => {
         if (!firestore || !chatId || !authUser || !otherUser || audioBlob.size === 0) return;
     
+        const localMessageId = `local_${Date.now()}`;
+        const isOtherUserOnline = otherUser?.isOnline ?? false;
+    
+        // 1. Optimistic UI Update: Add a temporary message
+        const optimisticMessage: MessageType = {
+            id: localMessageId,
+            senderId: authUser.uid,
+            content: 'Voice message',
+            timestamp: Timestamp.now(),
+            type: 'audio',
+            mediaUrl: URL.createObjectURL(audioBlob), // Use local blob URL for immediate playback
+            status: 'sent',
+            isUploading: true, // Custom flag
+        };
+        setMessages(prev => [...prev, optimisticMessage]);
+
         const storage = getStorage();
         const audioFileRef = storageRef(storage, `chats/${chatId}/${Date.now()}.webm`);
 
         try {
-            toast({ title: 'Uploading voice message...' });
+            // 2. Upload the file
             const snapshot = await uploadBytes(audioFileRef, audioBlob);
             const downloadURL = await getDownloadURL(snapshot.ref);
 
+            // 3. Add the real message to Firestore
             const messagesRef = collection(firestore, 'chats', chatId, 'messages');
             const newAudioMessage = {
                 senderId: authUser.uid,
@@ -486,11 +514,19 @@ export default function ChatIdPage({
                 timestamp: serverTimestamp(),
                 type: 'audio' as const,
                 mediaUrl: downloadURL,
-                status: otherUser.isOnline ? 'delivered' : 'sent',
+                status: isOtherUserOnline ? 'delivered' : 'sent',
             };
             
-            await addDoc(messagesRef, newAudioMessage);
+            const docRef = await addDoc(messagesRef, newAudioMessage);
 
+            // 4. Update the local message with the final URL and remove the uploading flag
+            setMessages(prev => prev.map(msg => 
+                msg.id === localMessageId 
+                ? { ...msg, id: docRef.id, mediaUrl: downloadURL, isUploading: false, timestamp: new Date() } // Use temp timestamp
+                : msg
+            ));
+            
+            // 5. Update last message and unread count
             const chatRef = doc(firestore, 'chats', chatId);
             const lastMessageData = {
                 content: '🎤 Voice message',
@@ -504,9 +540,15 @@ export default function ChatIdPage({
 
         } catch (error) {
             console.error("Error sending audio message:", error);
+            // Mark the optimistic message as failed
+            setMessages(prev => prev.map(msg => 
+                msg.id === localMessageId 
+                ? { ...msg, uploadFailed: true, isUploading: false }
+                : msg
+            ));
             toast({ title: 'Error', description: 'Could not send voice message.', variant: 'destructive' });
         }
-    };
+    }, [firestore, chatId, authUser, otherUser, toast]);
     
     // Timer update effect
     useEffect(() => {
@@ -730,7 +772,11 @@ export default function ChatIdPage({
   const formatTimestamp = (timestamp: any) => {
       if (!timestamp) return '';
       const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-      return format(date, 'p'); // e.g., 12:00 PM
+      try {
+        return format(date, 'p'); // e.g., 12:00 PM
+      } catch (e) {
+        return ''; // Return empty string if date is invalid
+      }
   };
 
   const formatLastSeen = (timestamp: any) => {
@@ -752,6 +798,12 @@ export default function ChatIdPage({
             case 'text':
                 return <p className="whitespace-pre-wrap flex-shrink">{msg.content}</p>;
             case 'audio':
+                if (msg.isUploading) {
+                    return <div className="flex items-center gap-2 w-48"><Skeleton className="h-2 w-full" /><span className="text-xs">Uploading...</span></div>;
+                }
+                 if (msg.uploadFailed) {
+                    return <div className="flex items-center gap-2 text-destructive"><AlertCircle className="h-4 w-4" /><span>Failed to send</span></div>
+                }
                 return (
                     <audio controls src={msg.mediaUrl} className="max-w-full">
                         Your browser does not support the audio element.
@@ -857,7 +909,7 @@ export default function ChatIdPage({
                              {renderMessageContent(msg)}
                             <div className={`flex items-center gap-1 text-[10px] shrink-0 self-end ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
                                 <span>{formatTimestamp(msg.timestamp)}</span>
-                                {msg.senderId === authUser?.uid && (
+                                {msg.senderId === authUser?.uid && !msg.isUploading && (
                                     <MessageStatus status={msg.status} />
                                 )}
                             </div>
@@ -1014,3 +1066,5 @@ export default function ChatIdPage({
     </>
   );
 }
+
+    

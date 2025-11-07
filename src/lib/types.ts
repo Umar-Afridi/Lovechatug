@@ -28,6 +28,8 @@ export type Message = {
     content: string;
     senderId: string;
   };
+  isUploading?: boolean;
+  uploadFailed?: boolean;
 };
 
 export type Chat = {
@@ -74,5 +76,7 @@ export type Call = {
     status: 'missed' | 'answered' | 'declined';
     timestamp: string;
 }
+
+    
 
     
