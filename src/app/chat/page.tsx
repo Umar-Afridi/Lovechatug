@@ -105,7 +105,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
         <div className='flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50'>
           <div className="relative">
             <Avatar>
-                <AvatarImage src={participant.photoURL} />
+                <AvatarImage src={participant.photoURL || undefined} />
                 <AvatarFallback>{getInitials(participant.displayName)}</AvatarFallback>
             </Avatar>
             {participant.isOnline && (
@@ -406,7 +406,7 @@ export default function ChatPage() {
             <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
                 <div className="flex items-center gap-4">
                 <Avatar>
-                    <AvatarImage src={foundUser.photoURL} />
+                    <AvatarImage src={foundUser.photoURL || undefined} />
                     <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
                 </Avatar>
                 <div>
