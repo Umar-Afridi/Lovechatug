@@ -894,16 +894,16 @@ export default function ChatIdPage({
                                 <Trash2 className="h-5 w-5 text-destructive animate-pulse" />
                                 <p className="animate-pulse ml-2">Slide to cancel</p>
                             </div>
-                            <div className="flex flex-col items-center text-muted-foreground animate-pulse flex-1">
-                                <ArrowUp className="h-5 w-5" />
-                                <Lock className="h-5 w-5" />
-                            </div>
-                             <div className="flex items-center gap-2 text-destructive font-mono flex-1 justify-end">
+                            <div className="flex items-center gap-2 text-destructive font-mono flex-1 justify-center">
                                 <span className="relative flex h-3 w-3">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
                                 </span>
                                 <span>{formatRecordingTime(recordingDuration)}</span>
+                            </div>
+                            <div className="flex flex-col items-center text-muted-foreground animate-pulse flex-1 justify-end text-right">
+                                <ArrowUp className="h-5 w-5" />
+                                <Lock className="h-5 w-5" />
                             </div>
                         </>
                     )}
@@ -937,19 +937,11 @@ export default function ChatIdPage({
                     </div>
                     )}
                     <div className="flex items-end gap-2">
-                        <Button variant="ghost" size="icon" className="shrink-0">
-                            <Smile className="h-6 w-6" />
-                            <span className="sr-only">Emoji</span>
-                        </Button>
-                        <Button variant="ghost" size="icon" className="shrink-0">
-                            <Paperclip className="h-6 w-6" />
-                            <span className="sr-only">Attach file</span>
-                        </Button>
                         <div className="relative w-full">
-                            <Textarea
+                             <Textarea
                                 ref={inputRef}
                                 placeholder="Type a message..."
-                                className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-4 shadow-sm focus:border-primary focus:ring-primary"
+                                className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-12 shadow-sm focus:border-primary focus:ring-primary"
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyDown={handleKeyPress}
@@ -960,6 +952,18 @@ export default function ChatIdPage({
                                 target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
                                 }}
                             />
+                            <div className="absolute left-1 top-1/2 -translate-y-1/2 flex items-center">
+                                <Button variant="ghost" size="icon" className="shrink-0">
+                                    <Smile className="h-6 w-6" />
+                                    <span className="sr-only">Emoji</span>
+                                </Button>
+                            </div>
+                            <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
+                                <Button variant="ghost" size="icon" className="shrink-0">
+                                    <Paperclip className="h-6 w-6" />
+                                    <span className="sr-only">Attach file</span>
+                                </Button>
+                            </div>
                         </div>
                          <Button
                             size="icon"
