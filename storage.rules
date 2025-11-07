@@ -1,0 +1,25 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Function to check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Rules for chat media
+    match /chats/{chatId}/{fileName} {
+      // Allow authenticated users to upload files if they are members of the chat.
+      // For simplicity, we are only checking for authentication for now.
+      // We also restrict the file type to common audio formats.
+      allow write: if isAuthenticated() && 
+                    (request.resource.contentType.matches('audio/webm') || 
+                     request.resource.contentType.matches('audio/mp4') ||
+                     request.resource.contentType.matches('audio/ogg'));
+
+      // Allow authenticated users to read files. In a real app, you'd restrict
+      // this to members of the chat.
+      allow read: if isAuthenticated();
+    }
+  }
+}
