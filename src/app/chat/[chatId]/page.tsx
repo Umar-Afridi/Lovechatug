@@ -122,7 +122,11 @@ export default function ChatIdPage({
   const { user: authUser } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const otherUserId = params.chatId;
+  const [otherUserId, setOtherUserId] = useState('');
+
+  useEffect(() => {
+    setOtherUserId(params.chatId);
+  }, [params.chatId]);
 
   const [chatId, setChatId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -534,16 +538,12 @@ export default function ChatIdPage({
                         <p className="truncate text-xs opacity-80">{msg.replyTo.content}</p>
                       </div>
                     )}
-                    <div className="flex items-end gap-2">
-                        <p className="flex-1 whitespace-pre-wrap">{msg.content}</p>
-                        <div className="flex shrink-0 items-center gap-1">
-                            <span className="-mb-1 text-[10px] text-primary-foreground/70">
-                                {formatTimestamp(msg.timestamp)}
-                            </span>
-                            {msg.senderId === authUser?.uid && (
-                                <MessageStatus status={msg.status} />
-                            )}
-                        </div>
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <div className="flex items-center justify-end gap-1 text-[10px] text-primary-foreground/70">
+                      <span>{formatTimestamp(msg.timestamp)}</span>
+                      {msg.senderId === authUser?.uid && (
+                        <MessageStatus status={msg.status} />
+                      )}
                     </div>
                   </div>
                 </div>
@@ -553,7 +553,7 @@ export default function ChatIdPage({
         </main>
 
       {/* Message Input */}
-      <footer className="shrink-0 border-t bg-muted/40">
+      <footer className="shrink-0 border-t bg-muted/40 p-2">
         {replyToMessage && (
           <div className="flex items-center justify-between bg-muted p-2">
             <div className="flex items-center gap-2 overflow-hidden">
@@ -580,7 +580,7 @@ export default function ChatIdPage({
             </Button>
           </div>
         )}
-        <div className="relative flex items-center p-2">
+        <div className="relative flex items-center">
           <Button variant="ghost" size="icon" className="absolute bottom-3 left-3">
             <Smile className="h-5 w-5" />
             <span className="sr-only">Emoji</span>

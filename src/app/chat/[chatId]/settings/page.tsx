@@ -34,7 +34,11 @@ export default function ChatSettingsPage({
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const otherUserId = params.chatId;
+  const [otherUserId, setOtherUserId] = useState('');
+
+  useEffect(() => {
+    setOtherUserId(params.chatId);
+  }, [params.chatId]);
 
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [isContactSheetOpen, setContactSheetOpen] = useState(false);
