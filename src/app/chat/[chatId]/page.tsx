@@ -395,7 +395,7 @@ export default function ChatIdPage({
         const localMessageId = `local_${Date.now()}`;
         const isOtherUserOnline = otherUser?.isOnline ?? false;
     
-        // 1. Optimistic UI Update: Add a temporary message
+        // 1. Optimistic UI Update: Add a temporary message with a local blob URL
         const optimisticMessage: MessageType = {
             id: localMessageId,
             senderId: authUser.uid,
@@ -403,8 +403,8 @@ export default function ChatIdPage({
             timestamp: Timestamp.now(),
             type: 'audio',
             mediaUrl: URL.createObjectURL(audioBlob), // Use local blob URL for immediate playback
-            status: 'sent',
-            isUploading: false, // We'll handle feedback differently if upload fails
+            status: 'sent', // Will be updated later
+            isUploading: false, 
         };
         setMessages(prev => [...prev, optimisticMessage]);
 
@@ -416,7 +416,7 @@ export default function ChatIdPage({
             const snapshot = await uploadBytes(audioFileRef, audioBlob);
             const downloadURL = await getDownloadURL(snapshot.ref);
 
-            // 3. Add the real message to Firestore
+            // 3. Add the real message to Firestore with the correct structure
             const messagesRef = collection(firestore, 'chats', chatId, 'messages');
             const newAudioMessageData = {
                 senderId: authUser.uid,
@@ -429,10 +429,10 @@ export default function ChatIdPage({
             
             const docRef = await addDoc(messagesRef, newAudioMessageData);
 
-            // 4. Update the local message with the final ID and mark as not uploading
-            setMessages(prev => prev.map(msg => 
+            // 4. Update the local message with the final ID from firestore
+             setMessages(prev => prev.map(msg => 
                 msg.id === localMessageId 
-                ? { ...msg, id: docRef.id, isUploading: false, mediaUrl: downloadURL } // Use permanent URL now
+                ? { ...msg, id: docRef.id, uploadFailed: false, mediaUrl: downloadURL } 
                 : msg
             ));
             
@@ -453,7 +453,7 @@ export default function ChatIdPage({
             // Mark the optimistic message as failed
             setMessages(prev => prev.map(msg => 
                 msg.id === localMessageId 
-                ? { ...msg, uploadFailed: true, isUploading: false }
+                ? { ...msg, uploadFailed: true }
                 : msg
             ));
             toast({ title: 'Error', description: 'Could not send voice message.', variant: 'destructive' });
