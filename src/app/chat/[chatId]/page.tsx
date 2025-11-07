@@ -491,7 +491,7 @@ export default function ChatIdPage({
   
   if (loading || !otherUser || !authUser) {
     return (
-      <div className="flex h-dvh flex-col items-center justify-center">
+      <div className="flex h-screen flex-col items-center justify-center">
         <p className="text-lg">Loading chat...</p>
       </div>
     );
@@ -504,7 +504,7 @@ export default function ChatIdPage({
         onOpenChange={setContactSheetOpen}
         userProfile={otherUser}
     />
-    <div className="flex h-dvh flex-col bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
        {/* Chat Header */}
         <header className="flex shrink-0 items-center gap-4 border-b bg-muted/40 px-4 py-3">
             <Button variant="ghost" size="icon" className="md:hidden" onClick={() => router.push('/chat')}>
