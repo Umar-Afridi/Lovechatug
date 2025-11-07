@@ -458,7 +458,7 @@ export default function ChatIdPage({
         if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return;
 
         mediaRecorderRef.current.onstop = async () => {
-            if (send) {
+            if (send && audioChunksRef.current.length > 0) {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                 await sendAudioMessage(audioBlob);
             }
@@ -524,6 +524,7 @@ export default function ChatIdPage({
 
 
     const handleMicButtonPress = () => {
+        if(inputValue.trim()) return;
         recordingPressTimerRef.current = setTimeout(() => {
             startRecording();
         }, 250); // Start recording after 250ms press
@@ -823,10 +824,10 @@ export default function ChatIdPage({
                  <div className="relative flex items-center justify-between gap-2">
                     {isRecordingLocked ? (
                         <>
-                            <Button variant="destructive" onClick={handleCancelRecording}>
-                                Cancel
+                            <Button variant="destructive" size="icon" onClick={handleCancelRecording}>
+                                <Trash2 className="h-5 w-5" />
                             </Button>
-                            <div className="flex items-center gap-2 text-destructive">
+                            <div className="flex items-center gap-2 text-destructive font-mono">
                                 <span className="relative flex h-3 w-3">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
                                 <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
@@ -839,19 +840,19 @@ export default function ChatIdPage({
                         </>
                     ) : (
                          <>
-                            <div className="text-muted-foreground text-sm animate-pulse">
+                            <div className="text-muted-foreground text-sm animate-pulse flex-1">
                                 &larr; Slide to cancel
                             </div>
-                            <div className="flex items-center gap-2 text-destructive">
+                            <div className="flex flex-col items-center text-muted-foreground animate-pulse flex-1">
+                                <ArrowUp className="h-5 w-5" />
+                                <Lock className="h-5 w-5" />
+                            </div>
+                             <div className="flex items-center gap-2 text-destructive font-mono flex-1 justify-end">
                                 <span className="relative flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
                                 </span>
                                 <span>{formatRecordingTime(recordingDuration)}</span>
-                            </div>
-                             <div className="flex flex-col items-center text-muted-foreground">
-                                <Lock className="h-5 w-5" />
-                                <span className="text-xs">Lock</span>
                             </div>
                         </>
                     )}
@@ -935,3 +936,5 @@ export default function ChatIdPage({
     </>
   );
 }
+
+    
