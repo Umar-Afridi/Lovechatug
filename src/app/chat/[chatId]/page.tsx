@@ -894,16 +894,16 @@ export default function ChatIdPage({
                                 <Trash2 className="h-5 w-5 text-destructive animate-pulse" />
                                 <p className="animate-pulse ml-2">Slide to cancel</p>
                             </div>
-                            <div className="flex items-center gap-2 text-destructive font-mono flex-1 justify-center">
+                            <div className="flex flex-col items-center text-muted-foreground animate-pulse flex-1 justify-end text-right">
+                                <ArrowUp className="h-5 w-5" />
+                                <Lock className="h-5 w-5" />
+                            </div>
+                             <div className="flex items-center gap-2 text-destructive font-mono flex-1 justify-center">
                                 <span className="relative flex h-3 w-3">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
                                 </span>
                                 <span>{formatRecordingTime(recordingDuration)}</span>
-                            </div>
-                            <div className="flex flex-col items-center text-muted-foreground animate-pulse flex-1 justify-end text-right">
-                                <ArrowUp className="h-5 w-5" />
-                                <Lock className="h-5 w-5" />
                             </div>
                         </>
                     )}
