@@ -515,48 +515,50 @@ export default function ChatIdPage({
 
       {/* Messages Area */}
        <main className="flex-1 overflow-y-auto" ref={viewportRef}>
-          <div className="p-6 space-y-1">
-              {messages.map((msg) => (
-                   <div
-                      key={msg.id}
-                      className={`flex w-full flex-col gap-1 ${msg.senderId === authUser?.uid ? 'items-end' : 'items-start'}`}
+          <div className="p-6 space-y-2">
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className="relative transition-transform duration-200 ease-out"
+                  onTouchStart={(e) => handleTouchStart(e, msg)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={() => handleTouchEnd(msg)}
+                >
+                  <div
+                    className={`max-w-xs rounded-lg px-3 py-2 text-sm lg:max-w-md flex flex-col ${
+                      msg.senderId === authUser?.uid
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted'
+                    }`}
                   >
-                      <div 
-                          className="relative transition-transform duration-200 ease-out"
-                          onTouchStart={(e) => handleTouchStart(e, msg)}
-                          onTouchMove={handleTouchMove}
-                          onTouchEnd={() => handleTouchEnd(msg)}
-                      >
-                      <div
-                          className={`max-w-xs rounded-lg px-3 py-2 text-sm lg:max-w-md flex flex-col gap-1 ${
-                              msg.senderId === authUser?.uid
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted'
-                          }`}
-                      >
-                          {msg.replyTo && (
-                              <div className="p-2 rounded-md bg-black/10 border-l-2 border-primary-foreground/50">
-                                  <p className="font-bold text-xs">
-                                      {msg.replyTo.senderId === authUser.uid ? 'You' : otherUser.displayName.split(' ')[0]}
-                                  </p>
-                                  <p className="text-xs opacity-80 truncate">{msg.replyTo.content}</p>
-                              </div>
-                          )}
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                    {msg.replyTo && (
+                      <div className="p-2 rounded-md bg-black/10 border-l-2 border-primary-foreground/50 mb-1">
+                        <p className="font-bold text-xs">
+                          {msg.replyTo.senderId === authUser.uid ? 'You' : otherUser.displayName.split(' ')[0]}
+                        </p>
+                        <p className="text-xs opacity-80 truncate">{msg.replyTo.content}</p>
                       </div>
-                      </div>
-                       <div className="flex items-center gap-1.5 pr-1">
-                            <span className="text-[10px] text-muted-foreground">
+                    )}
+                    <div className="flex items-end gap-2">
+                        <p className="whitespace-pre-wrap flex-1">{msg.content}</p>
+                        <div className="flex items-center gap-1 shrink-0">
+                            <span className="text-[10px] text-primary-foreground/70 -mb-1">
                                 {formatTimestamp(msg.timestamp)}
                             </span>
                             {msg.senderId === authUser?.uid && (
                                 <MessageStatus status={msg.status} />
                             )}
                         </div>
+                    </div>
                   </div>
-              ))}
+                </div>
+              </div>
+            ))}
           </div>
-      </main>
+        </main>
 
       {/* Message Input */}
       <footer className="border-t bg-muted/40 p-2 shrink-0">
