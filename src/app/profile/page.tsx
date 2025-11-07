@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, ChangeEvent, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -8,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Camera, LogOut } from 'lucide-react';
+import { ArrowLeft, Camera, LogOut, Shield } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { updateProfile } from 'firebase/auth';
@@ -211,12 +212,19 @@ export default function ProfilePage() {
                     </div>
                 </div>
                 
-                <Button className="w-full" onClick={handleSaveChanges}>Save Changes</Button>
-
-                <Button className="w-full" variant="outline" onClick={handleSignOut}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Logout
-                </Button>
+                <div className="space-y-2">
+                    <Button className="w-full" onClick={handleSaveChanges}>Save Changes</Button>
+                    <Button className="w-full" variant="outline" asChild>
+                        <Link href="/settings">
+                            <Shield className="mr-2 h-4 w-4" />
+                            Privacy & Security
+                        </Link>
+                    </Button>
+                    <Button className="w-full" variant="outline" onClick={handleSignOut}>
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Logout
+                    </Button>
+                </div>
             </div>
         </main>
     </div>
