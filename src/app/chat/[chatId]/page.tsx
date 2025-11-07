@@ -143,7 +143,6 @@ export default function ChatIdPage({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const isCancellingRef = useRef(false);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -398,7 +397,7 @@ export default function ChatIdPage({
             content: 'Voice message',
             timestamp: Timestamp.now(),
             type: 'audio',
-            mediaUrl: URL.createObjectURL(audioBlob), // Use local blob URL for immediate playback
+            mediaUrl: URL.createObjectURL(audioBlob),
             status: 'sent', // Will be updated later
             isUploading: false,
         };
@@ -484,11 +483,9 @@ export default function ChatIdPage({
             mediaRecorderRef.current = null;
         };
         
-        // Ensure stop is called only if the recorder is in 'recording' state
         if (mediaRecorderRef.current?.state === 'recording') {
             mediaRecorderRef.current.stop();
         } else {
-            // If not recording, just clean up state
              audioChunksRef.current = [];
             setIsRecording(false);
             setRecordingDuration(0);
@@ -498,7 +495,6 @@ export default function ChatIdPage({
     
     const startRecording = useCallback(async () => {
         if (isRecording) return;
-        isCancellingRef.current = false;
         
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -536,15 +532,9 @@ export default function ChatIdPage({
     const handleMicButtonRelease = (e: React.MouseEvent | React.TouchEvent) => {
         e.preventDefault();
         if (isRecording) {
-            stopRecording(!isCancellingRef.current);
+            stopRecording(true);
         }
     };
-
-    const handleMouseLeave = (e: React.MouseEvent) => {
-        if (isRecording) {
-            isCancellingRef.current = true;
-        }
-    }
     // --- End Voice Recording Logic ---
 
     const handleSendMessage = () => {
@@ -906,7 +896,6 @@ export default function ChatIdPage({
                                 onMouseUp={!inputValue.trim() ? handleMicButtonRelease : undefined}
                                 onTouchStart={!inputValue.trim() ? handleMicButtonPress : undefined}
                                 onTouchEnd={!inputValue.trim() ? handleMicButtonRelease : undefined}
-                                onMouseLeave={!inputValue.trim() ? handleMouseLeave : undefined}
                             >
                                 {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
                                 <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
