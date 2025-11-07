@@ -143,6 +143,7 @@ export default function ChatIdPage({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isCancellingRef = useRef(false);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -458,42 +459,46 @@ export default function ChatIdPage({
     const stopRecording = useCallback(async (send: boolean) => {
         if (recordingIntervalRef.current) {
             clearInterval(recordingIntervalRef.current);
+            recordingIntervalRef.current = null;
         }
 
         if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
             setIsRecording(false);
             return;
         }
+        
+        mediaRecorderRef.current.onstop = async () => {
+            const tracks = mediaRecorderRef.current?.stream.getTracks() ?? [];
+            tracks.forEach(track => track.stop());
 
-        return new Promise<void>((resolve) => {
-            mediaRecorderRef.current!.onstop = async () => {
-                const tracks = mediaRecorderRef.current?.stream.getTracks() ?? [];
-                tracks.forEach(track => track.stop());
-
-                if (send) {
-                    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                    if (audioBlob.size > 100) { 
-                        await sendAudioMessage(audioBlob);
-                    }
+            if (send) {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                if (audioBlob.size > 100) { 
+                    await sendAudioMessage(audioBlob);
                 }
-                
-                audioChunksRef.current = [];
-                setIsRecording(false);
-                setRecordingDuration(0);
-                mediaRecorderRef.current = null;
-                resolve();
-            };
-            
-            if (mediaRecorderRef.current?.state === 'recording') {
-                mediaRecorderRef.current.stop();
-            } else {
-                resolve();
             }
-        });
+            
+            audioChunksRef.current = [];
+            setIsRecording(false);
+            setRecordingDuration(0);
+            mediaRecorderRef.current = null;
+        };
+        
+        // Ensure stop is called only if the recorder is in 'recording' state
+        if (mediaRecorderRef.current?.state === 'recording') {
+            mediaRecorderRef.current.stop();
+        } else {
+            // If not recording, just clean up state
+             audioChunksRef.current = [];
+            setIsRecording(false);
+            setRecordingDuration(0);
+        }
+
     }, [sendAudioMessage]);
     
     const startRecording = useCallback(async () => {
         if (isRecording) return;
+        isCancellingRef.current = false;
         
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -531,9 +536,15 @@ export default function ChatIdPage({
     const handleMicButtonRelease = (e: React.MouseEvent | React.TouchEvent) => {
         e.preventDefault();
         if (isRecording) {
-            stopRecording(true); 
+            stopRecording(!isCancellingRef.current);
         }
     };
+
+    const handleMouseLeave = (e: React.MouseEvent) => {
+        if (isRecording) {
+            isCancellingRef.current = true;
+        }
+    }
     // --- End Voice Recording Logic ---
 
     const handleSendMessage = () => {
@@ -611,9 +622,12 @@ export default function ChatIdPage({
   };
   
     const handleReplyTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-        touchStartX.current = e.targetTouches[0].clientX;
-        touchMoveX.current = e.targetTouches[0].clientX;
-        isDraggingReply.current = false;
+        isDraggingReply.current = false; // Reset on new touch
+        const touch = e.targetTouches[0];
+        if (touch) {
+            touchStartX.current = touch.clientX;
+            touchMoveX.current = touch.clientX;
+        }
     };
 
     const handleReplyTouchMove = (e: React.TouchEvent<HTMLDivElement>, target: HTMLDivElement) => {
@@ -622,9 +636,9 @@ export default function ChatIdPage({
         const diffX = currentX - touchStartX.current;
         touchMoveX.current = currentX;
 
-        // Check if it's a real drag, not just a tap
+        // Only start dragging if moving horizontally
         if (Math.abs(diffX) > 10) {
-          isDraggingReply.current = true;
+            isDraggingReply.current = true;
         }
         
         // Only allow swiping right-to-left, and not too far
@@ -892,6 +906,7 @@ export default function ChatIdPage({
                                 onMouseUp={!inputValue.trim() ? handleMicButtonRelease : undefined}
                                 onTouchStart={!inputValue.trim() ? handleMicButtonPress : undefined}
                                 onTouchEnd={!inputValue.trim() ? handleMicButtonRelease : undefined}
+                                onMouseLeave={!inputValue.trim() ? handleMouseLeave : undefined}
                             >
                                 {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
                                 <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
