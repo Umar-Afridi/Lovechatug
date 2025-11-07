@@ -534,12 +534,14 @@ export default function ChatIdPage({
                         <p className="truncate text-xs opacity-80">{msg.replyTo.content}</p>
                       </div>
                     )}
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                     <div className={`mt-1 flex items-center gap-1 self-end text-[10px] ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
-                      <span>{formatTimestamp(msg.timestamp)}</span>
-                      {msg.senderId === authUser?.uid && (
-                        <MessageStatus status={msg.status} />
-                      )}
+                    <div className="flex items-end gap-2">
+                        <p className="whitespace-pre-wrap flex-shrink">{msg.content}</p>
+                        <div className={`flex items-center gap-1 text-[10px] ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
+                            <span>{formatTimestamp(msg.timestamp)}</span>
+                            {msg.senderId === authUser?.uid && (
+                                <MessageStatus status={msg.status} />
+                            )}
+                        </div>
                     </div>
                   </div>
                 </div>
