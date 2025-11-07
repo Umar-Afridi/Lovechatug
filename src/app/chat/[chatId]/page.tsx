@@ -432,7 +432,7 @@ export default function ChatIdPage({
             // 4. Update the local message with the final URL and ID
             setMessages(prev => prev.map(msg => 
                 msg.id === localMessageId 
-                ? { ...msg, id: docRef.id, mediaUrl: downloadURL, timestamp: new Date() } // Use temp timestamp
+                ? { ...msg, id: docRef.id, mediaUrl: downloadURL, timestamp: new Date(), isUploading: false } // Final state
                 : msg
             ));
             
@@ -453,7 +453,7 @@ export default function ChatIdPage({
             // Mark the optimistic message as failed
             setMessages(prev => prev.map(msg => 
                 msg.id === localMessageId 
-                ? { ...msg, uploadFailed: true }
+                ? { ...msg, uploadFailed: true, isUploading: false }
                 : msg
             ));
             toast({ title: 'Error', description: 'Could not send voice message.', variant: 'destructive' });
@@ -534,9 +534,7 @@ export default function ChatIdPage({
   // Event Handlers for Mic Button
   const handleMicButtonPress = (e: React.MouseEvent | React.TouchEvent) => {
       e.preventDefault();
-      if (inputValue.trim() === '') {
-          startRecording();
-      }
+      startRecording();
   };
 
   const handleMicButtonRelease = (e: React.MouseEvent | React.TouchEvent) => {
@@ -918,15 +916,11 @@ export default function ChatIdPage({
                                     "rounded-full h-12 w-12 shrink-0 transition-transform duration-200",
                                     isRecording && "scale-125 bg-destructive"
                                 )}
-                                onClick={() => {
-                                    if (inputValue.trim()) {
-                                        handleSendMessage();
-                                    }
-                                }}
-                                onMouseDown={handleMicButtonPress}
-                                onMouseUp={handleMicButtonRelease}
-                                onTouchStart={handleMicButtonPress}
-                                onTouchEnd={handleMicButtonRelease}
+                                onClick={inputValue.trim() ? handleSendMessage : undefined}
+                                onMouseDown={!inputValue.trim() ? handleMicButtonPress : undefined}
+                                onMouseUp={!inputValue.trim() ? handleMicButtonRelease : undefined}
+                                onTouchStart={!inputValue.trim() ? handleMicButtonPress : undefined}
+                                onTouchEnd={!inputValue.trim() ? handleMicButtonRelease : undefined}
                             >
                                 {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
                                 <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
