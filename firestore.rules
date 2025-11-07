@@ -1,84 +1,15 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    // Function to check if the requesting user (request.auth.uid) has been blocked
-    // by the user whose profile they are trying to access (targetUserId).
-    function isNotBlockedByTarget(targetUserId) {
-      let targetUserDoc = get(/databases/$(database)/documents/users/$(targetUserId)).data;
-      // Allow if the target user's blockedUsers list does not exist or the requester's UID is not in it.
-      return !('blockedUsers' in targetUserDoc) || !(request.auth.uid in targetUserDoc.blockedUsers);
-    }
     
-    // Function to check if the requesting user (request.auth.uid) has blocked
-    // the other user (targetUserId). This is to prevent sending messages to blocked users.
-    function hasNotBlockedTarget(targetUserId) {
-      let requesterUserDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return !('blockedUsers' in requesterUserDoc) || !(targetUserId in requesterUserDoc.blockedUsers);
-    }
-    
-    // Function to get the other member in a two-person chat
-    function getOtherChatMember(chatId) {
-        let chatMembers = get(/databases/$(database)/documents/chats/$(chatId)).data.members;
-        return chatMembers.filter(member => member != request.auth.uid)[0];
-    }
-
+    // 1. نیا یوزر (جس کا UID ابھی بنا ہے) صرف اپنا یوزر ڈاکومنٹ (پروفائل) بنا سکتا ہے۔
     match /users/{userId} {
-      // Allow reading a user's profile ONLY IF:
-      // 1. The requester is authenticated.
-      // 2. The requester is reading their own profile.
-      // OR
-      // 3. The user whose profile is being read (userId) has NOT blocked the requester.
-      allow get: if isAuthenticated() && (request.auth.uid == userId || isNotBlockedByTarget(userId));
-      
-      // Allow listing users for username checks during signup.
-      // The more specific 'get' rule above still protects individual user documents from being read fully.
-      allow list: if true;
-
-      // A user can create their own profile document.
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-
-      // A user can update their own profile, but cannot modify the 'blockedUsers' field of another user.
-      allow update: if isAuthenticated() && request.auth.uid == userId;
-      
-      // A user can delete their own profile document.
-      allow delete: if isAuthenticated() && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
     }
 
-    match /friendRequests/{requestId} {
-      allow read, write: if isAuthenticated(); // Simplified for now
-    }
-
-    match /chats/{chatId} {
-        // A user can interact with a chat (read, update, delete) only if they are a member.
-        allow read, update, delete: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
-        
-        // Anyone authenticated can create a chat.
-        allow create: if isAuthenticated();
-    }
-    
-    match /chats/{chatId}/messages/{messageId} {
-       // A message can only be created IF:
-       // 1. The sender is authenticated and is a member of the chat.
-       // 2. The other chat member has NOT blocked the sender.
-       // 3. The sender has NOT blocked the other chat member.
-       allow create: if isAuthenticated() &&
-                      request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members &&
-                      isNotBlockedByTarget(getOtherChatMember(chatId)) &&
-                      hasNotBlockedTarget(getOtherChatMember(chatId));
-                      
-      // Members can read, list, update, and delete messages, as long as they are a member of the parent chat.
-      allow read, list, update, delete: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
-    }
-    
-    match /calls/{callId} {
-        // Allow read, write, delete on call history only for authenticated users who are participants.
-        allow read, create, delete: if isAuthenticated() && request.auth.uid in resource.data.participants;
+    // 2. تمام لاگ اِن یوزرز کو تمام ڈیٹا (چیٹ، فرینڈز، وغیرہ) پڑھنے اور لکھنے کی مکمل اجازت۔
+    match /{document=**} {
+      allow read, write: if request.auth != null;
     }
   }
 }
