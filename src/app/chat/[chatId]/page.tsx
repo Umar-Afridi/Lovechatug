@@ -133,7 +133,7 @@ export default function ChatIdPage({
   const [inputValue, setInputValue] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<MessageType | null>(null);
 
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   
   const touchStartX = useRef(0);
@@ -290,11 +290,8 @@ export default function ChatIdPage({
   
    useEffect(() => {
     // Scroll to bottom when messages change
-    if (scrollAreaRef.current) {
-        const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
-        if(viewport) {
-            viewport.scrollTop = viewport.scrollHeight;
-        }
+    if (viewportRef.current) {
+        viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
     }
   }, [messages]);
 
@@ -460,9 +457,9 @@ export default function ChatIdPage({
         onOpenChange={setContactSheetOpen}
         userProfile={otherUser}
     />
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col bg-background">
        {/* Chat Header */}
-        <header className="flex items-center gap-4 border-b bg-muted/40 px-4 py-3">
+        <header className="flex items-center gap-4 border-b bg-muted/40 px-4 py-3 shrink-0">
             <Button variant="ghost" size="icon" className="md:hidden" onClick={() => router.push('/chat')}>
                 <ArrowLeft className="h-5 w-5" />
                 <span className="sr-only">Back</span>
@@ -511,51 +508,51 @@ export default function ChatIdPage({
         </header>
 
       {/* Messages Area */}
-      <ScrollArea className="flex-1" ref={scrollAreaRef}>
-        <div className="p-6 space-y-4">
-            {messages.map((msg) => (
-                 <div
-                    key={msg.id}
-                    className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
-                >
-                    <div 
-                        className="relative transition-transform duration-200 ease-out"
-                        onTouchStart={(e) => handleTouchStart(e, msg)}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={() => handleTouchEnd(msg)}
-                    >
-                    <div
-                        className={`max-w-xs rounded-lg px-3 py-2 text-sm lg:max-w-md flex flex-col gap-2 ${
-                            msg.senderId === authUser?.uid
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted'
-                        }`}
-                    >
-                        {msg.replyTo && (
-                            <div className="p-2 rounded-md bg-black/10 border-l-2 border-primary-foreground/50">
-                                <p className="font-bold text-xs">
-                                    {msg.replyTo.senderId === authUser.uid ? 'You' : otherUser.displayName.split(' ')[0]}
-                                </p>
-                                <p className="text-xs opacity-80 truncate">{msg.replyTo.content}</p>
-                            </div>
-                        )}
-                        <div className="flex items-end gap-2">
-                            <p className="whitespace-pre-wrap">{msg.content}</p>
-                            {msg.senderId === authUser?.uid && (
-                                <div className="flex-shrink-0">
-                                    <MessageStatus status={msg.status} />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    </div>
-                </div>
-            ))}
-        </div>
-      </ScrollArea>
+      <main className="flex-1 overflow-y-auto" ref={viewportRef}>
+          <div className="p-6 space-y-4">
+              {messages.map((msg) => (
+                   <div
+                      key={msg.id}
+                      className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
+                  >
+                      <div 
+                          className="relative transition-transform duration-200 ease-out"
+                          onTouchStart={(e) => handleTouchStart(e, msg)}
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={() => handleTouchEnd(msg)}
+                      >
+                      <div
+                          className={`max-w-xs rounded-lg px-3 py-2 text-sm lg:max-w-md flex flex-col gap-2 ${
+                              msg.senderId === authUser?.uid
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted'
+                          }`}
+                      >
+                          {msg.replyTo && (
+                              <div className="p-2 rounded-md bg-black/10 border-l-2 border-primary-foreground/50">
+                                  <p className="font-bold text-xs">
+                                      {msg.replyTo.senderId === authUser.uid ? 'You' : otherUser.displayName.split(' ')[0]}
+                                  </p>
+                                  <p className="text-xs opacity-80 truncate">{msg.replyTo.content}</p>
+                              </div>
+                          )}
+                          <div className="flex items-end gap-2">
+                              <p className="whitespace-pre-wrap">{msg.content}</p>
+                              {msg.senderId === authUser?.uid && (
+                                  <div className="flex-shrink-0">
+                                      <MessageStatus status={msg.status} />
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+                      </div>
+                  </div>
+              ))}
+          </div>
+      </main>
 
       {/* Message Input */}
-      <footer className="border-t bg-muted/40 p-2">
+      <footer className="border-t bg-muted/40 p-2 shrink-0">
          {replyToMessage && (
             <div className="bg-muted p-2 rounded-t-lg flex items-center justify-between">
                 <div className="flex items-center gap-2 overflow-hidden">
