@@ -937,5 +937,3 @@ export default function ChatIdPage({
     </>
   );
 }
-
-    
