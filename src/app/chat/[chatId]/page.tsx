@@ -615,13 +615,17 @@ export default function ChatIdPage({
 
         const diffX = touchMoveX.current - touchStartX.current;
 
-        if (diffX > 50) { // Swipe threshold
+        // Only trigger reply on a significant swipe, not a click
+        if (diffX > 50) { 
             setReplyToMessage(msg);
             inputRef.current?.focus();
         }
 
-        // Reset style
+        // Reset style regardless of whether it triggered a reply
         target.style.transform = 'translateX(0)';
+        // Reset touch points
+        touchStartX.current = 0;
+        touchMoveX.current = 0;
     };
   
   const MessageStatus = ({ status }: { status: MessageType['status'] }) => {
