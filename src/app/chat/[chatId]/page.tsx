@@ -625,7 +625,7 @@ export default function ChatIdPage({
 
         const diffX = touchMoveX.current - touchStartX.current;
 
-        // Only trigger reply on a significant right-to-left swipe
+        // Only trigger reply on a significant right-to-left swipe that is considered a drag
         if (isDragging.current && diffX < -50) { 
             setReplyToMessage(msg);
             inputRef.current?.focus();
@@ -797,6 +797,14 @@ export default function ChatIdPage({
         <footer className="shrink-0 border-t bg-muted/40 p-4">
             {isRecording ? (
                 <div className="flex items-center gap-4 w-full">
+                    <Button
+                        variant="destructive"
+                        size="icon"
+                        className="rounded-full h-12 w-12 shrink-0"
+                        onClick={() => stopRecording(false)}
+                    >
+                        <Trash2 className="h-6 w-6" />
+                    </Button>
                     <div className="flex-1 flex items-center justify-center gap-2 text-destructive font-mono">
                         <span className="relative flex h-3 w-3">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
@@ -807,7 +815,7 @@ export default function ChatIdPage({
                     <Button
                         size="icon"
                         className="rounded-full h-12 w-12 shrink-0"
-                        onClick={handleMicButtonRelease}
+                        onClick={() => stopRecording(true)}
                     >
                         <Send className="h-6 w-6" />
                     </Button>
@@ -893,5 +901,3 @@ export default function ChatIdPage({
     </>
   );
 }
-
-    
