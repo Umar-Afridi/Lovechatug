@@ -437,7 +437,8 @@ export default function ChatIdPage({
   const formatLastSeen = (timestamp: any) => {
       if (!timestamp) return 'Offline';
       const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-      return `Last seen at ${format(date, 'p')}`; // e.g., Last seen at 10:30 PM
+      // Format to time like "10:30 PM"
+      return `Last seen at ${format(date, 'p')}`;
   };
   
   if (loading || !otherUser || !authUser) {
@@ -578,7 +579,7 @@ export default function ChatIdPage({
             </Button>
           </div>
         )}
-        <div className="relative flex items-center p-2">
+        <div className="flex items-center p-2">
           <Button variant="ghost" size="icon" className="absolute bottom-3 left-3">
             <Smile className="h-5 w-5" />
             <span className="sr-only">Emoji</span>

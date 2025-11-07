@@ -19,7 +19,7 @@ import { collection, onSnapshot, doc, query, where, getDocs, getDoc, updateDoc }
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, isToday, isYesterday, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 
@@ -33,9 +33,20 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
     const unreadCount = chat.unreadCount?.[currentUserId] ?? 0;
 
     const formatTimestamp = (timestamp: any) => {
-      if (!timestamp) return '';
-      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-      return formatDistanceToNow(date, { addSuffix: true });
+        if (!timestamp) return '';
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        const now = new Date();
+
+        if (differenceInMinutes(now, date) < 1) {
+            return 'Just now';
+        }
+        if (isToday(date)) {
+            return format(date, 'p'); // e.g., 10:30 PM
+        }
+        if (isYesterday(date)) {
+            return 'Yesterday';
+        }
+        return format(date, 'P'); // e.g., 07/16/2024
     };
 
     const participantId = useMemo(() => chat.members.find(id => id !== currentUserId), [chat.members, currentUserId]);
