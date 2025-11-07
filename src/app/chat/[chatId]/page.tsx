@@ -517,10 +517,10 @@ export default function ChatIdPage({
     }, [inputValue, startRecording]);
 
     const handleMicButtonRelease = useCallback(() => {
-        if (isRecording && !isRecordingLocked) {
+        if (isRecording) {
             stopRecording(true);
         }
-    }, [isRecording, isRecordingLocked, stopRecording]);
+    }, [isRecording, stopRecording]);
 
     const handleSendMessage = () => {
     if (inputValue.trim() === '' || !firestore || !authUser || !chatId || !otherUser) return;
@@ -797,44 +797,20 @@ export default function ChatIdPage({
         <footer className="shrink-0 border-t bg-muted/40 p-4">
             {isRecording ? (
                 <div className="flex items-center gap-4 w-full">
-                   {isRecordingLocked ? (
-                    <>
-                        <Button variant="ghost" size="icon" onClick={() => stopRecording(false)}>
-                            <Trash2 className="h-6 w-6 text-destructive" />
-                        </Button>
-                        <div className="flex-1 flex items-center justify-center gap-2 text-destructive font-mono bg-destructive/10 rounded-full px-3 py-1">
-                            <span className="relative flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                            </span>
-                            <span>{formatRecordingTime(recordingDuration)}</span>
-                        </div>
-                         <Button
-                            size="icon"
-                            className="rounded-full h-12 w-12 shrink-0"
-                            onClick={() => stopRecording(true)}
-                        >
-                            <Send className="h-6 w-6" />
-                        </Button>
-                    </>
-                   ) : (
-                    <>
-                        <div className="flex-1 flex items-center justify-center gap-2 text-destructive font-mono">
-                            <span className="relative flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                            </span>
-                            <span>{formatRecordingTime(recordingDuration)}</span>
-                        </div>
-                        <Button
-                            size="icon"
-                            className="rounded-full h-12 w-12 shrink-0"
-                            onClick={handleMicButtonRelease}
-                        >
-                            <Send className="h-6 w-6" />
-                        </Button>
-                    </>
-                   )}
+                    <div className="flex-1 flex items-center justify-center gap-2 text-destructive font-mono">
+                        <span className="relative flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                        </span>
+                        <span>{formatRecordingTime(recordingDuration)}</span>
+                    </div>
+                    <Button
+                        size="icon"
+                        className="rounded-full h-12 w-12 shrink-0"
+                        onClick={handleMicButtonRelease}
+                    >
+                        <Send className="h-6 w-6" />
+                    </Button>
                 </div>
             ) : (
                 <div className="relative">
@@ -917,3 +893,5 @@ export default function ChatIdPage({
     </>
   );
 }
+
+    
