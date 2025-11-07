@@ -535,7 +535,7 @@ export default function ChatIdPage({
                       </div>
                     )}
                     <p className="whitespace-pre-wrap">{msg.content}</p>
-                    <div className="mt-1 flex items-center justify-end gap-1 self-end text-[10px] text-primary-foreground/70">
+                     <div className={`mt-1 flex items-center gap-1 self-end text-[10px] ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
                       <span>{formatTimestamp(msg.timestamp)}</span>
                       {msg.senderId === authUser?.uid && (
                         <MessageStatus status={msg.status} />
