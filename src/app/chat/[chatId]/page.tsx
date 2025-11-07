@@ -20,6 +20,7 @@ import {
   limit,
   where,
   Timestamp,
+  getDocs,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -293,6 +294,42 @@ export default function ChatIdPage({
 
   }, [messages, firestore, chatId, authUser]);
   
+  const prevOtherUserIsOnline = useRef(otherUser?.isOnline);
+  // Update sent messages to delivered when the other user comes online
+  useEffect(() => {
+    if (!firestore || !chatId || !authUser || !otherUser) return;
+
+    // Check if the user just came online
+    if (otherUser.isOnline && !prevOtherUserIsOnline.current) {
+      const messagesRef = collection(firestore, 'chats', chatId, 'messages');
+      const q = query(
+        messagesRef,
+        where('senderId', '==', authUser.uid),
+        where('status', '==', 'sent')
+      );
+
+      getDocs(q).then((querySnapshot) => {
+        if (!querySnapshot.empty) {
+          const batch = writeBatch(firestore);
+          querySnapshot.forEach((doc) => {
+            batch.update(doc.ref, { status: 'delivered' });
+          });
+          batch.commit().catch((serverError) => {
+             const permissionError = new FirestorePermissionError({
+                path: messagesRef.path,
+                operation: 'update',
+                requestResourceData: { status: 'delivered' }
+            });
+            errorEmitter.emit('permission-error', permissionError);
+          });
+        }
+      });
+    }
+
+    // Update the ref for the next render
+    prevOtherUserIsOnline.current = otherUser.isOnline;
+  }, [otherUser, firestore, chatId, authUser]);
+  
    useEffect(() => {
     // Scroll to bottom when messages change
     if (viewportRef.current) {
@@ -552,7 +589,7 @@ export default function ChatIdPage({
         </main>
 
       {/* Message Input */}
-      <footer className="shrink-0 border-t bg-muted/40">
+      <footer className="shrink-0 border-t bg-muted/40 p-2">
         {replyToMessage && (
           <div className="flex items-center justify-between bg-muted p-2">
             <div className="flex items-center gap-2 overflow-hidden">
@@ -579,7 +616,7 @@ export default function ChatIdPage({
             </Button>
           </div>
         )}
-        <div className="flex items-center p-2">
+        <div className="flex items-center">
           <Button variant="ghost" size="icon" className="absolute bottom-3 left-3">
             <Smile className="h-5 w-5" />
             <span className="sr-only">Emoji</span>
