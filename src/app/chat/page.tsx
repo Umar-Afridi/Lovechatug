@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { Search, MessageSquare, Users, UserPlus, Phone } from 'lucide-react';
+import { Search, MessageSquare, Users, UserPlus, Phone, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -251,6 +251,8 @@ export default function ChatPage() {
                 setLoadingChats(false);
             }
         }
+    }, (error) => {
+        console.error("Error setting up combined profile and chat listener:", error);
     });
 
     return () => { 
@@ -391,6 +393,12 @@ export default function ChatPage() {
             </h1>
             <div className="flex items-center gap-2">
                  <ThemeToggle />
+                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
+                    <Link href="/settings">
+                        <Settings className="h-5 w-5" />
+                        <span className="sr-only">Settings</span>
+                    </Link>
+                 </Button>
                  <Button variant="ghost" className="relative h-10 w-10 rounded-full" asChild>
                     <Link href="/profile">
                       <Avatar className="h-10 w-10">
