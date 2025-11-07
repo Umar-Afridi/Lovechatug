@@ -9,7 +9,7 @@ export type UserProfile = {
   isOnline?: boolean;
   lastSeen?: any;
   blockedUsers?: string[];
-  chatIds?: string[]; // New field to store user's chat IDs
+  chatIds: string[]; // New field to store user's chat IDs
 }
 
 export type Message = {
