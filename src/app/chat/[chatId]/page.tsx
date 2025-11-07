@@ -266,10 +266,10 @@ export default function ChatIdPage({
     setLoading(true);
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
     const chatClearedTimestamp = currentUser?.chatsCleared?.[chatId] ?? null;
-
+    
     let q = query(messagesRef, orderBy('timestamp', 'asc'));
-    if (chatClearedTimestamp) {
-        q = query(q, where('timestamp', '>', Timestamp.fromDate(new Date(chatClearedTimestamp))));
+    if (chatClearedTimestamp && chatClearedTimestamp.toDate) {
+        q = query(q, where('timestamp', '>', Timestamp.fromDate(chatClearedTimestamp.toDate())));
     }
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -388,108 +388,109 @@ export default function ChatIdPage({
       const seconds = Math.floor(durationInSeconds % 60);
       return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
-
-  const sendAudioMessage = useCallback(async (audioBlob: Blob) => {
-      if (!firestore || !chatId || !authUser || !otherUser || audioBlob.size === 0) return;
   
-      const localMessageId = `local_${Date.now()}`;
-      const isOtherUserOnline = otherUser?.isOnline ?? false;
-  
-      // 1. Optimistic UI Update: Add a temporary message
-      const optimisticMessage: MessageType = {
-          id: localMessageId,
-          senderId: authUser.uid,
-          content: 'Voice message',
-          timestamp: Timestamp.now(),
-          type: 'audio',
-          mediaUrl: URL.createObjectURL(audioBlob), // Use local blob URL for immediate playback
-          status: 'sent',
-      };
-      setMessages(prev => [...prev, optimisticMessage]);
-
-      const storage = getStorage();
-      const audioFileRef = storageRef(storage, `chats/${chatId}/${Date.now()}.webm`);
-
-      try {
-          // 2. Upload the file
-          const snapshot = await uploadBytes(audioFileRef, audioBlob);
-          const downloadURL = await getDownloadURL(snapshot.ref);
-
-          // 3. Add the real message to Firestore
-          const messagesRef = collection(firestore, 'chats', chatId, 'messages');
-          const newAudioMessage = {
-              senderId: authUser.uid,
-              content: 'Voice message',
-              timestamp: serverTimestamp(),
-              type: 'audio' as const,
-              mediaUrl: downloadURL,
-              status: isOtherUserOnline ? 'delivered' : 'sent',
-          };
-          
-          const docRef = await addDoc(messagesRef, newAudioMessage);
-
-          // 4. Update the local message with the final URL and remove the uploading flag
-          setMessages(prev => prev.map(msg => 
-              msg.id === localMessageId 
-              ? { ...msg, id: docRef.id, mediaUrl: downloadURL, timestamp: new Date() } // Use temp timestamp
-              : msg
-          ));
-          
-          // 5. Update last message and unread count
-          const chatRef = doc(firestore, 'chats', chatId);
-          const lastMessageData = {
-              content: '🎤 Voice message',
-              timestamp: serverTimestamp(),
-              senderId: authUser.uid
-          };
-          
-          const unreadCountUpdate: { [key: string]: any } = { lastMessage: lastMessageData };
-          unreadCountUpdate[`unreadCount.${otherUser.uid}`] = increment(1);
-          await updateDoc(chatRef, unreadCountUpdate);
-
-      } catch (error) {
-          console.error("Error sending audio message:", error);
-          // Mark the optimistic message as failed
-          setMessages(prev => prev.map(msg => 
-              msg.id === localMessageId 
-              ? { ...msg, uploadFailed: true }
-              : msg
-          ));
-          toast({ title: 'Error', description: 'Could not send voice message.', variant: 'destructive' });
-      }
-  }, [firestore, chatId, authUser, otherUser, toast]);
-
-  const startRecording = useCallback(async () => {
-    if (isRecording) return;
+    const sendAudioMessage = useCallback(async (audioBlob: Blob) => {
+        if (!firestore || !chatId || !authUser || !otherUser || audioBlob.size === 0) return;
     
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-        
-        recorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-                audioChunksRef.current.push(event.data);
-            }
+        const localMessageId = `local_${Date.now()}`;
+        const isOtherUserOnline = otherUser?.isOnline ?? false;
+    
+        // 1. Optimistic UI Update: Add a temporary message
+        const optimisticMessage: MessageType = {
+            id: localMessageId,
+            senderId: authUser.uid,
+            content: 'Voice message',
+            timestamp: Timestamp.now(),
+            type: 'audio',
+            mediaUrl: URL.createObjectURL(audioBlob), // Use local blob URL for immediate playback
+            status: 'sent',
+            isUploading: false,
         };
+        setMessages(prev => [...prev, optimisticMessage]);
+
+        const storage = getStorage();
+        const audioFileRef = storageRef(storage, `chats/${chatId}/${Date.now()}.webm`);
+
+        try {
+            // 2. Upload the file
+            const snapshot = await uploadBytes(audioFileRef, audioBlob);
+            const downloadURL = await getDownloadURL(snapshot.ref);
+
+            // 3. Add the real message to Firestore
+            const messagesRef = collection(firestore, 'chats', chatId, 'messages');
+            const newAudioMessage = {
+                senderId: authUser.uid,
+                content: 'Voice message',
+                timestamp: serverTimestamp(),
+                type: 'audio' as const,
+                mediaUrl: downloadURL,
+                status: isOtherUserOnline ? 'delivered' : 'sent',
+            };
+            
+            const docRef = await addDoc(messagesRef, newAudioMessage);
+
+            // 4. Update the local message with the final URL and ID
+            setMessages(prev => prev.map(msg => 
+                msg.id === localMessageId 
+                ? { ...msg, id: docRef.id, mediaUrl: downloadURL, timestamp: new Date() } // Use temp timestamp
+                : msg
+            ));
+            
+            // 5. Update last message and unread count
+            const chatRef = doc(firestore, 'chats', chatId);
+            const lastMessageData = {
+                content: '🎤 Voice message',
+                timestamp: serverTimestamp(),
+                senderId: authUser.uid
+            };
+            
+            const unreadCountUpdate: { [key: string]: any } = { lastMessage: lastMessageData };
+            unreadCountUpdate[`unreadCount.${otherUser.uid}`] = increment(1);
+            await updateDoc(chatRef, unreadCountUpdate);
+
+        } catch (error) {
+            console.error("Error sending audio message:", error);
+            // Mark the optimistic message as failed
+            setMessages(prev => prev.map(msg => 
+                msg.id === localMessageId 
+                ? { ...msg, uploadFailed: true }
+                : msg
+            ));
+            toast({ title: 'Error', description: 'Could not send voice message.', variant: 'destructive' });
+        }
+    }, [firestore, chatId, authUser, otherUser, toast]);
+
+    const startRecording = useCallback(async () => {
+        if (isRecording) return;
         
-        recorder.onstart = () => {
-            audioChunksRef.current = [];
-            setIsRecording(true);
-            setRecordingDuration(0); // Reset duration
-            recordingIntervalRef.current = setInterval(() => {
-                setRecordingDuration(prev => prev + 1);
-            }, 1000);
-        };
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                }
+            };
+            
+            recorder.onstart = () => {
+                audioChunksRef.current = [];
+                setIsRecording(true);
+                setRecordingDuration(0); // Reset duration
+                recordingIntervalRef.current = setInterval(() => {
+                    setRecordingDuration(prev => prev + 1);
+                }, 1000);
+            };
 
-        recorder.start();
-        mediaRecorderRef.current = recorder;
+            recorder.start();
+            mediaRecorderRef.current = recorder;
 
-    } catch (error) {
-        console.error("Error starting recording:", error);
-        toast({ title: "Microphone Access Denied", description: "Please grant microphone access to record audio.", variant: "destructive"});
-    }
-  }, [isRecording, toast]);
-  
+        } catch (error) {
+            console.error("Error starting recording:", error);
+            toast({ title: "Microphone Access Denied", description: "Please grant microphone access to record audio.", variant: "destructive"});
+        }
+    }, [isRecording, toast]);
+
   const stopRecording = useCallback(async (send: boolean) => {
       if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
           return;
