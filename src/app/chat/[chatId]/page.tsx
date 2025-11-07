@@ -118,16 +118,12 @@ export default function ChatIdPage({
 }: {
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
+  const { chatId: otherUserId } = React.use(params);
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const [otherUserId, setOtherUserId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setOtherUserId(params.chatId);
-  }, [params.chatId]);
-
+  
   const [chatId, setChatId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
