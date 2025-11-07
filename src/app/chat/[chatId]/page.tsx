@@ -656,8 +656,12 @@ export default function ChatIdPage({
                 <Button
                     size="icon"
                     className="rounded-full h-12 w-12 shrink-0"
-                    onClick={handleSendMessage}
-                    disabled={inputValue.trim() === '' && !!'This should be based on Mic or Send'}
+                    onClick={() => {
+                        if (inputValue.trim()) {
+                            handleSendMessage();
+                        }
+                        // Else: handle voice message recording in the future
+                    }}
                 >
                     {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
                     <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
