@@ -404,7 +404,7 @@ export default function ChatIdPage({
             type: 'audio',
             mediaUrl: URL.createObjectURL(audioBlob), // Use local blob URL for immediate playback
             status: 'sent',
-            isUploading: false,
+            isUploading: false, // We'll handle feedback differently if upload fails
         };
         setMessages(prev => [...prev, optimisticMessage]);
 
@@ -418,7 +418,7 @@ export default function ChatIdPage({
 
             // 3. Add the real message to Firestore
             const messagesRef = collection(firestore, 'chats', chatId, 'messages');
-            const newAudioMessage = {
+            const newAudioMessageData = {
                 senderId: authUser.uid,
                 content: 'Voice message',
                 timestamp: serverTimestamp(),
@@ -427,12 +427,12 @@ export default function ChatIdPage({
                 status: isOtherUserOnline ? 'delivered' : 'sent',
             };
             
-            const docRef = await addDoc(messagesRef, newAudioMessage);
+            const docRef = await addDoc(messagesRef, newAudioMessageData);
 
-            // 4. Update the local message with the final URL and ID
+            // 4. Update the local message with the final ID and mark as not uploading
             setMessages(prev => prev.map(msg => 
                 msg.id === localMessageId 
-                ? { ...msg, id: docRef.id, mediaUrl: downloadURL, timestamp: new Date(), isUploading: false } // Final state
+                ? { ...msg, id: docRef.id, isUploading: false, mediaUrl: downloadURL } // Use permanent URL now
                 : msg
             ));
             
