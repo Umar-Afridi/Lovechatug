@@ -435,50 +435,6 @@ export default function ChatIdPage({
         }
     }, [isRecording, toast]);
     
-    const stopRecording = useCallback(async (send: boolean) => {
-        if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
-            return;
-        }
-
-        return new Promise<void>((resolve) => {
-            mediaRecorderRef.current!.onstop = async () => {
-                const tracks = mediaRecorderRef.current?.stream.getTracks() ?? [];
-                tracks.forEach(track => track.stop());
-
-                if (send) {
-                    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                     if (audioBlob.size > 100) { 
-                        await sendAudioMessage(audioBlob);
-                    }
-                }
-                
-                // Reset all states
-                audioChunksRef.current = [];
-                setIsRecording(false);
-                setIsRecordingLocked(false);
-                setShowRecordingUI(false);
-                setShowLockIndicator(false);
-                setRecordingStartTime(null);
-                setRecordingDuration(0);
-                if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
-                if (recordingPressTimerRef.current) clearTimeout(recordingPressTimerRef.current);
-                isPressingMic.current = false;
-                resolve();
-            };
-            
-            if (mediaRecorderRef.current?.state === 'recording') {
-                mediaRecorderRef.current.stop();
-            } else {
-                 // Clean up state even if recorder wasn't active, just in case
-                setIsRecording(false);
-                setIsRecordingLocked(false);
-                setShowRecordingUI(false);
-                setShowLockIndicator(false);
-                resolve();
-            }
-        });
-    }, [sendAudioMessage]);
-
     const sendAudioMessage = useCallback(async (audioBlob: Blob) => {
         if (!firestore || !chatId || !authUser || !otherUser || audioBlob.size === 0) return;
     
@@ -549,6 +505,50 @@ export default function ChatIdPage({
             toast({ title: 'Error', description: 'Could not send voice message.', variant: 'destructive' });
         }
     }, [firestore, chatId, authUser, otherUser, toast]);
+
+    const stopRecording = useCallback(async (send: boolean) => {
+        if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+            return;
+        }
+
+        return new Promise<void>((resolve) => {
+            mediaRecorderRef.current!.onstop = async () => {
+                const tracks = mediaRecorderRef.current?.stream.getTracks() ?? [];
+                tracks.forEach(track => track.stop());
+
+                if (send) {
+                    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                     if (audioBlob.size > 100) { 
+                        await sendAudioMessage(audioBlob);
+                    }
+                }
+                
+                // Reset all states
+                audioChunksRef.current = [];
+                setIsRecording(false);
+                setIsRecordingLocked(false);
+                setShowRecordingUI(false);
+                setShowLockIndicator(false);
+                setRecordingStartTime(null);
+                setRecordingDuration(0);
+                if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+                if (recordingPressTimerRef.current) clearTimeout(recordingPressTimerRef.current);
+                isPressingMic.current = false;
+                resolve();
+            };
+            
+            if (mediaRecorderRef.current?.state === 'recording') {
+                mediaRecorderRef.current.stop();
+            } else {
+                 // Clean up state even if recorder wasn't active, just in case
+                setIsRecording(false);
+                setIsRecordingLocked(false);
+                setShowRecordingUI(false);
+                setShowLockIndicator(false);
+                resolve();
+            }
+        });
+    }, [sendAudioMessage]);
     
     // Timer update effect
     useEffect(() => {
