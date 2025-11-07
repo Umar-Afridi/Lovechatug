@@ -151,6 +151,46 @@
         }
       },
       "required": ["senderId", "content", "timestamp", "type", "status"]
+    },
+     "Call": {
+      "title": "Call Record",
+      "description": "Represents a record of a voice or video call.",
+      "type": "object",
+      "properties": {
+        "callerId": {
+          "type": "string",
+          "description": "The UID of the user who initiated the call."
+        },
+        "receiverId": {
+          "type": "string",
+          "description": "The UID of the user who received the call."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["audio", "video"],
+          "description": "The type of the call."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["answered", "missed", "declined", "outgoing"],
+          "description": "The status of the call from the perspective of one user."
+        },
+        "direction": {
+           "type": "string",
+           "enum": ["incoming", "outgoing"],
+           "description": "The direction of the call for the user viewing the history."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the call was initiated."
+        },
+        "duration": {
+            "type": "number",
+            "description": "Duration of the call in seconds (if answered)."
+        }
+      },
+      "required": ["callerId", "receiverId", "type", "status", "timestamp", "direction"]
     }
   },
   "auth": {
@@ -180,6 +220,12 @@
         "$ref": "#/entities/Message"
       },
       "description": "Sub-collection for messages within a specific chat."
+    },
+    "/calls/{callId}": {
+        "schema": {
+            "$ref": "#/entities/Call"
+        },
+        "description": "Stores all call records between users."
     }
   }
 }

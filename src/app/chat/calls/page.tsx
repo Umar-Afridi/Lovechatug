@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Phone,
   Video,
@@ -31,62 +31,172 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import { useUser } from '@/firebase/auth/use-user';
+import { useFirestore } from '@/firebase/provider';
+import { collection, query, where, onSnapshot, doc, getDocs, writeBatch, orderBy } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+import type { UserProfile, Call } from '@/lib/types';
+import { formatDistanceToNow } from 'date-fns';
 
-// Mock data - replace with actual data from Firebase
-const mockCalls = [
-  {
-    id: '1',
-    name: 'Imran Khan',
-    avatar: 'https://placehold.co/100x100/E2E8F0/4A5568?text=IK',
-    type: 'video' as const,
-    direction: 'incoming' as const,
-    status: 'answered' as const,
-    time: 'Yesterday, 10:30 PM',
-  },
-  {
-    id: '2',
-    name: 'Nawaz Sharif',
-    avatar: 'https://placehold.co/100x100/E2E8F0/4A5568?text=NS',
-    type: 'audio' as const,
-    direction: 'outgoing' as const,
-    status: 'answered' as const,
-    time: 'Yesterday, 9:15 PM',
-  },
-  {
-    id: '3',
-    name: 'Asif Zardari',
-    avatar: 'https://placehold.co/100x100/E2E8F0/4A5568?text=AZ',
-    type: 'audio' as const,
-    direction: 'incoming' as const,
-    status: 'missed' as const,
-    time: '2 days ago',
-  },
-];
 
+interface CallWithUser extends Call {
+  otherUser?: UserProfile;
+}
+
+const CallItem = ({ call }: { call: CallWithUser }) => {
+  const { user } = useUser();
+  if (!user || !call.otherUser) return null;
+
+  const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
+
+  const CallStatusIcon = ({ direction, status }: { direction: string, status: string }) => {
+    const className = status === 'missed' ? 'text-destructive' : 'text-muted-foreground';
+    if (direction === 'incoming') {
+      return <PhoneIncoming className={className + " h-4 w-4"} />
+    }
+    return <PhoneOutgoing className={className + " h-4 w-4"} />
+  }
+  
+  const formatTimestamp = (timestamp: any) => {
+    if (!timestamp) return '';
+    try {
+        const date = timestamp.toDate();
+        return formatDistanceToNow(date, { addSuffix: true });
+    } catch (e) {
+        return '';
+    }
+  }
+
+  return (
+     <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+            <Avatar className="h-10 w-10">
+                <AvatarImage src={call.otherUser?.photoURL} />
+                <AvatarFallback>{getInitials(call.otherUser?.displayName)}</AvatarFallback>
+            </Avatar>
+            <div>
+                <p className={`font-semibold ${call.status === 'missed' ? 'text-destructive' : ''}`}>
+                    {call.otherUser?.displayName}
+                </p>
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    <CallStatusIcon direction={call.direction} status={call.status} />
+                    {formatTimestamp(call.timestamp)}
+                </p>
+            </div>
+        </div>
+        <Button variant="ghost" size="icon">
+            {call.type === 'video' ? <Video className="h-5 w-5 text-primary" /> : <Phone className="h-5 w-5 text-primary" />}
+        </Button>
+    </div>
+  )
+}
 
 export default function CallsPage() {
-  const [calls, setCalls] = useState(mockCalls);
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const [calls, setCalls] = useState<CallWithUser[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isClearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const handleClearAll = () => {
-    setCalls([]);
-    setClearAllDialogOpen(false);
-    toast({
-      title: 'Call History Cleared',
-      description: 'All your call records have been deleted.',
+  const callsQuery = useMemo(() => {
+    if (!user || !firestore) return null;
+    return query(
+        collection(firestore, 'calls'),
+        where('participants', 'array-contains', user.uid),
+        orderBy('timestamp', 'desc')
+    );
+  }, [user, firestore]);
+  
+  useEffect(() => {
+    if (!callsQuery || !firestore || !user) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    const unsubscribe = onSnapshot(callsQuery, async (querySnapshot) => {
+        if (querySnapshot.empty) {
+            setCalls([]);
+            setLoading(false);
+            return;
+        }
+
+        const callsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Call));
+
+        const otherUserIds = [
+            ...new Set(callsData.flatMap(call => [call.callerId, call.receiverId]))
+        ].filter(uid => uid !== user.uid);
+        
+        const userProfiles = new Map<string, UserProfile>();
+        if (otherUserIds.length > 0) {
+            const usersRef = collection(firestore, 'users');
+            const usersQuery = query(usersRef, where('uid', 'in', otherUserIds));
+            try {
+                const usersSnapshot = await getDocs(usersQuery);
+                usersSnapshot.docs.forEach(doc => {
+                    userProfiles.set(doc.data().uid, doc.data() as UserProfile);
+                });
+            } catch (e) {
+                 const permissionError = new FirestorePermissionError({ path: usersRef.path, operation: 'list' });
+                 errorEmitter.emit('permission-error', permissionError);
+            }
+        }
+
+        const populatedCalls = callsData.map(call => {
+            const otherUserId = call.callerId === user.uid ? call.receiverId : call.callerId;
+            return {
+                ...call,
+                otherUser: userProfiles.get(otherUserId),
+                 // Determine direction for the current user
+                direction: call.callerId === user.uid ? 'outgoing' : 'incoming',
+            };
+        }).filter(call => call.otherUser); // Filter out calls where other user data could not be fetched
+        
+        setCalls(populatedCalls as CallWithUser[]);
+        setLoading(false);
+
+    }, (serverError: any) => {
+        const permissionError = new FirestorePermissionError({ path: 'calls', operation: 'list' });
+        errorEmitter.emit('permission-error', permissionError);
+        setLoading(false);
     });
+
+    return () => unsubscribe();
+  }, [callsQuery, firestore, user]);
+
+
+  const handleClearAll = async () => {
+    if (!firestore || !user || calls.length === 0) return;
+
+    const batch = writeBatch(firestore);
+    calls.forEach(call => {
+        const callRef = doc(firestore, 'calls', call.id);
+        batch.delete(callRef);
+    });
+
+    try {
+        await batch.commit();
+        toast({
+          title: 'Call History Cleared',
+          description: 'All your call records have been deleted.',
+        });
+    } catch(error) {
+        console.error("Error clearing call history: ", error);
+        const permissionError = new FirestorePermissionError({ path: 'calls', operation: 'delete' });
+        errorEmitter.emit('permission-error', permissionError);
+        toast({
+            title: 'Error',
+            description: 'Could not clear call history.',
+            variant: 'destructive',
+        });
+    } finally {
+        setClearAllDialogOpen(false);
+    }
   };
   
-  const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
-
-  const CallStatusIcon = ({ direction, status } : {direction: string, status: string}) => {
-    const className = status === 'missed' ? 'text-destructive' : 'text-muted-foreground';
-    if (direction === 'incoming') {
-        return <PhoneIncoming className={className + " h-4 w-4"}/>
-    }
-    return <PhoneOutgoing className={className + " h-4 w-4"}/>
-  }
 
   return (
     <>
@@ -128,30 +238,15 @@ export default function CallsPage() {
 
         {/* Content */}
         <ScrollArea className="flex-1">
-          {calls.length > 0 ? (
-            <div className="p-4 space-y-4">
+          {loading ? (
+             <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                <p>Loading call history...</p>
+            </div>
+          ) : calls.length > 0 ? (
+            <div className="p-4 space-y-2">
                 {calls.map((call, index) => (
                     <React.Fragment key={call.id}>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <Avatar className="h-10 w-10">
-                                    <AvatarImage src={call.avatar} />
-                                    <AvatarFallback>{getInitials(call.name)}</AvatarFallback>
-                                </Avatar>
-                                <div>
-                                    <p className={`font-semibold ${call.status === 'missed' ? 'text-destructive' : ''}`}>
-                                        {call.name}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground flex items-center gap-1">
-                                        <CallStatusIcon direction={call.direction} status={call.status} />
-                                        {call.time}
-                                    </p>
-                                </div>
-                            </div>
-                            <Button variant="ghost" size="icon">
-                                {call.type === 'video' ? <Video className="h-5 w-5 text-primary" /> : <Phone className="h-5 w-5 text-primary" />}
-                            </Button>
-                        </div>
+                        <CallItem call={call} />
                         {index < calls.length - 1 && <Separator />}
                     </React.Fragment>
                 ))}

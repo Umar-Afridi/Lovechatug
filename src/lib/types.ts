@@ -69,14 +69,13 @@ export type FriendRequest = {
 }
 
 export type Call = {
-    id: string;
-    caller: string; // user id
-    receiver: string; // user id
-    type: 'audio' | 'video';
-    status: 'missed' | 'answered' | 'declined';
-    timestamp: string;
-}
-
-    
-
-    
+  id: string;
+  callerId: string;
+  receiverId: string;
+  participants: string[]; // [callerId, receiverId]
+  type: 'audio' | 'video';
+  status: 'answered' | 'missed' | 'declined' | 'outgoing';
+  direction: 'incoming' | 'outgoing';
+  timestamp: any; // Firestore ServerTimestamp
+  duration?: number; // in seconds
+};
