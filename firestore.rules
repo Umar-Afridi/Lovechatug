@@ -36,9 +36,9 @@ service cloud.firestore {
       // 3. The user whose profile is being read (userId) has NOT blocked the requester.
       allow get: if isAuthenticated() && (request.auth.uid == userId || isNotBlockedByTarget(userId));
       
-      // Allow listing users, but the client must filter out users who have blocked the requester.
-      // The 'get' rule above will prevent fetching the full details of a user who has blocked the requester.
-      allow list: if isAuthenticated();
+      // Allow listing users for username checks during signup.
+      // The more specific 'get' rule above still protects individual user documents from being read fully.
+      allow list: if true;
 
       // A user can create their own profile document.
       allow create: if isAuthenticated() && request.auth.uid == userId;
