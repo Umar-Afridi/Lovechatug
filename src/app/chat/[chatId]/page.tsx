@@ -36,9 +36,7 @@ import {
   Settings,
   X,
   Reply,
-  Lock,
   Trash2,
-  ArrowUp,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
@@ -163,7 +161,6 @@ export default function ChatIdPage({
   // Voice message states
   const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [isRecordingLocked, setIsRecordingLocked] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -172,10 +169,7 @@ export default function ChatIdPage({
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const micButtonRef = useRef<HTMLButtonElement>(null);
   
-  const touchStartY = useRef(0);
-  const touchMoveY = useRef(0);
   const touchStartX = useRef(0);
   const touchMoveX = useRef(0);
 
@@ -470,18 +464,10 @@ export default function ChatIdPage({
         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
 
         setIsRecording(false);
-        setIsRecordingLocked(false);
         setRecordingStartTime(null);
         setRecordingDuration(0);
     }, [chatId, authUser, otherUser, firestore]);
 
-    const handleLockRecording = () => {
-        setIsRecordingLocked(true);
-    };
-
-    const handleCancelRecording = () => {
-        stopRecording(false);
-    };
 
     const sendAudioMessage = async (audioBlob: Blob) => {
         if (!firestore || !chatId || !authUser || !otherUser || audioBlob.size === 0) return;
@@ -528,33 +514,15 @@ export default function ChatIdPage({
         if(inputValue.trim()) return;
         recordingPressTimerRef.current = setTimeout(() => {
             startRecording();
-        }, 250); // Start recording after 250ms press
+        }, 200); // Start recording after 200ms press
     };
 
     const handleMicButtonRelease = () => {
         if (recordingPressTimerRef.current) {
             clearTimeout(recordingPressTimerRef.current);
         }
-        if (isRecording && !isRecordingLocked) {
+        if (isRecording) {
             stopRecording(true);
-        }
-    };
-    
-    const handleTouchMove = (e: React.TouchEvent<HTMLButtonElement>) => {
-        if (!isRecording || isRecordingLocked) return;
-
-        const touch = e.touches[0];
-        const micButton = micButtonRef.current?.getBoundingClientRect();
-        if (!micButton) return;
-
-        // Swipe Up to Lock
-        if (touch.clientY < micButton.top - 20) {
-            handleLockRecording();
-        }
-
-        // Swipe Left to Cancel
-        if (touch.clientX < micButton.left - 50) {
-            stopRecording(false);
         }
     };
 
@@ -822,41 +790,15 @@ export default function ChatIdPage({
         {/* Message Input */}
         <footer className="shrink-0 border-t bg-muted/40 p-4">
             {isRecording ? (
-                 <div className="relative flex items-center justify-between gap-2">
-                    {isRecordingLocked ? (
-                        <>
-                            <Button variant="destructive" size="icon" onClick={handleCancelRecording}>
-                                <Trash2 className="h-5 w-5" />
-                            </Button>
-                            <div className="flex items-center gap-2 text-destructive font-mono">
-                                <span className="relative flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                                </span>
-                                <span>{formatRecordingTime(recordingDuration)}</span>
-                            </div>
-                            <Button size="icon" className="rounded-full h-12 w-12" onClick={() => stopRecording(true)}>
-                                <Send className="h-6 w-6" />
-                            </Button>
-                        </>
-                    ) : (
-                         <>
-                            <div className="text-muted-foreground text-sm animate-pulse flex-1">
-                                &larr; Slide to cancel
-                            </div>
-                            <div className="flex flex-col items-center text-muted-foreground animate-pulse flex-1">
-                                <ArrowUp className="h-5 w-5" />
-                                <Lock className="h-5 w-5" />
-                            </div>
-                             <div className="flex items-center gap-2 text-destructive font-mono flex-1 justify-end">
-                                <span className="relative flex h-3 w-3">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                                </span>
-                                <span>{formatRecordingTime(recordingDuration)}</span>
-                            </div>
-                        </>
-                    )}
+                 <div className="flex items-center gap-4">
+                     <Trash2 className="h-6 w-6 text-destructive" />
+                     <div className="flex items-center gap-2 text-destructive font-mono bg-destructive/10 rounded-full px-3 py-1">
+                         <span className="relative flex h-3 w-3">
+                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                         <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                         </span>
+                         <span>{formatRecordingTime(recordingDuration)}</span>
+                     </div>
                  </div>
             ) : (
                 <div className="relative">
@@ -906,13 +848,12 @@ export default function ChatIdPage({
                                 target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
                                 }}
                             />
-                            <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 shrink-0">
+                             <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 shrink-0">
                                 <Paperclip className="h-6 w-6" />
                                 <span className="sr-only">Attach file</span>
                             </Button>
                         </div>
                          <Button
-                            ref={micButtonRef}
                             size="icon"
                             className="rounded-full h-12 w-12 shrink-0"
                             onClick={() => {
@@ -924,7 +865,6 @@ export default function ChatIdPage({
                             onMouseUp={handleMicButtonRelease}
                             onTouchStart={handleMicButtonPress}
                             onTouchEnd={handleMicButtonRelease}
-                            onTouchMove={handleTouchMove}
                         >
                             {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
                             <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
