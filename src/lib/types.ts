@@ -37,6 +37,10 @@ export type Chat = {
         photoURL: string;
     }
   }
+  // New field for unread counts
+  unreadCount?: {
+    [key: string]: number; // key is userId, value is count
+  }
 };
 
 export type Group = {
@@ -62,5 +66,3 @@ export type Call = {
     status: 'missed' | 'answered' | 'declined';
     timestamp: string;
 }
-
-    

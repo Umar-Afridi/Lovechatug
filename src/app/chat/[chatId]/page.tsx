@@ -17,6 +17,7 @@ import {
   updateDoc,
   setDoc,
   arrayUnion,
+  increment,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -77,6 +78,11 @@ async function getOrCreateChat(
                     displayName: otherUser.displayName,
                     photoURL: otherUser.photoURL,
                 }
+            },
+            // Initialize unread counts
+            unreadCount: {
+                [currentUser.uid]: 0,
+                [otherUser.uid]: 0,
             }
         };
         batch.set(chatRef, chatData);
@@ -207,7 +213,6 @@ export default function ChatIdPage({
       }
     });
 
-
     return () => unsubscribeUser();
 
   }, [firestore, authUser, otherUserId, router, toast]);
@@ -235,7 +240,7 @@ export default function ChatIdPage({
     return () => unsubscribe();
   }, [firestore, chatId]);
 
-  // Mark messages as read
+  // Mark messages as read and reset unread count
   useEffect(() => {
     if (!firestore || !chatId || !authUser) return;
     
@@ -261,6 +266,17 @@ export default function ChatIdPage({
             errorEmitter.emit('permission-error', permissionError);
         });
     }
+
+    // Reset this user's unread count in the chat document
+    const chatRef = doc(firestore, 'chats', chatId);
+    const unreadCountReset: { [key: string]: any } = {};
+    unreadCountReset[`unreadCount.${authUser.uid}`] = 0;
+    
+    updateDoc(chatRef, unreadCountReset).catch(serverError => {
+        // This might fail if the user is offline, but it's not critical
+        console.warn("Could not reset unread count:", serverError);
+    });
+
   }, [messages, firestore, chatId, authUser]);
   
    useEffect(() => {
@@ -283,7 +299,7 @@ export default function ChatIdPage({
   };
 
   const handleSendMessage = () => {
-    if (inputValue.trim() === '' || !firestore || !authUser || !chatId) return;
+    if (inputValue.trim() === '' || !firestore || !authUser || !chatId || !otherUser) return;
 
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
     const chatRef = doc(firestore, 'chats', chatId);
@@ -316,7 +332,14 @@ export default function ChatIdPage({
         errorEmitter.emit('permission-error', permissionError);
     });
     
-    updateDoc(chatRef, { lastMessage: lastMessageData }).catch((serverError) => {
+    // Increment unread count for the other user
+    const unreadCountUpdate: { [key: string]: any } = {
+        lastMessage: lastMessageData
+    };
+    unreadCountUpdate[`unreadCount.${otherUser.uid}`] = increment(1);
+
+
+    updateDoc(chatRef, unreadCountUpdate).catch((serverError) => {
         const permissionError = new FirestorePermissionError({
             path: chatRef.path,
             operation: 'update',
