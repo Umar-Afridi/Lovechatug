@@ -18,6 +18,7 @@ import {
   setDoc,
   arrayUnion,
   increment,
+  limit,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -199,9 +200,8 @@ export default function ChatIdPage({
             const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' });
             errorEmitter.emit('permission-error', permissionError);
             toast({ title: 'Error', description: 'Could not initialize chat.', variant: 'destructive' });
-        } finally {
-            setLoading(false);
         }
+        // Note: We don't set loading to false here, because the message listener will do it.
     };
     
     fetchProfilesAndSetupChat();
@@ -221,20 +221,23 @@ export default function ChatIdPage({
   useEffect(() => {
     if (!firestore || !chatId) return;
 
+    setLoading(true); // Start loading when we begin fetching messages
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'));
+    const q = query(messagesRef, orderBy('timestamp', 'asc'), limit(50));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const msgs = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as MessageType)
       );
       setMessages(msgs);
+      setLoading(false); // Stop loading once messages are fetched
     }, (serverError) => {
         const permissionError = new FirestorePermissionError({
             path: messagesRef.path,
             operation: 'list',
         });
         errorEmitter.emit('permission-error', permissionError);
+        setLoading(false); // Stop loading on error as well
     });
 
     return () => unsubscribe();
