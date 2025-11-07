@@ -87,7 +87,19 @@ export default function ChatSettingsPage({
         });
         router.back();
       }
-    });
+    }).catch(error => {
+      // This can happen if the user is blocked
+      if (error.code === 'permission-denied') {
+        // Still fetch basic info if possible to show who is being managed
+        // For now, just show a generic error and go back
+         toast({
+          title: 'Access Denied',
+          description: "You don't have permission to view this user's details.",
+          variant: 'destructive',
+        });
+        router.back();
+      }
+    })
   }, [firestore, otherUserId, router, toast]);
 
   const handleBlockUser = async () => {
