@@ -600,7 +600,7 @@ export default function ChatIdPage({
         </main>
 
       {/* Message Input */}
-      <footer className="shrink-0 border-t bg-muted/40 p-2">
+       <footer className="shrink-0 border-t bg-muted/40 p-4">
         <div className="relative">
             {replyToMessage && (
             <div className="flex items-center justify-between bg-muted p-2 rounded-t-md">
@@ -628,15 +628,19 @@ export default function ChatIdPage({
                 </Button>
             </div>
             )}
-            <div className="flex items-center p-2">
+            <div className="flex items-center gap-2">
                 <Button variant="ghost" size="icon">
-                    <Smile className="h-5 w-5" />
+                    <Smile className="h-6 w-6" />
                     <span className="sr-only">Emoji</span>
+                </Button>
+                 <Button variant="ghost" size="icon">
+                    <Paperclip className="h-6 w-6" />
+                    <span className="sr-only">Attach file</span>
                 </Button>
                 <Textarea
                     ref={inputRef}
                     placeholder="Type a message..."
-                    className="min-h-[40px] max-h-[120px] resize-none rounded-full border-2 border-input bg-transparent py-2 pl-4 pr-24 shadow-sm focus:border-primary focus:ring-primary"
+                    className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-4 shadow-sm focus:border-primary focus:ring-primary"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleKeyPress}
@@ -644,27 +648,22 @@ export default function ChatIdPage({
                     onInput={(e) => {
                     const target = e.target as HTMLTextAreaElement;
                     target.style.height = 'auto';
-                    target.style.height = `${target.scrollHeight}px`;
+                    target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
                     }}
                 />
-                <div className="flex items-center">
-                    <Button variant="ghost" size="icon">
-                    <Paperclip className="h-5 w-5" />
-                    <span className="sr-only">Attach file</span>
-                    </Button>
-                    <Button variant="ghost" size="icon">
-                    <Mic className="h-5 w-5" />
+                <Button variant="ghost" size="icon">
+                    <Mic className="h-6 w-6" />
                     <span className="sr-only">Record voice message</span>
-                    </Button>
-                    <Button
-                    variant="ghost"
+                </Button>
+                <Button
                     size="icon"
+                    className="rounded-full h-12 w-12"
                     onClick={handleSendMessage}
-                    >
-                    <Send className="h-5 w-5" />
+                    disabled={inputValue.trim() === ''}
+                >
+                    <Send className="h-6 w-6" />
                     <span className="sr-only">Send</span>
-                    </Button>
-                </div>
+                </Button>
             </div>
         </div>
       </footer>
