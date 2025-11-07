@@ -119,7 +119,7 @@ export default function ChatIdPage({
 }: {
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
-  const { chatId: otherUserId } = React.use(params);
+  const { chatId: otherUserIdFromParams } = React.use(params);
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -173,13 +173,13 @@ export default function ChatIdPage({
 
   // Fetch users' profiles and determine chat ID
   useEffect(() => {
-    if (!firestore || !authUser || !otherUserId) return;
+    if (!firestore || !authUser || !otherUserIdFromParams) return;
 
     const fetchProfilesAndSetupChat = async () => {
         setLoading(true);
         try {
             const currentUserDocRef = doc(firestore, 'users', authUser.uid);
-            const otherUserDocRef = doc(firestore, 'users', otherUserId);
+            const otherUserDocRef = doc(firestore, 'users', otherUserIdFromParams);
 
             const [currentUserSnap, otherUserSnap] = await Promise.all([
                 getDoc(currentUserDocRef),
@@ -213,7 +213,7 @@ export default function ChatIdPage({
     fetchProfilesAndSetupChat();
     
     // Real-time listener for other user's profile changes (like online status)
-    const otherUserDocRef = doc(firestore, 'users', otherUserId);
+    const otherUserDocRef = doc(firestore, 'users', otherUserIdFromParams);
     const unsubscribeUser = onSnapshot(otherUserDocRef, 
         (docSnap) => {
           if (docSnap.exists()) {
@@ -232,7 +232,7 @@ export default function ChatIdPage({
 
     return () => unsubscribeUser();
 
-  }, [firestore, authUser, otherUserId, router, toast]);
+  }, [firestore, authUser, otherUserIdFromParams, router, toast]);
 
   // Real-time listener for messages
   useEffect(() => {
@@ -544,7 +544,7 @@ export default function ChatIdPage({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                  <DropdownMenuItem asChild>
-                    <Link href={`/chat/${otherUserId}/settings`}>
+                    <Link href={`/chat/${otherUserIdFromParams}/settings`}>
                       <Settings className="mr-2 h-4 w-4" />
                       <span>More settings</span>
                     </Link>
@@ -585,7 +585,7 @@ export default function ChatIdPage({
                     )}
                     <div className="flex items-end gap-2">
                         <p className="whitespace-pre-wrap flex-shrink">{msg.content}</p>
-                        <div className={`flex items-center gap-1 text-[10px] ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
+                        <div className={`flex items-center gap-1 text-[10px] shrink-0 ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
                             <span>{formatTimestamp(msg.timestamp)}</span>
                             {msg.senderId === authUser?.uid && (
                                 <MessageStatus status={msg.status} />
@@ -628,41 +628,39 @@ export default function ChatIdPage({
                 </Button>
             </div>
             )}
-            <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon">
+            <div className="flex items-end gap-2">
+                <Button variant="ghost" size="icon" className="shrink-0">
                     <Smile className="h-6 w-6" />
                     <span className="sr-only">Emoji</span>
                 </Button>
-                 <Button variant="ghost" size="icon">
-                    <Paperclip className="h-6 w-6" />
-                    <span className="sr-only">Attach file</span>
-                </Button>
-                <Textarea
-                    ref={inputRef}
-                    placeholder="Type a message..."
-                    className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-4 shadow-sm focus:border-primary focus:ring-primary"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={handleKeyPress}
-                    rows={1}
-                    onInput={(e) => {
-                    const target = e.target as HTMLTextAreaElement;
-                    target.style.height = 'auto';
-                    target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-                    }}
-                />
-                <Button variant="ghost" size="icon">
-                    <Mic className="h-6 w-6" />
-                    <span className="sr-only">Record voice message</span>
-                </Button>
+                <div className="relative w-full">
+                    <Textarea
+                        ref={inputRef}
+                        placeholder="Type a message..."
+                        className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 pl-12 pr-4 shadow-sm focus:border-primary focus:ring-primary"
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        onKeyDown={handleKeyPress}
+                        rows={1}
+                        onInput={(e) => {
+                        const target = e.target as HTMLTextAreaElement;
+                        target.style.height = 'auto';
+                        target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+                        }}
+                    />
+                    <Button variant="ghost" size="icon" className="absolute left-2 top-1/2 -translate-y-1/2">
+                        <Paperclip className="h-6 w-6" />
+                        <span className="sr-only">Attach file</span>
+                    </Button>
+                </div>
                 <Button
                     size="icon"
-                    className="rounded-full h-12 w-12"
+                    className="rounded-full h-12 w-12 shrink-0"
                     onClick={handleSendMessage}
-                    disabled={inputValue.trim() === ''}
+                    disabled={inputValue.trim() === '' && !!'This should be based on Mic or Send'}
                 >
-                    <Send className="h-6 w-6" />
-                    <span className="sr-only">Send</span>
+                    {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                    <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
                 </Button>
             </div>
         </div>
