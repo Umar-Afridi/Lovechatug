@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { Search, MessageSquare, Users, UserPlus, Phone, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -170,6 +170,9 @@ export default function ChatPage() {
   const [requestCount, setRequestCount] = useState(0);
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
   const { toast } = useToast();
+
+  const touchStartX = useRef(0);
+  const touchMoveX = useRef(0);
   
   const navigationItems = [
     { name: 'Inbox', icon: MessageSquare, content: 'inbox' },
@@ -178,10 +181,37 @@ export default function ChatPage() {
     { name: 'Requests', icon: UserPlus, content: 'requests', count: requestCount },
     { name: 'Calls', icon: Phone, content: 'calls' },
   ];
+  const tabOrder = navigationItems.map(item => item.content);
+
 
   const handleTabSelect = useCallback((tabContent: string) => {
     setActiveTab(tabContent);
   }, []);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+    touchMoveX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchMoveX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    const swipeThreshold = 50; // Minimum distance for a swipe
+    const movedX = touchMoveX.current - touchStartX.current;
+
+    if (Math.abs(movedX) > swipeThreshold) {
+      const currentIndex = tabOrder.indexOf(activeTab);
+      if (movedX < 0) { // Swiped left
+        const nextIndex = Math.min(currentIndex + 1, tabOrder.length - 1);
+        setActiveTab(tabOrder[nextIndex]);
+      } else { // Swiped right
+        const prevIndex = Math.max(currentIndex - 1, 0);
+        setActiveTab(tabOrder[prevIndex]);
+      }
+    }
+  };
 
   // Fetch user profile
   useEffect(() => {
@@ -518,7 +548,12 @@ export default function ChatPage() {
         </div>
         
         {/* Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div 
+          className="flex-1 flex flex-col overflow-hidden"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
             {renderContent()}
         </div>
 
