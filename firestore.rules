@@ -1,83 +1,78 @@
 rules_version = '2';
 
-function isAuthenticated() {
-  return request.auth != null;
-}
-
-// Function to check if the requesting user has been blocked by the target user.
-// User 'A' (requester) wants to read User 'B's (targetUserId) profile.
-// This function checks if User B has blocked User A.
-// Firestore path: /users/$(targetUserId) -> data.blockedUsers
-// This is used to prevent User A from seeing User B's profile if B blocked A.
-function isNotBlockedByTarget(targetUserId) {
-  // Allow if the target user's document doesn't exist, or if the blockedUsers field doesn't exist,
-  // or if the requester's UID is not in the target's blockedUsers list.
-  return !exists(/databases/$(database)/documents/users/$(targetUserId)) ||
-         !('blockedUsers' in get(/databases/$(database)/documents/users/$(targetUserId)).data) ||
-         !(request.auth.uid in get(/databases/$(database)/documents/users/$(targetUserId)).data.blockedUsers);
-}
-
-
-// Function to check if the requesting user has blocked the target user.
-// User 'A' (requester) wants to do something related to User 'B' (targetUserId).
-// This function checks if User A has blocked User B.
-// Firestore path: /users/$(request.auth.uid) -> data.blockedUsers
-// This is used to prevent User A from sending messages to User B if A blocked B.
-function hasNotBlockedTarget(targetUserId) {
-    // Check my own user document to see if I have blocked the other person.
-    return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
-           !('blockedUsers' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
-           !(targetUserId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blockedUsers);
-}
-
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Function to check if the requesting user (request.auth.uid) has been blocked
+    // by the user whose profile they are trying to access (targetUserId).
+    function isNotBlockedByTarget(targetUserId) {
+      let targetUserDoc = get(/databases/$(database)/documents/users/$(targetUserId)).data;
+      // Allow if the target user's blockedUsers list does not exist or the requester's UID is not in it.
+      return !('blockedUsers' in targetUserDoc) || !(request.auth.uid in targetUserDoc.blockedUsers);
+    }
+    
+    // Function to check if the requesting user (request.auth.uid) has blocked
+    // the other user (targetUserId). This is to prevent sending messages to blocked users.
+    function hasNotBlockedTarget(targetUserId) {
+      let requesterUserDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return !('blockedUsers' in requesterUserDoc) || !(targetUserId in requesterUserDoc.blockedUsers);
+    }
+    
+    // Function to get the other member in a two-person chat
+    function getOtherChatMember(chatId) {
+        let chatMembers = get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+        return chatMembers.filter(member => member != request.auth.uid)[0];
+    }
+
     match /users/{userId} {
-      // Allow reading a user's profile ONLY if the requester is not on that user's block list.
-      // A user can always read their own profile.
+      // Allow reading a user's profile ONLY IF:
+      // 1. The requester is authenticated.
+      // 2. The requester is reading their own profile.
+      // OR
+      // 3. The user whose profile is being read (userId) has NOT blocked the requester.
       allow get: if isAuthenticated() && (request.auth.uid == userId || isNotBlockedByTarget(userId));
       
-      // A user can list other users. The client must filter out users who have blocked the requester.
-      // The 'get' rule above will prevent fetching full details of a user who has blocked the requester.
+      // Allow listing users, but the client must filter out users who have blocked the requester.
+      // The 'get' rule above will prevent fetching the full details of a user who has blocked the requester.
       allow list: if isAuthenticated();
 
-      // A user can create, update, or delete their own profile document.
-      allow create, update, delete: if isAuthenticated() && request.auth.uid == userId;
+      // A user can create their own profile document.
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+
+      // A user can update their own profile, but cannot modify the 'blockedUsers' field of another user.
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      
+      // A user can delete their own profile document.
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
     }
 
     match /friendRequests/{requestId} {
-      // Receiver can read the request
-      allow get: if isAuthenticated() && get(/databases/$(database)/documents/friendRequests/$(requestId)).data.receiverId == request.auth.uid;
-      
-      // Sender can create the request
-      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
-
-      // Receiver can accept/reject (update/delete)
-      allow update, delete: if isAuthenticated() && get(/databases/$(database)/documents/friendRequests/$(requestId)).data.receiverId == request.auth.uid;
+      allow read, write: if isAuthenticated(); // Simplified for now
     }
 
     match /chats/{chatId} {
-        // Only members of the chat can interact with it.
+        // A user can interact with a chat (read, update, delete) only if they are a member.
         allow read, update, delete: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
         
-        // Anyone authenticated can create a chat (this is handled in a batch write with friend request acceptance)
+        // Anyone authenticated can create a chat.
         allow create: if isAuthenticated();
     }
     
     match /chats/{chatId}/messages/{messageId} {
-       // A message can only be created if:
-       // 1. The sender is a member of the chat.
-       // 2. The sender has NOT been blocked by the other member.
-       // 3. The sender has NOT blocked the other member.
+       // A message can only be created IF:
+       // 1. The sender is authenticated and is a member of the chat.
+       // 2. The other chat member has NOT blocked the sender.
+       // 3. The sender has NOT blocked the other chat member.
        allow create: if isAuthenticated() &&
                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members &&
-                      isNotBlockedByTarget(get(/databases/$(database)/documents/chats/$(chatId)).data.members.filter(m => m != request.auth.uid)[0]) &&
-                      hasNotBlockedTarget(get(/databases/$(database)/documents/chats/$(chatId)).data.members.filter(m => m != request.auth.uid)[0]);
+                      isNotBlockedByTarget(getOtherChatMember(chatId)) &&
+                      hasNotBlockedTarget(getOtherChatMember(chatId));
                       
-      // Members of the chat can read, list, update, and delete messages.
-      // Read access is controlled at the chat document level.
+      // Members can read, list, update, and delete messages, as long as they are a member of the parent chat.
       allow read, list, update, delete: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
     }
   }

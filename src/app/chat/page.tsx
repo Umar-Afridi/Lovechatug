@@ -289,9 +289,10 @@ export default function ChatPage() {
   }, [firestore, user]);
 
   const filteredChats = useMemo(() => {
-    const blockedUsers = profile?.blockedUsers ?? [];
+    if (!profile || !user) return [];
+    const blockedUsers = profile.blockedUsers || [];
     return chats.filter(chat => {
-        const otherMemberId = chat.members.find(id => id !== user?.uid);
+        const otherMemberId = chat.members.find(id => id !== user.uid);
         return otherMemberId && !blockedUsers.includes(otherMemberId);
     });
   }, [chats, profile, user]);
