@@ -126,7 +126,7 @@ export default function ChatIdPage({
 }: {
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
-  const { chatId: otherUserIdFromParams } = params;
+  const { chatId: otherUserIdFromParams } = React.use(params);
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -275,17 +275,9 @@ export default function ChatIdPage({
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const msgs = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as MessageType)
-      ).filter(msg => !msg.isUploading); // Filter out temp messages that are now confirmed
+      );
       
-      // Merge with local-only messages (for optimistic UI)
-      setMessages(prev => {
-          const localOnly = prev.filter(m => m.isUploading);
-          const serverMsgs = msgs;
-          // Avoid duplicates
-          const uniqueServerMsgs = serverMsgs.filter(sm => !localOnly.some(lm => lm.id === sm.id));
-          return [...uniqueServerMsgs, ...localOnly];
-      });
-
+      setMessages(msgs);
       setLoading(false);
     }, (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -412,7 +404,6 @@ export default function ChatIdPage({
           type: 'audio',
           mediaUrl: URL.createObjectURL(audioBlob), // Use local blob URL for immediate playback
           status: 'sent',
-          isUploading: true, // Custom flag to know it's a local message
       };
       setMessages(prev => [...prev, optimisticMessage]);
 
@@ -440,7 +431,7 @@ export default function ChatIdPage({
           // 4. Update the local message with the final URL and remove the uploading flag
           setMessages(prev => prev.map(msg => 
               msg.id === localMessageId 
-              ? { ...msg, id: docRef.id, mediaUrl: downloadURL, isUploading: false, timestamp: new Date() } // Use temp timestamp, remove uploading flag
+              ? { ...msg, id: docRef.id, mediaUrl: downloadURL, timestamp: new Date() } // Use temp timestamp
               : msg
           ));
           
@@ -461,7 +452,7 @@ export default function ChatIdPage({
           // Mark the optimistic message as failed
           setMessages(prev => prev.map(msg => 
               msg.id === localMessageId 
-              ? { ...msg, uploadFailed: true, isUploading: false }
+              ? { ...msg, uploadFailed: true }
               : msg
           ));
           toast({ title: 'Error', description: 'Could not send voice message.', variant: 'destructive' });
@@ -853,7 +844,13 @@ export default function ChatIdPage({
                             <span>{formatRecordingTime(recordingDuration)}</span>
                         </div>
                     </div>
-                    <div className="w-[88px]"></div> {/* Placeholder for spacing */}
+                    <Button
+                        size="icon"
+                        className="rounded-full h-12 w-12 shrink-0 bg-primary"
+                        onClick={() => stopRecording(true)}
+                    >
+                        <Send className="h-6 w-6" />
+                    </Button>
                 </div>
             ) : (
                 <div className="relative">
