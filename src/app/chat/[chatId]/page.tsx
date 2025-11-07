@@ -38,6 +38,7 @@ import {
   Reply,
   Lock,
   Trash2,
+  ArrowUp,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
