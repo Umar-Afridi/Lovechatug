@@ -162,6 +162,7 @@ export default function ChatIdPage({
 
   // Voice message states
   const [isRecording, setIsRecording] = useState(false);
+  const [isRecordingLocked, setIsRecordingLocked] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
 
@@ -173,6 +174,9 @@ export default function ChatIdPage({
   
   const touchStartX = useRef(0);
   const touchMoveX = useRef(0);
+  const touchStartY = useRef(0);
+  const touchMoveY = useRef(0);
+  const isDragging = useRef(false);
   
   // Swipe to go back logic for mobile
   useEffect(() => {
@@ -413,7 +417,7 @@ export default function ChatIdPage({
         return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     };
 
-    const startRecording = async () => {
+    const startRecording = useCallback(async () => {
         if (isRecording) return;
         
         try {
@@ -436,11 +440,12 @@ export default function ChatIdPage({
             setIsRecording(false);
             setRecordingStartTime(null);
         }
-    };
+    }, [isRecording, toast]);
     
     const stopRecording = useCallback(async (send: boolean) => {
         if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
             setIsRecording(false);
+            setIsRecordingLocked(false);
             return;
         }
 
@@ -456,6 +461,7 @@ export default function ChatIdPage({
                 mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop());
                 
                 setIsRecording(false);
+                setIsRecordingLocked(false);
                 setRecordingStartTime(null);
                 setRecordingDuration(0);
                 resolve();
@@ -507,18 +513,18 @@ export default function ChatIdPage({
         }
     };
 
-    const handleMicButtonPress = () => {
+    const handleMicButtonPress = useCallback(() => {
         if(inputValue.trim()) return;
         startRecording();
-    };
+    }, [inputValue, startRecording]);
 
-    const handleMicButtonRelease = () => {
-        if (isRecording) {
+    const handleMicButtonRelease = useCallback(() => {
+        if (isRecording && !isRecordingLocked) {
             stopRecording(true);
         }
-    };
+    }, [isRecording, isRecordingLocked, stopRecording]);
 
-  const handleSendMessage = () => {
+    const handleSendMessage = () => {
     if (inputValue.trim() === '' || !firestore || !authUser || !chatId || !otherUser) return;
 
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
@@ -596,6 +602,7 @@ export default function ChatIdPage({
     const handleReplyTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
         touchStartX.current = e.targetTouches[0].clientX;
         touchMoveX.current = e.targetTouches[0].clientX;
+        isDragging.current = false;
     };
 
     const handleReplyTouchMove = (e: React.TouchEvent<HTMLDivElement>, target: HTMLDivElement) => {
@@ -603,6 +610,11 @@ export default function ChatIdPage({
         const currentX = e.targetTouches[0].clientX;
         const diffX = currentX - touchStartX.current;
         touchMoveX.current = currentX;
+
+        // If drag is more than a small threshold, consider it a drag
+        if (Math.abs(diffX) > 10) {
+          isDragging.current = true;
+        }
         
         // Only allow swiping right, and not too far
         if (diffX > 0 && diffX < 100) {
@@ -616,16 +628,17 @@ export default function ChatIdPage({
         const diffX = touchMoveX.current - touchStartX.current;
 
         // Only trigger reply on a significant swipe, not a click
-        if (diffX > 50) { 
+        if (isDragging.current && diffX > 50) { 
             setReplyToMessage(msg);
             inputRef.current?.focus();
         }
 
         // Reset style regardless of whether it triggered a reply
         target.style.transform = 'translateX(0)';
-        // Reset touch points
+        // Reset touch points and dragging state
         touchStartX.current = 0;
         touchMoveX.current = 0;
+        isDragging.current = false;
     };
   
   const MessageStatus = ({ status }: { status: MessageType['status'] }) => {
@@ -785,7 +798,11 @@ export default function ChatIdPage({
         {/* Message Input */}
         <footer className="shrink-0 border-t bg-muted/40 p-4">
             {isRecording ? (
-                <div className="flex items-center gap-4 w-full">
+                isRecordingLocked ? (
+                 <div className="flex items-center gap-4 w-full">
+                    <Button variant="ghost" size="icon" onClick={() => stopRecording(false)}>
+                        <Trash2 className="h-6 w-6 text-destructive" />
+                    </Button>
                     <div className="flex-1 flex items-center justify-center gap-2 text-destructive font-mono bg-destructive/10 rounded-full px-3 py-1">
                         <span className="relative flex h-3 w-3">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
@@ -796,12 +813,30 @@ export default function ChatIdPage({
                      <Button
                         size="icon"
                         className="rounded-full h-12 w-12 shrink-0"
-                        onClick={handleMicButtonRelease}
+                        onClick={() => stopRecording(true)}
                     >
                         <Send className="h-6 w-6" />
-                        <span className="sr-only">Send</span>
                     </Button>
                 </div>
+                ) : (
+                <div className="flex items-center gap-4 w-full">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <Trash2 className="h-5 w-5" />
+                        <span>Slide to cancel</span>
+                    </div>
+                    <div className="flex-1 flex items-center justify-center gap-2 text-destructive font-mono">
+                        <span className="relative flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                        </span>
+                        <span>{formatRecordingTime(recordingDuration)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <ArrowUp className="h-5 w-5" />
+                        <Lock className="h-5 w-5" />
+                    </div>
+                </div>
+                )
             ) : (
                 <div className="relative">
                     {replyToMessage && (
