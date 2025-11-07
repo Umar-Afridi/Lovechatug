@@ -174,8 +174,6 @@ export default function ChatIdPage({
   
   const touchStartX = useRef(0);
   const touchMoveX = useRef(0);
-  const touchStartY = useRef(0);
-  const touchMoveY = useRef(0);
   const isDragging = useRef(false);
   
   // Swipe to go back logic for mobile
@@ -798,45 +796,46 @@ export default function ChatIdPage({
         {/* Message Input */}
         <footer className="shrink-0 border-t bg-muted/40 p-4">
             {isRecording ? (
-                isRecordingLocked ? (
-                 <div className="flex items-center gap-4 w-full">
-                    <Button variant="ghost" size="icon" onClick={() => stopRecording(false)}>
-                        <Trash2 className="h-6 w-6 text-destructive" />
-                    </Button>
-                    <div className="flex-1 flex items-center justify-center gap-2 text-destructive font-mono bg-destructive/10 rounded-full px-3 py-1">
-                        <span className="relative flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                        </span>
-                        <span>{formatRecordingTime(recordingDuration)}</span>
-                    </div>
-                     <Button
-                        size="icon"
-                        className="rounded-full h-12 w-12 shrink-0"
-                        onClick={() => stopRecording(true)}
-                    >
-                        <Send className="h-6 w-6" />
-                    </Button>
-                </div>
-                ) : (
                 <div className="flex items-center gap-4 w-full">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                        <Trash2 className="h-5 w-5" />
-                        <span>Slide to cancel</span>
-                    </div>
-                    <div className="flex-1 flex items-center justify-center gap-2 text-destructive font-mono">
-                        <span className="relative flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                        </span>
-                        <span>{formatRecordingTime(recordingDuration)}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                        <ArrowUp className="h-5 w-5" />
-                        <Lock className="h-5 w-5" />
-                    </div>
+                   {isRecordingLocked ? (
+                    <>
+                        <Button variant="ghost" size="icon" onClick={() => stopRecording(false)}>
+                            <Trash2 className="h-6 w-6 text-destructive" />
+                        </Button>
+                        <div className="flex-1 flex items-center justify-center gap-2 text-destructive font-mono bg-destructive/10 rounded-full px-3 py-1">
+                            <span className="relative flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                            </span>
+                            <span>{formatRecordingTime(recordingDuration)}</span>
+                        </div>
+                         <Button
+                            size="icon"
+                            className="rounded-full h-12 w-12 shrink-0"
+                            onClick={() => stopRecording(true)}
+                        >
+                            <Send className="h-6 w-6" />
+                        </Button>
+                    </>
+                   ) : (
+                    <>
+                        <div className="flex-1 flex items-center justify-center gap-2 text-destructive font-mono">
+                            <span className="relative flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                            </span>
+                            <span>{formatRecordingTime(recordingDuration)}</span>
+                        </div>
+                        <Button
+                            size="icon"
+                            className="rounded-full h-12 w-12 shrink-0"
+                            onClick={handleMicButtonRelease}
+                        >
+                            <Send className="h-6 w-6" />
+                        </Button>
+                    </>
+                   )}
                 </div>
-                )
             ) : (
                 <div className="relative">
                     {replyToMessage && (
