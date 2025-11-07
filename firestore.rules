@@ -75,5 +75,10 @@ service cloud.firestore {
       // Members can read, list, update, and delete messages, as long as they are a member of the parent chat.
       allow read, list, update, delete: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
     }
+    
+    match /calls/{callId} {
+        // Allow read, write, delete on call history only for authenticated users who are participants.
+        allow read, create, delete: if isAuthenticated() && request.auth.uid in resource.data.participants;
+    }
   }
 }
