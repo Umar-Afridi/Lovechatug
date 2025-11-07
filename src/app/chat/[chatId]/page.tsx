@@ -49,7 +49,7 @@ import type { Message as MessageType, UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import Link from 'next/link';
 
@@ -436,10 +436,16 @@ export default function ChatIdPage({
     return <Check className="h-4 w-4 text-muted-foreground" />;
   };
   
+  const formatTimestamp = (timestamp: any) => {
+      if (!timestamp) return '';
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      return format(date, 'p'); // e.g., 12:00 PM
+  };
+
   const formatLastSeen = (timestamp: any) => {
       if (!timestamp) return 'Offline';
       const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-      return `Last seen ${formatDistanceToNow(date, { addSuffix: true })}`;
+      return `Last seen at ${format(date, 'p')}`; // e.g., Last seen at 10:30 PM
   };
   
   if (loading || !otherUser || !authUser) {
@@ -508,12 +514,12 @@ export default function ChatIdPage({
         </header>
 
       {/* Messages Area */}
-      <main className="flex-1 overflow-y-auto" ref={viewportRef}>
-          <div className="p-6 space-y-4">
+       <main className="flex-1 overflow-y-auto" ref={viewportRef}>
+          <div className="p-6 space-y-1">
               {messages.map((msg) => (
                    <div
                       key={msg.id}
-                      className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
+                      className={`flex w-full flex-col gap-1 ${msg.senderId === authUser?.uid ? 'items-end' : 'items-start'}`}
                   >
                       <div 
                           className="relative transition-transform duration-200 ease-out"
@@ -522,7 +528,7 @@ export default function ChatIdPage({
                           onTouchEnd={() => handleTouchEnd(msg)}
                       >
                       <div
-                          className={`max-w-xs rounded-lg px-3 py-2 text-sm lg:max-w-md flex flex-col gap-2 ${
+                          className={`max-w-xs rounded-lg px-3 py-2 text-sm lg:max-w-md flex flex-col gap-1 ${
                               msg.senderId === authUser?.uid
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-muted'
@@ -536,16 +542,17 @@ export default function ChatIdPage({
                                   <p className="text-xs opacity-80 truncate">{msg.replyTo.content}</p>
                               </div>
                           )}
-                          <div className="flex items-end gap-2">
-                              <p className="whitespace-pre-wrap">{msg.content}</p>
-                              {msg.senderId === authUser?.uid && (
-                                  <div className="flex-shrink-0">
-                                      <MessageStatus status={msg.status} />
-                                  </div>
-                              )}
-                          </div>
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
                       </div>
                       </div>
+                       <div className="flex items-center gap-1.5 pr-1">
+                            <span className="text-[10px] text-muted-foreground">
+                                {formatTimestamp(msg.timestamp)}
+                            </span>
+                            {msg.senderId === authUser?.uid && (
+                                <MessageStatus status={msg.status} />
+                            )}
+                        </div>
                   </div>
               ))}
           </div>
