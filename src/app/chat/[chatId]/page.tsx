@@ -516,7 +516,7 @@ export default function ChatIdPage({
             {messages.map((msg) => (
                  <div
                     key={msg.id}
-                    className={`flex flex-col items-end gap-2 ${msg.senderId === authUser?.uid ? 'items-end' : 'items-start'}`}
+                    className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
                 >
                     <div 
                         className="relative transition-transform duration-200 ease-out"
