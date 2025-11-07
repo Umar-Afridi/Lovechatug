@@ -616,8 +616,8 @@ export default function ChatIdPage({
           isDragging.current = true;
         }
         
-        // Only allow swiping right, and not too far
-        if (diffX > 0 && diffX < 100) {
+        // Only allow swiping right-to-left, and not too far
+        if (diffX < 0 && diffX > -100) {
             target.style.transform = `translateX(${diffX}px)`;
         }
     };
@@ -627,8 +627,8 @@ export default function ChatIdPage({
 
         const diffX = touchMoveX.current - touchStartX.current;
 
-        // Only trigger reply on a significant swipe, not a click
-        if (isDragging.current && diffX > 50) { 
+        // Only trigger reply on a significant right-to-left swipe
+        if (isDragging.current && diffX < -50) { 
             setReplyToMessage(msg);
             inputRef.current?.focus();
         }
