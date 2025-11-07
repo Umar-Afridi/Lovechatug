@@ -20,6 +20,11 @@ export type Message = {
   type: 'text' | 'image' | 'audio';
   mediaUrl?: string;
   status: 'sent' | 'delivered' | 'read';
+  replyTo?: {
+    messageId: string;
+    content: string;
+    senderId: string;
+  };
 };
 
 export type Chat = {
