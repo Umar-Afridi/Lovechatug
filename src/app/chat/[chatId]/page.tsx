@@ -448,25 +448,31 @@ export default function ChatIdPage({
             setIsRecording(false);
         }
     };
-
+    
     const stopRecording = useCallback(async (send: boolean) => {
-        if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return;
+        if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+            return;
+        }
 
-        mediaRecorderRef.current.onstop = async () => {
-            if (send && audioChunksRef.current.length > 0) {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                await sendAudioMessage(audioBlob);
-            }
-            audioChunksRef.current = [];
-        };
-
-        mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-
-        setIsRecording(false);
-        setRecordingStartTime(null);
-        setRecordingDuration(0);
+        return new Promise((resolve) => {
+            mediaRecorderRef.current!.onstop = async () => {
+                if (send && audioChunksRef.current.length > 0) {
+                    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                    await sendAudioMessage(audioBlob);
+                }
+                audioChunksRef.current = [];
+                // Stop all tracks on the stream
+                mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop());
+                
+                setIsRecording(false);
+                setRecordingStartTime(null);
+                setRecordingDuration(0);
+                resolve(undefined);
+            };
+            mediaRecorderRef.current!.stop();
+        });
     }, [chatId, authUser, otherUser, firestore]);
+
 
 
     const sendAudioMessage = async (audioBlob: Blob) => {
