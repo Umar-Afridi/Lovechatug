@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   collection,
   query,
@@ -17,7 +18,6 @@ import {
   updateDoc,
   arrayUnion,
   increment,
-  limit,
   where,
   Timestamp,
   getDocs,
@@ -36,6 +36,8 @@ import {
   Settings,
   X,
   Reply,
+  Lock,
+  Trash2,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
@@ -53,6 +55,29 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { format } from 'date-fns';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
+
+// Custom interval hook
+const useInterval = (callback: () => void, delay: number | null) => {
+  const savedCallback = useRef<() => void>();
+
+  useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
+
+  useEffect(() => {
+    function tick() {
+      if (savedCallback.current) {
+        savedCallback.current();
+      }
+    }
+    if (delay !== null) {
+      const id = setInterval(tick, delay);
+      return () => clearInterval(id);
+    }
+  }, [delay]);
+};
+
 
 // Helper to get or create a chat
 async function getOrCreateChat(
@@ -119,7 +144,7 @@ export default function ChatIdPage({
 }: {
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
-  const { chatId: otherUserIdFromParams } = React.use(params);
+  const { chatId: otherUserIdFromParams } = params;
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -134,28 +159,66 @@ export default function ChatIdPage({
   const [inputValue, setInputValue] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<MessageType | null>(null);
 
+  // Voice message states
+  const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isRecordingLocked, setIsRecordingLocked] = useState(false);
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const micButtonRef = useRef<HTMLButtonElement>(null);
   
+  const touchStartY = useRef(0);
+  const touchMoveY = useRef(0);
   const touchStartX = useRef(0);
-  const touchEndX = useRef(0);
-  const swipeTargetRef = useRef<HTMLDivElement | null>(null);
-  const SWIPE_THRESHOLD = 50; // Minimum pixels for a swipe
+  const touchMoveX = useRef(0);
+
+  // Microphone permission
+  useEffect(() => {
+    navigator.permissions.query({ name: 'microphone' as PermissionName }).then((result) => {
+      setHasMicPermission(result.state === 'granted');
+      result.onchange = () => setHasMicPermission(result.state === 'granted');
+    });
+  }, []);
+
+  const getMicPermission = async () => {
+      if (hasMicPermission) return true;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Close the stream immediately, we only wanted the permission
+        stream.getTracks().forEach(track => track.stop());
+        setHasMicPermission(true);
+        return true;
+      } catch (error) {
+        console.error("Error getting mic permission:", error);
+        toast({
+            title: 'Microphone access denied',
+            description: 'Please grant microphone access in your browser settings.',
+            variant: 'destructive'
+        });
+        setHasMicPermission(false);
+        return false;
+      }
+  };
 
 
   // Swipe to go back logic
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
       touchStartX.current = e.targetTouches[0].clientX;
-      touchEndX.current = e.targetTouches[0].clientX; // Reset on new touch
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      touchEndX.current = e.targetTouches[0].clientX;
+      touchMoveX.current = e.targetTouches[0].clientX;
     };
 
     const handleTouchEnd = () => {
-      if (touchStartX.current < 50 && touchEndX.current > touchStartX.current + 100) {
+      if (touchStartX.current < 50 && touchMoveX.current > touchStartX.current + 100) {
         router.back();
       }
     };
@@ -246,7 +309,6 @@ export default function ChatIdPage({
     if (chatClearedTimestamp) {
         q = query(q, where('timestamp', '>', chatClearedTimestamp));
     }
-
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const msgs = querySnapshot.docs.map(
@@ -348,7 +410,6 @@ export default function ChatIdPage({
     }
   }, [messages]);
 
-
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
     return name
@@ -356,6 +417,145 @@ export default function ChatIdPage({
       .map((n) => n[0])
       .join('');
   };
+  
+    useInterval(
+        () => {
+        if (recordingStartTime) {
+            setRecordingDuration(Date.now() - recordingStartTime);
+        }
+        },
+        isRecording ? 1000 : null
+    );
+
+    const formatRecordingTime = (duration: number) => {
+        const seconds = Math.floor((duration / 1000) % 60);
+        const minutes = Math.floor((duration / (1000 * 60)) % 60);
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    };
+
+    const startRecording = async () => {
+        const hasPermission = await getMicPermission();
+        if (!hasPermission) return;
+
+        setIsRecording(true);
+        setRecordingStartTime(Date.now());
+        audioChunksRef.current = [];
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorderRef.current = new MediaRecorder(stream);
+            mediaRecorderRef.current.ondataavailable = (event) => {
+                audioChunksRef.current.push(event.data);
+            };
+            mediaRecorderRef.current.start();
+        } catch (error) {
+            console.error("Error starting recording:", error);
+            setIsRecording(false);
+        }
+    };
+
+    const stopRecording = useCallback(async (send: boolean) => {
+        if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return;
+
+        mediaRecorderRef.current.onstop = async () => {
+            if (send) {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                await sendAudioMessage(audioBlob);
+            }
+            audioChunksRef.current = [];
+        };
+
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+
+        setIsRecording(false);
+        setIsRecordingLocked(false);
+        setRecordingStartTime(null);
+        setRecordingDuration(0);
+    }, [chatId, authUser]);
+
+    const handleLockRecording = () => {
+        setIsRecordingLocked(true);
+    };
+
+    const handleCancelRecording = () => {
+        stopRecording(false);
+    };
+
+    const sendAudioMessage = async (audioBlob: Blob) => {
+        if (!firestore || !chatId || !authUser || !otherUser || audioBlob.size === 0) return;
+    
+        const storage = getStorage();
+        const audioFileRef = storageRef(storage, `chats/${chatId}/${Date.now()}.webm`);
+
+        try {
+            toast({ title: 'Uploading voice message...' });
+            const snapshot = await uploadBytes(audioFileRef, audioBlob);
+            const downloadURL = await getDownloadURL(snapshot.ref);
+
+            const messagesRef = collection(firestore, 'chats', chatId, 'messages');
+            const newAudioMessage = {
+                senderId: authUser.uid,
+                content: '',
+                timestamp: serverTimestamp(),
+                type: 'audio' as const,
+                mediaUrl: downloadURL,
+                status: otherUser.isOnline ? 'delivered' : 'sent',
+            };
+            
+            await addDoc(messagesRef, newAudioMessage);
+
+            const chatRef = doc(firestore, 'chats', chatId);
+            const lastMessageData = {
+                content: 'Voice message',
+                timestamp: serverTimestamp(),
+                senderId: authUser.uid
+            };
+            
+            const unreadCountUpdate: { [key: string]: any } = { lastMessage: lastMessageData };
+            unreadCountUpdate[`unreadCount.${otherUser.uid}`] = increment(1);
+            await updateDoc(chatRef, unreadCountUpdate);
+
+        } catch (error) {
+            console.error("Error sending audio message:", error);
+            toast({ title: 'Error', description: 'Could not send voice message.', variant: 'destructive' });
+        }
+    };
+
+
+    const handleMicButtonPress = () => {
+        recordingPressTimerRef.current = setTimeout(() => {
+            startRecording();
+        }, 250); // Start recording after 250ms press
+    };
+
+    const handleMicButtonRelease = () => {
+        if (recordingPressTimerRef.current) {
+            clearTimeout(recordingPressTimerRef.current);
+        }
+        if (isRecording && !isRecordingLocked) {
+            stopRecording(true);
+        }
+    };
+    
+    const handleTouchMove = (e: React.TouchEvent<HTMLButtonElement>) => {
+        if (!isRecording || isRecordingLocked) return;
+
+        const touch = e.touches[0];
+        const micButton = micButtonRef.current?.getBoundingClientRect();
+        if (!micButton) return;
+
+        // Swipe Up to Lock
+        if (touch.clientY < micButton.top - 20) {
+            handleLockRecording();
+        }
+
+        // Swipe Left to Cancel
+        if (touch.clientX < micButton.left - 50) {
+            stopRecording(false);
+        }
+    };
+
 
   const handleSendMessage = () => {
     if (inputValue.trim() === '' || !firestore || !authUser || !chatId || !otherUser) return;
@@ -432,38 +632,35 @@ export default function ChatIdPage({
     }
   };
   
-    const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>, msg: MessageType) => {
-        swipeTargetRef.current = e.currentTarget;
+    const handleReplyTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
         touchStartX.current = e.targetTouches[0].clientX;
-        touchEndX.current = e.targetTouches[0].clientX; // Reset on new touch
+        touchMoveX.current = e.targetTouches[0].clientX;
     };
 
-    const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-        if (!swipeTargetRef.current) return;
+    const handleReplyTouchMove = (e: React.TouchEvent<HTMLDivElement>, target: HTMLDivElement) => {
+        if (!target) return;
         const currentX = e.targetTouches[0].clientX;
         const diffX = currentX - touchStartX.current;
-        touchEndX.current = currentX;
+        touchMoveX.current = currentX;
         
         // Only allow swiping right, and not too far
         if (diffX > 0 && diffX < 100) {
-            swipeTargetRef.current.style.transform = `translateX(${diffX}px)`;
+            target.style.transform = `translateX(${diffX}px)`;
         }
     };
 
-    const handleTouchEnd = (msg: MessageType) => {
-        if (!swipeTargetRef.current) return;
+    const handleReplyTouchEnd = (msg: MessageType, target: HTMLDivElement) => {
+        if (!target) return;
 
-        const diffX = touchEndX.current - touchStartX.current;
+        const diffX = touchMoveX.current - touchStartX.current;
 
-        if (diffX > SWIPE_THRESHOLD) {
-            // Successful swipe
+        if (diffX > 50) { // Swipe threshold
             setReplyToMessage(msg);
             inputRef.current?.focus();
         }
 
         // Reset style
-        swipeTargetRef.current.style.transform = 'translateX(0)';
-        swipeTargetRef.current = null;
+        target.style.transform = 'translateX(0)';
     };
   
   const MessageStatus = ({ status }: { status: MessageType['status'] }) => {
@@ -496,6 +693,23 @@ export default function ChatIdPage({
       </div>
     );
   }
+  
+    const renderMessageContent = (msg: MessageType) => {
+        switch (msg.type) {
+            case 'text':
+                return <p className="whitespace-pre-wrap flex-shrink">{msg.content}</p>;
+            case 'audio':
+                return (
+                    <audio controls src={msg.mediaUrl} className="max-w-full">
+                        Your browser does not support the audio element.
+                    </audio>
+                );
+            case 'image':
+                 return msg.mediaUrl ? <img src={msg.mediaUrl} alt="sent image" className="rounded-lg max-w-full" /> : <p>Image not available</p>;
+            default:
+                return null;
+        }
+    };
 
   return (
     <>
@@ -526,7 +740,7 @@ export default function ChatIdPage({
                   </p>
                   </div>
               </div>
-              <div className="flex flex-1 justify-end items-center gap-2">
+              <div className="ml-auto flex items-center gap-2">
               <Button variant="ghost" size="icon">
                   <Phone className="h-5 w-5" />
                   <span className="sr-only">Audio Call</span>
@@ -557,117 +771,165 @@ export default function ChatIdPage({
         {/* Messages Area */}
         <main className="flex-1 overflow-y-auto" ref={viewportRef}>
             <div className="space-y-2 p-6">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className="relative transition-transform duration-200 ease-out"
-                    onTouchStart={(e) => handleTouchStart(e, msg)}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={() => handleTouchEnd(msg)}
-                  >
+              {messages.map((msg) => {
+                const messageRef = React.createRef<HTMLDivElement>();
+                return (
                     <div
-                      className={`flex max-w-xs flex-col rounded-lg px-3 py-2 text-sm lg:max-w-md ${
-                        msg.senderId === authUser?.uid
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted'
-                      }`}
+                    key={msg.id}
+                    className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
                     >
-                      {msg.replyTo && (
-                        <div className="mb-1 rounded-md border-l-2 border-primary-foreground/50 bg-black/10 p-2">
-                          <p className="font-bold text-xs">
-                            {msg.replyTo.senderId === authUser.uid ? 'You' : otherUser.displayName.split(' ')[0]}
-                          </p>
-                          <p className="truncate text-xs opacity-80">{msg.replyTo.content}</p>
+                    <div
+                        className="relative transition-transform duration-200 ease-out"
+                        ref={messageRef}
+                        onTouchStart={(e) => handleReplyTouchStart(e)}
+                        onTouchMove={(e) => messageRef.current && handleReplyTouchMove(e, messageRef.current)}
+                        onTouchEnd={() => messageRef.current && handleReplyTouchEnd(msg, messageRef.current)}
+                    >
+                        <div
+                        className={`flex max-w-xs flex-col rounded-lg px-3 py-2 text-sm lg:max-w-md ${
+                            msg.senderId === authUser?.uid
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted'
+                        }`}
+                        >
+                        {msg.replyTo && (
+                            <div className="mb-1 rounded-md border-l-2 border-primary-foreground/50 bg-black/10 p-2">
+                            <p className="font-bold text-xs">
+                                {msg.replyTo.senderId === authUser.uid ? 'You' : otherUser.displayName.split(' ')[0]}
+                            </p>
+                            <p className="truncate text-xs opacity-80">{msg.replyTo.content}</p>
+                            </div>
+                        )}
+                        <div className="flex items-end gap-2">
+                             {renderMessageContent(msg)}
+                            <div className={`flex items-center gap-1 text-[10px] shrink-0 self-end ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
+                                <span>{formatTimestamp(msg.timestamp)}</span>
+                                {msg.senderId === authUser?.uid && (
+                                    <MessageStatus status={msg.status} />
+                                )}
+                            </div>
                         </div>
-                      )}
-                      <div className="flex items-end gap-2">
-                          <p className="whitespace-pre-wrap flex-shrink">{msg.content}</p>
-                          <div className={`flex items-center gap-1 text-[10px] shrink-0 ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
-                              <span>{formatTimestamp(msg.timestamp)}</span>
-                              {msg.senderId === authUser?.uid && (
-                                  <MessageStatus status={msg.status} />
-                              )}
-                          </div>
-                      </div>
+                        </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                    </div>
+                );
+            })}
             </div>
           </main>
 
         {/* Message Input */}
         <footer className="shrink-0 border-t bg-muted/40 p-4">
-          <div className="relative">
-              {replyToMessage && (
-              <div className="flex items-center justify-between bg-muted p-2 rounded-t-md">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                  <Reply className="h-4 w-4 flex-shrink-0" />
-                  <div className="overflow-hidden">
-                      <p className="truncate font-bold text-sm">
-                      Replying to{' '}
-                      {replyToMessage.senderId === authUser.uid
-                          ? 'yourself'
-                          : otherUser.displayName.split(' ')[0]}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                      {replyToMessage.content}
-                      </p>
-                  </div>
-                  </div>
-                  <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => setReplyToMessage(null)}
-                  >
-                  <X className="h-4 w-4" />
-                  </Button>
-              </div>
-              )}
-              <div className="flex items-end gap-2">
-                  <Button variant="ghost" size="icon" className="shrink-0">
-                      <Smile className="h-6 w-6" />
-                      <span className="sr-only">Emoji</span>
-                  </Button>
-                  <div className="relative w-full">
-                      <Textarea
-                          ref={inputRef}
-                          placeholder="Type a message..."
-                          className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-4 pr-12 shadow-sm focus:border-primary focus:ring-primary"
-                          value={inputValue}
-                          onChange={(e) => setInputValue(e.target.value)}
-                          onKeyDown={handleKeyPress}
-                          rows={1}
-                          onInput={(e) => {
-                          const target = e.target as HTMLTextAreaElement;
-                          target.style.height = 'auto';
-                          target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-                          }}
-                      />
-                      <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 shrink-0">
-                          <Paperclip className="h-6 w-6" />
-                          <span className="sr-only">Attach file</span>
-                      </Button>
-                  </div>
-                  <Button
-                      size="icon"
-                      className="rounded-full h-12 w-12 shrink-0"
-                      onClick={() => {
-                          if (inputValue.trim()) {
-                              handleSendMessage();
-                          }
-                          // Else: handle voice message recording in the future
-                      }}
-                  >
-                      {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-                      <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
-                  </Button>
-              </div>
-          </div>
+            {isRecording ? (
+                 <div className="relative flex items-center justify-between gap-2">
+                    {isRecordingLocked ? (
+                        <>
+                            <Button variant="destructive" onClick={handleCancelRecording}>
+                                Cancel
+                            </Button>
+                            <div className="flex items-center gap-2 text-destructive">
+                                <span className="relative flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                                </span>
+                                <span>{formatRecordingTime(recordingDuration)}</span>
+                            </div>
+                            <Button size="icon" className="rounded-full h-12 w-12" onClick={() => stopRecording(true)}>
+                                <Send className="h-6 w-6" />
+                            </Button>
+                        </>
+                    ) : (
+                         <>
+                            <div className="text-muted-foreground text-sm animate-pulse">
+                                &larr; Slide to cancel
+                            </div>
+                            <div className="flex items-center gap-2 text-destructive">
+                                <span className="relative flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                                </span>
+                                <span>{formatRecordingTime(recordingDuration)}</span>
+                            </div>
+                             <div className="flex flex-col items-center text-muted-foreground">
+                                <Lock className="h-5 w-5" />
+                                <span className="text-xs">Lock</span>
+                            </div>
+                        </>
+                    )}
+                 </div>
+            ) : (
+                <div className="relative">
+                    {replyToMessage && (
+                    <div className="flex items-center justify-between bg-muted p-2 rounded-t-md">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                        <Reply className="h-4 w-4 flex-shrink-0" />
+                        <div className="overflow-hidden">
+                            <p className="truncate font-bold text-sm">
+                            Replying to{' '}
+                            {replyToMessage.senderId === authUser.uid
+                                ? 'yourself'
+                                : otherUser.displayName.split(' ')[0]}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                            {replyToMessage.content}
+                            </p>
+                        </div>
+                        </div>
+                        <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => setReplyToMessage(null)}
+                        >
+                        <X className="h-4 w-4" />
+                        </Button>
+                    </div>
+                    )}
+                    <div className="flex items-end gap-2">
+                        <Button variant="ghost" size="icon" className="shrink-0">
+                            <Smile className="h-6 w-6" />
+                            <span className="sr-only">Emoji</span>
+                        </Button>
+                        <div className="relative w-full">
+                            <Textarea
+                                ref={inputRef}
+                                placeholder="Type a message..."
+                                className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-4 pr-12 shadow-sm focus:border-primary focus:ring-primary"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                onKeyDown={handleKeyPress}
+                                rows={1}
+                                onInput={(e) => {
+                                const target = e.target as HTMLTextAreaElement;
+                                target.style.height = 'auto';
+                                target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+                                }}
+                            />
+                            <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 shrink-0">
+                                <Paperclip className="h-6 w-6" />
+                                <span className="sr-only">Attach file</span>
+                            </Button>
+                        </div>
+                         <Button
+                            ref={micButtonRef}
+                            size="icon"
+                            className="rounded-full h-12 w-12 shrink-0"
+                            onClick={() => {
+                                if (inputValue.trim()) {
+                                    handleSendMessage();
+                                }
+                            }}
+                            onMouseDown={handleMicButtonPress}
+                            onMouseUp={handleMicButtonRelease}
+                            onTouchStart={handleMicButtonPress}
+                            onTouchEnd={handleMicButtonRelease}
+                            onTouchMove={handleTouchMove}
+                        >
+                            {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                            <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
+                        </Button>
+                    </div>
+                </div>
+            )}
         </footer>
       </div>
     </>
