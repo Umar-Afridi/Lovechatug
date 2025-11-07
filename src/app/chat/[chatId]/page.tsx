@@ -37,6 +37,8 @@ import {
   X,
   Reply,
   Trash2,
+  Lock,
+  ArrowUp,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
@@ -159,7 +161,6 @@ export default function ChatIdPage({
   const [replyToMessage, setReplyToMessage] = useState<MessageType | null>(null);
 
   // Voice message states
-  const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -172,36 +173,7 @@ export default function ChatIdPage({
   
   const touchStartX = useRef(0);
   const touchMoveX = useRef(0);
-
-  // Microphone permission
-  useEffect(() => {
-    navigator.permissions.query({ name: 'microphone' as PermissionName }).then((result) => {
-      setHasMicPermission(result.state === 'granted');
-      result.onchange = () => setHasMicPermission(result.state === 'granted');
-    });
-  }, []);
-
-  const getMicPermission = async () => {
-      if (hasMicPermission) return true;
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Close the stream immediately, we only wanted the permission
-        stream.getTracks().forEach(track => track.stop());
-        setHasMicPermission(true);
-        return true;
-      } catch (error) {
-        console.error("Error getting mic permission:", error);
-        toast({
-            title: 'Microphone access denied',
-            description: 'Please grant microphone access in your browser settings.',
-            variant: 'destructive'
-        });
-        setHasMicPermission(false);
-        return false;
-      }
-  };
-
-
+  
   // Swipe to go back logic for mobile
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
@@ -443,16 +415,14 @@ export default function ChatIdPage({
 
     const startRecording = async () => {
         if (isRecording) return;
-        const hasPermission = await getMicPermission();
-        if (!hasPermission) return;
-
-        setIsRecording(true);
-        setRecordingStartTime(Date.now());
-        setRecordingDuration(0);
-        audioChunksRef.current = [];
-
+        
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setIsRecording(true);
+            setRecordingStartTime(Date.now());
+            setRecordingDuration(0);
+            audioChunksRef.current = [];
+            
             mediaRecorderRef.current = new MediaRecorder(stream);
             mediaRecorderRef.current.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -462,7 +432,7 @@ export default function ChatIdPage({
             mediaRecorderRef.current.start();
         } catch (error) {
             console.error("Error starting recording:", error);
-            toast({ title: "Recording Error", description: "Could not start recording.", variant: "destructive"});
+            toast({ title: "Microphone Access Denied", description: "Please grant microphone access to record audio.", variant: "destructive"});
             setIsRecording(false);
             setRecordingStartTime(null);
         }
@@ -471,25 +441,19 @@ export default function ChatIdPage({
     const stopRecording = useCallback(async (send: boolean) => {
         if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
             setIsRecording(false);
-            setRecordingDuration(0);
-            setRecordingStartTime(null);
             return;
         }
 
         return new Promise<void>((resolve) => {
             mediaRecorderRef.current!.onstop = async () => {
-                if (send && audioChunksRef.current.length > 0) {
-                    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
-                    // Ensure blob is not empty and recording is longer than a fraction of a second
-                    if (audioBlob.size > 100 && recordingDuration > 500) { 
-                        await sendAudioMessage(audioBlob);
-                    }
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+                
+                if (send && audioBlob.size > 100) {
+                    await sendAudioMessage(audioBlob);
                 }
                 
                 audioChunksRef.current = [];
-                if (mediaRecorderRef.current) {
-                  mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-                }
+                mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop());
                 
                 setIsRecording(false);
                 setRecordingStartTime(null);
@@ -497,13 +461,11 @@ export default function ChatIdPage({
                 resolve();
             };
             
-            if (mediaRecorderRef.current!.state === 'recording') {
-                mediaRecorderRef.current!.stop();
+            if (mediaRecorderRef.current?.state === 'recording') {
+                mediaRecorderRef.current.stop();
             }
         });
-    }, [chatId, authUser, otherUser, firestore, recordingDuration]);
-
-
+    }, [chatId, authUser, otherUser, firestore]);
 
     const sendAudioMessage = async (audioBlob: Blob) => {
         if (!firestore || !chatId || !authUser || !otherUser || audioBlob.size === 0) return;
@@ -820,7 +782,6 @@ export default function ChatIdPage({
         <footer className="shrink-0 border-t bg-muted/40 p-4">
             {isRecording ? (
                 <div className="flex items-center gap-4 w-full">
-                    <Trash2 className="h-6 w-6 text-destructive" />
                     <div className="flex-1 flex items-center justify-center gap-2 text-destructive font-mono bg-destructive/10 rounded-full px-3 py-1">
                         <span className="relative flex h-3 w-3">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
@@ -828,7 +789,14 @@ export default function ChatIdPage({
                         </span>
                         <span>{formatRecordingTime(recordingDuration)}</span>
                     </div>
-                    <p className="text-sm text-muted-foreground animate-pulse">Release to send</p>
+                     <Button
+                        size="icon"
+                        className="rounded-full h-12 w-12 shrink-0"
+                        onClick={handleMicButtonRelease}
+                    >
+                        <Send className="h-6 w-6" />
+                        <span className="sr-only">Send</span>
+                    </Button>
                 </div>
             ) : (
                 <div className="relative">
