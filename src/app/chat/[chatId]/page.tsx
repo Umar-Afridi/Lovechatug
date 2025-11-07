@@ -633,15 +633,11 @@ export default function ChatIdPage({
                     <Smile className="h-6 w-6" />
                     <span className="sr-only">Emoji</span>
                 </Button>
-                <Button variant="ghost" size="icon" className="shrink-0">
-                    <Paperclip className="h-6 w-6" />
-                    <span className="sr-only">Attach file</span>
-                </Button>
                 <div className="relative w-full">
                     <Textarea
                         ref={inputRef}
                         placeholder="Type a message..."
-                        className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-4 shadow-sm focus:border-primary focus:ring-primary"
+                        className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-4 pr-12 shadow-sm focus:border-primary focus:ring-primary"
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyPress}
@@ -652,6 +648,10 @@ export default function ChatIdPage({
                         target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
                         }}
                     />
+                    <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 shrink-0">
+                        <Paperclip className="h-6 w-6" />
+                        <span className="sr-only">Attach file</span>
+                    </Button>
                 </div>
                 <Button
                     size="icon"
