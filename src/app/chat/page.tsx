@@ -69,17 +69,21 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
         }
 
         const userDocRef = doc(firestore, 'users', participantId);
-        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-                setParticipant(docSnap.data() as UserProfile);
+        const unsubscribe = onSnapshot(userDocRef, 
+            (docSnap) => {
+                if (docSnap.exists()) {
+                    setParticipant(docSnap.data() as UserProfile);
+                }
+            }, 
+            (error) => {
+                const permissionError = new FirestorePermissionError({
+                    path: userDocRef.path,
+                    operation: 'get',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+                console.error(`Error fetching participant ${participantId}:`, error);
             }
-        }, (error) => {
-            const permissionError = new FirestorePermissionError({
-                path: userDocRef.path,
-                operation: 'get',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        });
+        );
 
         return () => unsubscribe();
     }, [firestore, participantId, chat.participantDetails]);
@@ -185,44 +189,14 @@ export default function ChatPage() {
       return;
     }
     const userDocRef = doc(firestore, 'users', user.uid);
-    const unsub = onSnapshot(userDocRef, async (docSnap) => {
+    const unsubProfile = onSnapshot(userDocRef, async (docSnap) => {
         if (docSnap.exists()) {
             const userProfile = docSnap.data() as UserProfile;
             setProfile(userProfile);
-            
-            // New logic: Fetch chats based on chatIds from the user's profile
-            if (userProfile.chatIds && userProfile.chatIds.length > 0 && firestore) {
-                setLoadingChats(true);
-                const chatRefs = userProfile.chatIds.map(id => doc(firestore, 'chats', id));
-                
-                // Set up listeners for each chat
-                const unsubscribers = chatRefs.map(chatRef => onSnapshot(chatRef, (chatDoc) => {
-                    if (chatDoc.exists()) {
-                        const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
-                        setChats(prevChats => {
-                            const chatIndex = prevChats.findIndex(c => c.id === chatDoc.id);
-                            if (chatIndex > -1) {
-                                // Chat exists, update it in place
-                                const newChats = [...prevChats];
-                                newChats[chatIndex] = chatData;
-                                return newChats;
-                            } else {
-                                // New chat, add it to the list
-                                return [...prevChats, chatData];
-                            }
-                        });
-                    }
-                }));
-
-                setLoadingChats(false);
-                // Return a function that unsubscribes from all chat listeners
-                return () => unsubscribers.forEach(unsub => unsub());
-            } else {
-                setChats([]);
-                setLoadingChats(false);
-            }
+            setLoadingProfile(false);
+        } else {
+            setLoadingProfile(false);
         }
-        setLoadingProfile(false);
     }, (error) => {
         const permissionError = new FirestorePermissionError({
             path: userDocRef.path,
@@ -231,7 +205,59 @@ export default function ChatPage() {
         errorEmitter.emit('permission-error', permissionError);
         setLoadingProfile(false);
     });
-    return () => { if (typeof unsub === 'function') unsub(); };
+
+    // Setup chat listeners based on profile's chatIds
+    let unsubChats: (() => void)[] = [];
+    const unsubProfileAndChats = onSnapshot(userDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const userProfile = docSnap.data() as UserProfile;
+            
+            // Unsubscribe from old chat listeners
+            unsubChats.forEach(unsub => unsub());
+            unsubChats = [];
+
+            if (userProfile.chatIds && userProfile.chatIds.length > 0 && firestore) {
+                setLoadingChats(true);
+                const chatRefs = userProfile.chatIds.map(id => doc(firestore, 'chats', id));
+                
+                unsubChats = chatRefs.map(chatRef => onSnapshot(chatRef, 
+                    (chatDoc) => {
+                        if (chatDoc.exists()) {
+                            const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
+                            setChats(prevChats => {
+                                const chatIndex = prevChats.findIndex(c => c.id === chatDoc.id);
+                                if (chatIndex > -1) {
+                                    const newChats = [...prevChats];
+                                    newChats[chatIndex] = chatData;
+                                    return newChats;
+                                } else {
+                                    return [...prevChats, chatData];
+                                }
+                            });
+                        }
+                    },
+                    (error) => {
+                         const permissionError = new FirestorePermissionError({
+                            path: chatRef.path,
+                            operation: 'get',
+                        });
+                        errorEmitter.emit('permission-error', permissionError);
+                        console.error(`Error listening to chat ${chatRef.id}:`, error);
+                    }
+                ));
+                setLoadingChats(false);
+            } else {
+                setChats([]);
+                setLoadingChats(false);
+            }
+        }
+    });
+
+    return () => { 
+        unsubProfile();
+        unsubProfileAndChats();
+        unsubChats.forEach(unsub => unsub());
+    };
   }, [user, firestore]);
 
    useEffect(() => {

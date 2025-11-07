@@ -63,24 +63,32 @@ function useUserProfile() {
     }
 
     const userDocRef = doc(firestore, 'users', user.uid);
-    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setProfile(docSnap.data() as UserProfile);
-      } else {
-        // Fallback to auth data if firestore doc doesn't exist
-        setProfile({
-          uid: user.uid,
-          displayName: user.displayName || 'User',
-          email: user.email || '',
-          photoURL: user.photoURL || '',
-          username: user.email?.split('@')[0] || `user-${Date.now()}`
+    const unsubscribe = onSnapshot(userDocRef, 
+      (docSnap) => {
+        if (docSnap.exists()) {
+          setProfile(docSnap.data() as UserProfile);
+        } else {
+          // Fallback to auth data if firestore doc doesn't exist
+          setProfile({
+            uid: user.uid,
+            displayName: user.displayName || 'User',
+            email: user.email || '',
+            photoURL: user.photoURL || '',
+            username: user.email?.split('@')[0] || `user-${Date.now()}`
+          });
+        }
+        setLoading(false);
+      }, 
+      (error) => {
+        const permissionError = new FirestorePermissionError({
+            path: userDocRef.path,
+            operation: 'get',
         });
+        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching user profile:", error);
+        setLoading(false);
       }
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching user profile:", error);
-      setLoading(false);
-    });
+    );
 
     return () => unsubscribe();
   }, [user, firestore, authLoading]);
@@ -127,6 +135,8 @@ function usePresence() {
           }
         });
       }
+    }, (error) => {
+      console.error("Error with presence listener:", error);
     });
 
     return () => {

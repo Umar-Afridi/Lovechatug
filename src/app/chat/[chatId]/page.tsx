@@ -213,11 +213,22 @@ export default function ChatIdPage({
     fetchProfilesAndSetupChat();
     
     // Real-time listener for other user's profile changes (like online status)
-    const unsubscribeUser = onSnapshot(doc(firestore, 'users', otherUserId), (docSnap) => {
-      if (docSnap.exists()) {
-        setOtherUser(docSnap.data() as UserProfile);
-      }
-    });
+    const otherUserDocRef = doc(firestore, 'users', otherUserId);
+    const unsubscribeUser = onSnapshot(otherUserDocRef, 
+        (docSnap) => {
+          if (docSnap.exists()) {
+            setOtherUser(docSnap.data() as UserProfile);
+          }
+        },
+        (error) => {
+            const permissionError = new FirestorePermissionError({
+                path: otherUserDocRef.path,
+                operation: 'get',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            console.error("Error fetching other user's profile:", error);
+        }
+    );
 
     return () => unsubscribeUser();
 
@@ -590,70 +601,71 @@ export default function ChatIdPage({
 
       {/* Message Input */}
       <footer className="shrink-0 border-t bg-muted/40 p-2">
-        {replyToMessage && (
-          <div className="flex items-center justify-between bg-muted p-2">
-            <div className="flex items-center gap-2 overflow-hidden">
-              <Reply className="h-4 w-4 flex-shrink-0" />
-              <div className="overflow-hidden">
-                <p className="truncate font-bold text-sm">
-                  Replying to{' '}
-                  {replyToMessage.senderId === authUser.uid
-                    ? 'yourself'
-                    : otherUser.displayName.split(' ')[0]}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {replyToMessage.content}
-                </p>
-              </div>
+        <div className="relative">
+            {replyToMessage && (
+            <div className="flex items-center justify-between bg-muted p-2 rounded-t-md">
+                <div className="flex items-center gap-2 overflow-hidden">
+                <Reply className="h-4 w-4 flex-shrink-0" />
+                <div className="overflow-hidden">
+                    <p className="truncate font-bold text-sm">
+                    Replying to{' '}
+                    {replyToMessage.senderId === authUser.uid
+                        ? 'yourself'
+                        : otherUser.displayName.split(' ')[0]}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                    {replyToMessage.content}
+                    </p>
+                </div>
+                </div>
+                <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setReplyToMessage(null)}
+                >
+                <X className="h-4 w-4" />
+                </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => setReplyToMessage(null)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-        <div className="flex items-center">
-          <Button variant="ghost" size="icon" className="absolute bottom-3 left-3">
-            <Smile className="h-5 w-5" />
-            <span className="sr-only">Emoji</span>
-          </Button>
-          <Textarea
-            ref={inputRef}
-            placeholder="Type a message..."
-            className="min-h-[40px] max-h-[120px] resize-none rounded-full border-2 border-input bg-transparent py-2 pl-12 pr-28 shadow-sm focus:border-primary focus:ring-primary"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyPress}
-            rows={1}
-            onInput={(e) => {
-              const target = e.target as HTMLTextAreaElement;
-              target.style.height = 'auto';
-              target.style.height = `${target.scrollHeight}px`;
-            }}
-          />
-          <div className="absolute bottom-3 right-3 flex items-center">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <Paperclip className="h-5 w-5" />
-              <span className="sr-only">Attach file</span>
-            </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <Mic className="h-5 w-5" />
-              <span className="sr-only">Record voice message</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={handleSendMessage}
-            >
-              <Send className="h-5 w-5" />
-              <span className="sr-only">Send</span>
-            </Button>
-          </div>
+            )}
+            <div className="flex items-center p-2">
+                <Button variant="ghost" size="icon">
+                    <Smile className="h-5 w-5" />
+                    <span className="sr-only">Emoji</span>
+                </Button>
+                <Textarea
+                    ref={inputRef}
+                    placeholder="Type a message..."
+                    className="min-h-[40px] max-h-[120px] resize-none rounded-full border-2 border-input bg-transparent py-2 pl-4 pr-24 shadow-sm focus:border-primary focus:ring-primary"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyPress}
+                    rows={1}
+                    onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = `${target.scrollHeight}px`;
+                    }}
+                />
+                <div className="flex items-center">
+                    <Button variant="ghost" size="icon">
+                    <Paperclip className="h-5 w-5" />
+                    <span className="sr-only">Attach file</span>
+                    </Button>
+                    <Button variant="ghost" size="icon">
+                    <Mic className="h-5 w-5" />
+                    <span className="sr-only">Record voice message</span>
+                    </Button>
+                    <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleSendMessage}
+                    >
+                    <Send className="h-5 w-5" />
+                    <span className="sr-only">Send</span>
+                    </Button>
+                </div>
+            </div>
         </div>
       </footer>
     </div>
