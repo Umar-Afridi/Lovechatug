@@ -53,6 +53,14 @@
           "items": {
             "type": "string"
           }
+        },
+        "chatsCleared": {
+          "type": "object",
+          "description": "A map of chatId to the timestamp when the user cleared the chat.",
+          "additionalProperties": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "required": ["uid", "displayName", "email", "username"]

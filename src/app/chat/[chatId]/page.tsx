@@ -15,10 +15,11 @@ import {
   getDoc,
   writeBatch,
   updateDoc,
-  setDoc,
   arrayUnion,
   increment,
   limit,
+  where,
+  Timestamp,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -91,7 +92,7 @@ async function getOrCreateChat(
         
         // 2. Add chatId to both users' profiles
         const currentUserRef = doc(firestore, 'users', currentUser.uid);
-        const otherUserRef = doc(firestore, 'users', otherUserId);
+        const otherUserRef = doc(firestore, 'users', otherUser.uid);
         batch.update(currentUserRef, { chatIds: arrayUnion(chatId) });
         batch.update(otherUserRef, { chatIds: arrayUnion(chatId) });
 
@@ -121,7 +122,7 @@ export default function ChatIdPage({
   const { user: authUser } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const otherUserId = React.use(params as any).chatId;
+  const otherUserId = params.chatId;
 
   const [chatId, setChatId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -206,7 +207,6 @@ export default function ChatIdPage({
             errorEmitter.emit('permission-error', permissionError);
             toast({ title: 'Error', description: 'Could not initialize chat.', variant: 'destructive' });
         }
-        // Note: We don't set loading to false here, because the message listener will do it.
     };
     
     fetchProfilesAndSetupChat();
@@ -224,29 +224,35 @@ export default function ChatIdPage({
 
   // Real-time listener for messages
   useEffect(() => {
-    if (!firestore || !chatId) return;
+    if (!firestore || !chatId || !currentUser) return;
 
-    setLoading(true); // Start loading when we begin fetching messages
+    setLoading(true);
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'), limit(50));
+    const chatClearedTimestamp = currentUser?.chatsCleared?.[chatId] ?? null;
+
+    let q = query(messagesRef, orderBy('timestamp', 'asc'));
+    if (chatClearedTimestamp) {
+        q = query(q, where('timestamp', '>', chatClearedTimestamp));
+    }
+
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const msgs = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as MessageType)
       );
       setMessages(msgs);
-      setLoading(false); // Stop loading once messages are fetched
+      setLoading(false);
     }, (serverError) => {
         const permissionError = new FirestorePermissionError({
             path: messagesRef.path,
             operation: 'list',
         });
         errorEmitter.emit('permission-error', permissionError);
-        setLoading(false); // Stop loading on error as well
+        setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [firestore, chatId]);
+  }, [firestore, chatId, currentUser]);
 
   // Mark messages as read and reset unread count
   useEffect(() => {
@@ -331,26 +337,7 @@ export default function ChatIdPage({
         setReplyToMessage(null); // Reset reply state after sending
     }
 
-    // --- Optimistic UI Update ---
-    const tempId = `temp_${Date.now()}`;
-    const optimisticMessage: MessageType = {
-        ...newMessage,
-        id: tempId,
-        timestamp: new Date(), // Use local time for optimistic update
-    };
-    setMessages(prevMessages => [...prevMessages, optimisticMessage]);
-    // --- End Optimistic UI Update ---
-    
-    
-    const lastMessageData = {
-        content: newMessage.content,
-        timestamp: serverTimestamp(),
-        senderId: newMessage.senderId
-    };
-
     addDoc(messagesRef, newMessage).catch((serverError) => {
-        // Revert optimistic update on error
-        setMessages(prevMessages => prevMessages.filter(msg => msg.id !== tempId));
         toast({
           title: "Error Sending Message",
           description: "Could not send your message. Please try again.",
@@ -364,6 +351,12 @@ export default function ChatIdPage({
         });
         errorEmitter.emit('permission-error', permissionError);
     });
+    
+    const lastMessageData = {
+        content: newMessage.content,
+        timestamp: serverTimestamp(),
+        senderId: newMessage.senderId
+    };
     
     // Increment unread count for the other user
     const unreadCountUpdate: { [key: string]: any } = {

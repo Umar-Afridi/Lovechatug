@@ -14,6 +14,7 @@ import {
   writeBatch,
   query,
   getDocs,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { ArrowLeft, User, Trash2, UserX, ShieldX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,7 +34,7 @@ export default function ChatSettingsPage({
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const otherUserId = React.use(params as any).chatId;
+  const otherUserId = params.chatId;
 
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [isContactSheetOpen, setContactSheetOpen] = useState(false);
@@ -182,43 +183,31 @@ export default function ChatSettingsPage({
   const handleClearChat = async () => {
     if (!firestore || !user || !otherUserId) return;
     const chatId = [user.uid, otherUserId].sort().join('_');
-    const messagesRef = collection(firestore, 'chats', chatId, 'messages');
+    const currentUserRef = doc(firestore, 'users', user.uid);
     
+    // Instead of deleting messages, we update a timestamp on the user's profile
+    // indicating when they cleared this specific chat.
+    const fieldPath = `chatsCleared.${chatId}`;
+    const payload = { [fieldPath]: serverTimestamp() };
+
     try {
-        const q = query(messagesRef);
-        const querySnapshot = await getDocs(q);
-
-        if (querySnapshot.empty) {
-            toast({ title: "Chat is already empty." });
-            setClearChatDialogOpen(false);
-            return;
-        }
-
-        const batch = writeBatch(firestore);
-        querySnapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-        
-        await batch.commit();
-
-        // Also clear the lastMessage on the chat document
-        const chatRef = doc(firestore, 'chats', chatId);
-        await updateDoc(chatRef, { lastMessage: null });
-
-        toast({ title: "Chat Cleared", description: "All messages in this chat have been deleted."});
+        await updateDoc(currentUserRef, payload);
+        toast({ title: "Chat Cleared", description: "Your view of this chat has been cleared."});
     } catch(error: any) {
          if (error.code === 'permission-denied') {
             const permissionError = new FirestorePermissionError({
-                path: messagesRef.path,
-                operation: 'delete',
+                path: currentUserRef.path,
+                operation: 'update',
+                requestResourceData: payload,
             });
             errorEmitter.emit('permission-error', permissionError);
         } else {
             console.error("Error clearing chat:", error);
-            toast({ title: "Error", description: "Could not clear chat.", variant: "destructive" });
+            toast({ title: "Error", description: "Could not clear your chat view.", variant: "destructive" });
         }
     } finally {
         setClearChatDialogOpen(false);
+        router.back(); // Go back to chat screen which will now be empty
     }
   };
 
