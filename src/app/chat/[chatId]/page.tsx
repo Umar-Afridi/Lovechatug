@@ -311,6 +311,19 @@ export default function ChatIdPage({
     setInputValue(''); // Clear input immediately for better UX
     
     const isOtherUserOnline = otherUser?.isOnline ?? false;
+
+    // --- Optimistic UI Update ---
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMessage: MessageType = {
+        id: tempId,
+        senderId: authUser.uid,
+        content: contentToSend,
+        timestamp: new Date(), // Use local time for optimistic update
+        type: 'text' as const,
+        status: 'sent'
+    };
+    setMessages(prevMessages => [...prevMessages, optimisticMessage]);
+    // --- End Optimistic UI Update ---
     
     const newMessage = {
       senderId: authUser.uid,
@@ -327,6 +340,14 @@ export default function ChatIdPage({
     };
 
     addDoc(messagesRef, newMessage).catch((serverError) => {
+        // Revert optimistic update on error
+        setMessages(prevMessages => prevMessages.filter(msg => msg.id !== tempId));
+        toast({
+          title: "Error Sending Message",
+          description: "Could not send your message. Please try again.",
+          variant: "destructive",
+        });
+
         const permissionError = new FirestorePermissionError({
             path: messagesRef.path,
             operation: 'create',
