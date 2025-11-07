@@ -21,8 +21,6 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import useEmblaCarousel from 'embla-carousel-react';
-import type { EmblaCarouselType } from 'embla-carousel-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 
@@ -145,7 +143,6 @@ const ChatList = ({ chats, currentUserId }: { chats: Chat[], currentUserId: stri
 
 
 export default function ChatPage() {
-  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
   const [activeTab, setActiveTab] = useState('inbox');
   const firestore = useFirestore();
   const { user } = useUser();
@@ -167,27 +164,9 @@ export default function ChatPage() {
   ];
 
   const handleTabSelect = useCallback((tabContent: string) => {
-    const tabIndex = navigationItems.findIndex(item => item.content === tabContent);
-    if (emblaApi && tabIndex !== -1) {
-      emblaApi.scrollTo(tabIndex);
-      setActiveTab(tabContent);
-    }
-  }, [emblaApi, navigationItems]);
+    setActiveTab(tabContent);
+  }, []);
 
-  useEffect(() => {
-    if (!emblaApi) return;
-    
-    const onSelect = (emblaApi: EmblaCarouselType) => {
-      const selectedIndex = emblaApi.selectedScrollSnap();
-      setActiveTab(navigationItems[selectedIndex].content);
-    };
-
-    emblaApi.on('select', onSelect);
-    return () => {
-      emblaApi.off('select', onSelect);
-    };
-  }, [emblaApi, navigationItems]);
-  
   // Fetch user profile
   useEffect(() => {
     if (!user || !firestore) {
@@ -348,21 +327,20 @@ export default function ChatPage() {
       return <div className="flex-1 flex flex-col overflow-hidden">{renderSearchResults()}</div>;
     }
     
-    return (
-      <div className="overflow-hidden flex-1" ref={emblaRef}>
-        <div className="flex h-full">
-          {navigationItems.map(item => (
-            <div className="flex-[0_0_100%] min-w-0 h-full flex flex-col" key={item.content}>
-               {item.content === 'inbox' && (loadingChats || loadingProfile || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} currentUserId={user.uid} />)}
-               {item.content === 'groups' && <GroupsPage />}
-               {item.content === 'stories' && <StoriesPage />}
-               {item.content === 'requests' && <FriendsPage />}
-               {item.content === 'calls' && <CallsPage />}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+    switch (activeTab) {
+        case 'inbox':
+            return (loadingChats || loadingProfile || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} currentUserId={user.uid} />);
+        case 'groups':
+            return <GroupsPage />;
+        case 'stories':
+            return <StoriesPage />;
+        case 'requests':
+            return <FriendsPage />;
+        case 'calls':
+            return <CallsPage />;
+        default:
+            return null;
+    }
   }
 
   return (
@@ -405,13 +383,13 @@ export default function ChatPage() {
         </div>
         
         {/* Navigation */}
-        <div className='flex border-b'>
+        <div className='flex border-b overflow-x-auto'>
             {navigationItems.map((item) => (
                 <Button 
                     key={item.content}
                     variant="ghost" 
                     className={cn(
-                        "flex-1 justify-center gap-2 rounded-none relative",
+                        "flex-shrink-0 justify-center gap-2 rounded-none relative px-4 py-4 h-auto",
                         activeTab === item.content ? 'border-b-2 border-primary text-primary bg-primary/10' : 'text-muted-foreground'
                     )}
                     onClick={() => handleTabSelect(item.content)}
