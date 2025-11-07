@@ -499,177 +499,177 @@ export default function ChatIdPage({
 
   return (
     <>
-    <ContactProfileSheet 
-        isOpen={isContactSheetOpen} 
-        onOpenChange={setContactSheetOpen}
-        userProfile={otherUser}
-    />
-    <div className="flex min-h-screen flex-col bg-background">
-       {/* Chat Header */}
-        <header className="flex shrink-0 items-center gap-4 border-b bg-muted/40 px-4 py-3">
-            <Button variant="ghost" size="icon" className="md:hidden" onClick={() => router.push('/chat')}>
-                <ArrowLeft className="h-5 w-5" />
-                <span className="sr-only">Back</span>
-            </Button>
-            <div 
-                className="flex items-center gap-4 cursor-pointer"
-                onClick={() => setContactSheetOpen(true)}
-            >
-                <Avatar>
-                    <AvatarImage src={otherUser.photoURL} />
-                    <AvatarFallback>{getInitials(otherUser.displayName)}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
-                <p className="text-xs text-muted-foreground">
-                    {otherUser.isOnline ? 'Online' : formatLastSeen(otherUser.lastSeen)}
-                </p>
-                </div>
-            </div>
-            <div className="flex flex-1 justify-end items-center gap-2">
-            <Button variant="ghost" size="icon">
-                <Phone className="h-5 w-5" />
-                <span className="sr-only">Audio Call</span>
-            </Button>
-            <Button variant="ghost" size="icon">
-                <Video className="h-5 w-5" />
-                <span className="sr-only">Video Call</span>
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="h-5 w-5" />
-                  <span className="sr-only">More options</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                 <DropdownMenuItem asChild>
-                    <Link href={`/chat/${otherUserIdFromParams}/settings`}>
-                      <Settings className="mr-2 h-4 w-4" />
-                      <span>More settings</span>
-                    </Link>
-                  </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            </div>
-        </header>
-
-      {/* Messages Area */}
-       <main className="flex-1 overflow-y-auto" ref={viewportRef}>
-          <div className="space-y-2 p-6">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
+      <ContactProfileSheet 
+          isOpen={isContactSheetOpen} 
+          onOpenChange={setContactSheetOpen}
+          userProfile={otherUser}
+      />
+      <div className="h-screen flex flex-col bg-background">
+        {/* Chat Header */}
+          <header className="flex shrink-0 items-center gap-4 border-b bg-muted/40 px-4 py-3">
+              <Button variant="ghost" size="icon" className="md:hidden" onClick={() => router.push('/chat')}>
+                  <ArrowLeft className="h-5 w-5" />
+                  <span className="sr-only">Back</span>
+              </Button>
+              <div 
+                  className="flex items-center gap-4 cursor-pointer"
+                  onClick={() => setContactSheetOpen(true)}
               >
+                  <Avatar>
+                      <AvatarImage src={otherUser.photoURL} />
+                      <AvatarFallback>{getInitials(otherUser.displayName)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                  <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
+                  <p className="text-xs text-muted-foreground">
+                      {otherUser.isOnline ? 'Online' : formatLastSeen(otherUser.lastSeen)}
+                  </p>
+                  </div>
+              </div>
+              <div className="flex flex-1 justify-end items-center gap-2">
+              <Button variant="ghost" size="icon">
+                  <Phone className="h-5 w-5" />
+                  <span className="sr-only">Audio Call</span>
+              </Button>
+              <Button variant="ghost" size="icon">
+                  <Video className="h-5 w-5" />
+                  <span className="sr-only">Video Call</span>
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <MoreVertical className="h-5 w-5" />
+                    <span className="sr-only">More options</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                      <Link href={`/chat/${otherUserIdFromParams}/settings`}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        <span>More settings</span>
+                      </Link>
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              </div>
+          </header>
+
+        {/* Messages Area */}
+        <main className="flex-1 overflow-y-auto" ref={viewportRef}>
+            <div className="space-y-2 p-6">
+              {messages.map((msg) => (
                 <div
-                  className="relative transition-transform duration-200 ease-out"
-                  onTouchStart={(e) => handleTouchStart(e, msg)}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={() => handleTouchEnd(msg)}
+                  key={msg.id}
+                  className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`flex max-w-xs flex-col rounded-lg px-3 py-2 text-sm lg:max-w-md ${
-                      msg.senderId === authUser?.uid
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    }`}
+                    className="relative transition-transform duration-200 ease-out"
+                    onTouchStart={(e) => handleTouchStart(e, msg)}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={() => handleTouchEnd(msg)}
                   >
-                    {msg.replyTo && (
-                      <div className="mb-1 rounded-md border-l-2 border-primary-foreground/50 bg-black/10 p-2">
-                        <p className="font-bold text-xs">
-                          {msg.replyTo.senderId === authUser.uid ? 'You' : otherUser.displayName.split(' ')[0]}
-                        </p>
-                        <p className="truncate text-xs opacity-80">{msg.replyTo.content}</p>
-                      </div>
-                    )}
-                    <div className="flex items-end gap-2">
-                        <p className="whitespace-pre-wrap flex-shrink">{msg.content}</p>
-                        <div className={`flex items-center gap-1 text-[10px] shrink-0 ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
-                            <span>{formatTimestamp(msg.timestamp)}</span>
-                            {msg.senderId === authUser?.uid && (
-                                <MessageStatus status={msg.status} />
-                            )}
+                    <div
+                      className={`flex max-w-xs flex-col rounded-lg px-3 py-2 text-sm lg:max-w-md ${
+                        msg.senderId === authUser?.uid
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted'
+                      }`}
+                    >
+                      {msg.replyTo && (
+                        <div className="mb-1 rounded-md border-l-2 border-primary-foreground/50 bg-black/10 p-2">
+                          <p className="font-bold text-xs">
+                            {msg.replyTo.senderId === authUser.uid ? 'You' : otherUser.displayName.split(' ')[0]}
+                          </p>
+                          <p className="truncate text-xs opacity-80">{msg.replyTo.content}</p>
                         </div>
+                      )}
+                      <div className="flex items-end gap-2">
+                          <p className="whitespace-pre-wrap flex-shrink">{msg.content}</p>
+                          <div className={`flex items-center gap-1 text-[10px] shrink-0 ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
+                              <span>{formatTimestamp(msg.timestamp)}</span>
+                              {msg.senderId === authUser?.uid && (
+                                  <MessageStatus status={msg.status} />
+                              )}
+                          </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </main>
+              ))}
+            </div>
+          </main>
 
-      {/* Message Input */}
-       <footer className="shrink-0 border-t bg-muted/40 p-4">
-        <div className="relative">
-            {replyToMessage && (
-            <div className="flex items-center justify-between bg-muted p-2 rounded-t-md">
-                <div className="flex items-center gap-2 overflow-hidden">
-                <Reply className="h-4 w-4 flex-shrink-0" />
-                <div className="overflow-hidden">
-                    <p className="truncate font-bold text-sm">
-                    Replying to{' '}
-                    {replyToMessage.senderId === authUser.uid
-                        ? 'yourself'
-                        : otherUser.displayName.split(' ')[0]}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                    {replyToMessage.content}
-                    </p>
-                </div>
-                </div>
-                <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => setReplyToMessage(null)}
-                >
-                <X className="h-4 w-4" />
-                </Button>
-            </div>
-            )}
-            <div className="flex items-end gap-2">
-                <Button variant="ghost" size="icon" className="shrink-0">
-                    <Smile className="h-6 w-6" />
-                    <span className="sr-only">Emoji</span>
-                </Button>
-                <div className="relative w-full">
-                    <Textarea
-                        ref={inputRef}
-                        placeholder="Type a message..."
-                        className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-4 pr-12 shadow-sm focus:border-primary focus:ring-primary"
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        onKeyDown={handleKeyPress}
-                        rows={1}
-                        onInput={(e) => {
-                        const target = e.target as HTMLTextAreaElement;
-                        target.style.height = 'auto';
-                        target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-                        }}
-                    />
-                    <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 shrink-0">
-                        <Paperclip className="h-6 w-6" />
-                        <span className="sr-only">Attach file</span>
-                    </Button>
-                </div>
-                <Button
-                    size="icon"
-                    className="rounded-full h-12 w-12 shrink-0"
-                    onClick={() => {
-                        if (inputValue.trim()) {
-                            handleSendMessage();
-                        }
-                        // Else: handle voice message recording in the future
-                    }}
-                >
-                    {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-                    <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
-                </Button>
-            </div>
-        </div>
-      </footer>
-    </div>
+        {/* Message Input */}
+        <footer className="shrink-0 border-t bg-muted/40 p-4">
+          <div className="relative">
+              {replyToMessage && (
+              <div className="flex items-center justify-between bg-muted p-2 rounded-t-md">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                  <Reply className="h-4 w-4 flex-shrink-0" />
+                  <div className="overflow-hidden">
+                      <p className="truncate font-bold text-sm">
+                      Replying to{' '}
+                      {replyToMessage.senderId === authUser.uid
+                          ? 'yourself'
+                          : otherUser.displayName.split(' ')[0]}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                      {replyToMessage.content}
+                      </p>
+                  </div>
+                  </div>
+                  <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setReplyToMessage(null)}
+                  >
+                  <X className="h-4 w-4" />
+                  </Button>
+              </div>
+              )}
+              <div className="flex items-end gap-2">
+                  <Button variant="ghost" size="icon" className="shrink-0">
+                      <Smile className="h-6 w-6" />
+                      <span className="sr-only">Emoji</span>
+                  </Button>
+                  <div className="relative w-full">
+                      <Textarea
+                          ref={inputRef}
+                          placeholder="Type a message..."
+                          className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-4 pr-12 shadow-sm focus:border-primary focus:ring-primary"
+                          value={inputValue}
+                          onChange={(e) => setInputValue(e.target.value)}
+                          onKeyDown={handleKeyPress}
+                          rows={1}
+                          onInput={(e) => {
+                          const target = e.target as HTMLTextAreaElement;
+                          target.style.height = 'auto';
+                          target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+                          }}
+                      />
+                      <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 shrink-0">
+                          <Paperclip className="h-6 w-6" />
+                          <span className="sr-only">Attach file</span>
+                      </Button>
+                  </div>
+                  <Button
+                      size="icon"
+                      className="rounded-full h-12 w-12 shrink-0"
+                      onClick={() => {
+                          if (inputValue.trim()) {
+                              handleSendMessage();
+                          }
+                          // Else: handle voice message recording in the future
+                      }}
+                  >
+                      {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                      <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
+                  </Button>
+              </div>
+          </div>
+        </footer>
+      </div>
     </>
   );
 }
