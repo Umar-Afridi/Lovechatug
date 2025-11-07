@@ -143,11 +143,15 @@ export default function ChatIdPage({
 
   // --- Voice Recording State ---
   const [isRecording, setIsRecording] = useState(false);
+  const [isRecordingLocked, setIsRecordingLocked] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [showLockIndicator, setShowLockIndicator] = useState(false);
+  const [gestureState, setGestureState] = useState({ isDragging: false, startY: 0, currentY: 0 });
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -389,12 +393,12 @@ export default function ChatIdPage({
       return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
   
-    const sendAudioMessage = useCallback(async (audioBlob: Blob) => {
+  const sendAudioMessage = useCallback(async (audioBlob: Blob) => {
         if (!firestore || !chatId || !authUser || !otherUser || audioBlob.size === 0) return;
     
         const localMessageId = `local_${Date.now()}`;
         const isOtherUserOnline = otherUser?.isOnline ?? false;
-    
+        
         // 1. Optimistic UI Update: Add a temporary message with a local blob URL
         const optimisticMessage: MessageType = {
             id: localMessageId,
@@ -404,7 +408,7 @@ export default function ChatIdPage({
             type: 'audio',
             mediaUrl: URL.createObjectURL(audioBlob), // Use local blob URL for immediate playback
             status: 'sent', // Will be updated later
-            isUploading: false, 
+            isUploading: false,
         };
         setMessages(prev => [...prev, optimisticMessage]);
 
@@ -467,6 +471,9 @@ export default function ChatIdPage({
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
             
+            mediaRecorderRef.current = recorder;
+            audioChunksRef.current = [];
+            
             recorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     audioChunksRef.current.push(event.data);
@@ -474,16 +481,15 @@ export default function ChatIdPage({
             };
             
             recorder.onstart = () => {
-                audioChunksRef.current = [];
                 setIsRecording(true);
-                setRecordingDuration(0); // Reset duration
+                setRecordingDuration(0); 
                 recordingIntervalRef.current = setInterval(() => {
                     setRecordingDuration(prev => prev + 1);
                 }, 1000);
             };
 
             recorder.start();
-            mediaRecorderRef.current = recorder;
+            setShowLockIndicator(true);
 
         } catch (error) {
             console.error("Error starting recording:", error);
@@ -491,60 +497,92 @@ export default function ChatIdPage({
         }
     }, [isRecording, toast]);
 
-  const stopRecording = useCallback(async (send: boolean) => {
-      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
-          return;
-      }
-      
-      if (recordingIntervalRef.current) {
-          clearInterval(recordingIntervalRef.current);
-      }
+    const stopRecording = useCallback(async (send: boolean) => {
+        if (longPressTimeoutRef.current) {
+            clearTimeout(longPressTimeoutRef.current);
+        }
+        if (recordingIntervalRef.current) {
+            clearInterval(recordingIntervalRef.current);
+        }
 
-      return new Promise<void>((resolve) => {
-          mediaRecorderRef.current!.onstop = async () => {
-              const tracks = mediaRecorderRef.current?.stream.getTracks() ?? [];
-              tracks.forEach(track => track.stop());
+        if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+             // Clean up UI state just in case
+            setIsRecording(false);
+            setIsRecordingLocked(false);
+            setShowLockIndicator(false);
+            setGestureState({ isDragging: false, startY: 0, currentY: 0 });
+            return;
+        }
 
-              if (send) {
-                  const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                   if (audioBlob.size > 100) { // Only send if there is actual data
-                      await sendAudioMessage(audioBlob);
-                  }
-              }
-              
-              // Reset all states
-              audioChunksRef.current = [];
-              setIsRecording(false);
-              setRecordingDuration(0);
-              mediaRecorderRef.current = null;
-              resolve();
-          };
-          
-          if (mediaRecorderRef.current?.state === 'recording') {
-              mediaRecorderRef.current.stop();
-          } else {
-               // Clean up state even if recorder wasn't active
-              setIsRecording(false);
-              setRecordingDuration(0);
-              resolve();
-          }
-      });
-  }, [sendAudioMessage]);
-  
-  // Event Handlers for Mic Button
-  const handleMicButtonPress = (e: React.MouseEvent | React.TouchEvent) => {
-      e.preventDefault();
-      startRecording();
-  };
+        return new Promise<void>((resolve) => {
+            mediaRecorderRef.current!.onstop = async () => {
+                const tracks = mediaRecorderRef.current?.stream.getTracks() ?? [];
+                tracks.forEach(track => track.stop());
 
-  const handleMicButtonRelease = (e: React.MouseEvent | React.TouchEvent) => {
-      e.preventDefault();
-      if (isRecording) {
-          stopRecording(true); // Send the recording on release
-      }
-  };
+                if (send) {
+                    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                    if (audioBlob.size > 100) { 
+                        await sendAudioMessage(audioBlob);
+                    }
+                }
+                
+                // Reset all states
+                audioChunksRef.current = [];
+                setIsRecording(false);
+                setIsRecordingLocked(false);
+                setShowLockIndicator(false);
+                setGestureState({ isDragging: false, startY: 0, currentY: 0 });
+                setRecordingDuration(0);
+                mediaRecorderRef.current = null;
+                resolve();
+            };
+            
+            if (mediaRecorderRef.current?.state === 'recording') {
+                mediaRecorderRef.current.stop();
+            } else {
+                resolve();
+            }
+        });
+    }, [sendAudioMessage]);
 
+    const handleMicButtonPress = (e: React.MouseEvent | React.TouchEvent) => {
+        e.preventDefault();
+        setGestureState({ 
+            isDragging: true, 
+            startY: 'clientY' in e ? e.clientY : e.targetTouches[0].clientY,
+            currentY: 'clientY' in e ? e.clientY : e.targetTouches[0].clientY
+        });
 
+        longPressTimeoutRef.current = setTimeout(() => {
+            startRecording();
+        }, 500); // 500ms for long press
+    };
+
+    const handleMicButtonRelease = (e: React.MouseEvent | React.TouchEvent) => {
+        e.preventDefault();
+        if (longPressTimeoutRef.current) {
+            clearTimeout(longPressTimeoutRef.current);
+        }
+        if (isRecording && !isRecordingLocked) {
+            stopRecording(true); 
+        }
+        setGestureState({ isDragging: false, startY: 0, currentY: 0 });
+        setShowLockIndicator(false);
+    };
+
+    const handleGestureMove = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!gestureState.isDragging || !isRecording) return;
+        
+        const currentY = 'clientY' in e ? e.clientY : e.targetTouches[0].clientY;
+        const diffY = gestureState.startY - currentY;
+
+        // Lock recording on swipe up
+        if (diffY > 50) { // 50px swipe up to lock
+            setIsRecordingLocked(true);
+            setShowLockIndicator(false); // Hide the indicator once locked
+            setGestureState(prev => ({ ...prev, isDragging: false })); // Stop tracking gesture
+        }
+    };
     // --- End Voice Recording Logic ---
 
     const handleSendMessage = () => {
@@ -843,13 +881,17 @@ export default function ChatIdPage({
                             <span>{formatRecordingTime(recordingDuration)}</span>
                         </div>
                     </div>
-                    <Button
-                        size="icon"
-                        className="rounded-full h-12 w-12 shrink-0 bg-primary"
-                        onClick={() => stopRecording(true)}
-                    >
-                        <Send className="h-6 w-6" />
-                    </Button>
+                     {isRecordingLocked ? (
+                        <Button
+                            size="icon"
+                            className="rounded-full h-12 w-12 shrink-0 bg-primary"
+                            onClick={() => stopRecording(true)}
+                        >
+                            <Send className="h-6 w-6" />
+                        </Button>
+                    ) : (
+                         <div className="w-12 h-12 shrink-0" />
+                    )}
                 </div>
             ) : (
                 <div className="relative">
@@ -910,17 +952,27 @@ export default function ChatIdPage({
                         </div>
 
                         <div className="relative">
+                            {showLockIndicator && !isRecordingLocked && (
+                                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-70">
+                                    <div className="bg-muted p-2 rounded-full">
+                                        <Lock className="h-5 w-5" />
+                                    </div>
+                                    <ArrowUp className="h-4 w-4 animate-bounce" />
+                                </div>
+                            )}
                              <Button
                                 size="icon"
                                 className={cn(
                                     "rounded-full h-12 w-12 shrink-0 transition-transform duration-200",
-                                    isRecording && "scale-125 bg-destructive"
+                                    isRecording && !isRecordingLocked && "scale-125"
                                 )}
                                 onClick={inputValue.trim() ? handleSendMessage : undefined}
                                 onMouseDown={!inputValue.trim() ? handleMicButtonPress : undefined}
                                 onMouseUp={!inputValue.trim() ? handleMicButtonRelease : undefined}
+                                onMouseMove={!inputValue.trim() ? handleGestureMove : undefined}
                                 onTouchStart={!inputValue.trim() ? handleMicButtonPress : undefined}
                                 onTouchEnd={!inputValue.trim() ? handleMicButtonRelease : undefined}
+                                onTouchMove={!inputValue.trim() ? handleGestureMove : undefined}
                             >
                                 {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
                                 <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
@@ -934,3 +986,5 @@ export default function ChatIdPage({
     </>
   );
 }
+
+    
