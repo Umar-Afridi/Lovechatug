@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot, getDocs, writeBatch, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot, getDocs, writeBatch, setDoc, serverTimestamp, getDoc as getDocNonRealTime } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -120,11 +120,18 @@ export default function FriendsPage() {
         // Add chatId to both users' profiles
         batch.update(currentUserRef, { chatIds: arrayUnion(chatId) });
         batch.update(friendUserRef, { chatIds: arrayUnion(chatId) });
-
-        const currentUserSnap = await getDoc(currentUserRef);
-        const friendUserSnap = await getDoc(friendUserRef);
+        
+        // Use a non-realtime get to avoid conflicts with listeners
+        const currentUserSnap = await getDocNonRealTime(currentUserRef);
+        const friendUserSnap = await getDocNonRealTime(friendUserRef);
+        
         const currentUserProfile = currentUserSnap.data() as UserProfile;
         const friendUserProfile = friendUserSnap.data() as UserProfile;
+        
+        if (!currentUserProfile || !friendUserProfile) {
+            toast({ title: 'Error', description: 'Could not find user profiles to create chat.', variant: 'destructive' });
+            return;
+        }
 
         batch.set(chatRef, {
           members: [user.uid, request.senderId],
@@ -214,5 +221,3 @@ export default function FriendsPage() {
     </ScrollArea>
   );
 }
-
-    

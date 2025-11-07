@@ -6,7 +6,7 @@ import { Search, MessageSquare, Users, UserPlus, Phone, Settings } from 'lucide-
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { Chat, UserProfile } from '@/lib/types';
+import type { Chat, UserProfile, FriendRequest } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import GroupsPage from './groups/page';
@@ -15,7 +15,7 @@ import CallsPage from './calls/page';
 import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, onSnapshot, doc, query, where, getDocs, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, query, where, getDocs, getDoc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
@@ -168,6 +168,7 @@ export default function ChatPage() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [loadingChats, setLoadingChats] = useState(true);
   const [requestCount, setRequestCount] = useState(0);
+  const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
   const { toast } = useToast();
   
   const navigationItems = [
@@ -268,24 +269,36 @@ export default function ChatPage() {
    useEffect(() => {
     if (!firestore || !user?.uid) return;
 
-    const requestsRef = collection(firestore, 'friendRequests');
-    const q = query(requestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
+    // Listener for incoming friend requests (for the badge count)
+    const incomingRequestsRef = collection(firestore, 'friendRequests');
+    const qIncoming = query(incomingRequestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
 
-    const unsubscribe = onSnapshot(q, 
+    const unsubscribeIncoming = onSnapshot(qIncoming, 
       (snapshot) => {
         setRequestCount(snapshot.size);
       },
       (serverError) => {
-        const permissionError = new FirestorePermissionError({
-            path: requestsRef.path,
-            operation: 'list',
-        });
+        const permissionError = new FirestorePermissionError({ path: incomingRequestsRef.path, operation: 'list' });
         errorEmitter.emit('permission-error', permissionError);
-        console.error("Error fetching friend request count:", serverError);
       }
     );
+    
+    // Listener for requests sent by the current user (to manage button state)
+    const sentRequestsRef = collection(firestore, 'friendRequests');
+    const qSent = query(sentRequestsRef, where('senderId', '==', user.uid));
+    
+    const unsubscribeSent = onSnapshot(qSent, (snapshot) => {
+        const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequest));
+        setSentRequests(requests);
+    }, (serverError) => {
+        const permissionError = new FirestorePermissionError({ path: sentRequestsRef.path, operation: 'list' });
+        errorEmitter.emit('permission-error', permissionError);
+    });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeIncoming();
+      unsubscribeSent();
+    };
   }, [firestore, user]);
 
   const filteredChats = useMemo(() => {
@@ -325,6 +338,46 @@ export default function ChatPage() {
         }
       }
     };
+    
+  const handleSendRequest = async (receiverId: string) => {
+      if (!firestore || !user) return;
+      const requestsRef = collection(firestore, 'friendRequests');
+      const newRequest = {
+          senderId: user.uid,
+          receiverId: receiverId,
+          status: 'pending' as const
+      };
+      
+      try {
+          await addDoc(requestsRef, newRequest);
+          toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
+      } catch (error) {
+          console.error("Error sending friend request:", error);
+          const permissionError = new FirestorePermissionError({ path: requestsRef.path, operation: 'create', requestResourceData: newRequest });
+          errorEmitter.emit('permission-error', permissionError);
+          toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive'});
+      }
+  };
+  
+  const handleCancelRequest = async (receiverId: string) => {
+      if (!firestore || !user) return;
+      
+      const requestToCancel = sentRequests.find(req => req.receiverId === receiverId);
+      if (!requestToCancel || !requestToCancel.id) return;
+      
+      const requestRef = doc(firestore, 'friendRequests', requestToCancel.id);
+      
+      try {
+          await deleteDoc(requestRef);
+          toast({ title: 'Request Cancelled' });
+      } catch(error) {
+           console.error("Error cancelling friend request:", error);
+           const permissionError = new FirestorePermissionError({ path: requestRef.path, operation: 'delete' });
+           errorEmitter.emit('permission-error', permissionError);
+           toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
+      }
+  }
+
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
@@ -347,6 +400,8 @@ export default function ChatPage() {
         <ScrollArea className="flex-1">
         {searchResults.map(foundUser => {
             const isFriend = profile?.friends?.includes(foundUser.uid);
+            const hasSentRequest = sentRequests.some(req => req.receiverId === foundUser.uid);
+            
             return (
             <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
                 <div className="flex items-center gap-4">
@@ -363,8 +418,10 @@ export default function ChatPage() {
                     <Button asChild size="sm">
                         <Link href={`/chat/${foundUser.uid}`}>Message</Link>
                     </Button>
+                ) : hasSentRequest ? (
+                    <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel Request</Button>
                 ) : (
-                    <Button size="sm">Add Request</Button>
+                    <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>Add Request</Button>
                 )}
             </div>
             );
