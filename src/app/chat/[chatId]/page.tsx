@@ -144,7 +144,7 @@ export default function ChatIdPage({
 }: {
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
-  const { chatId: otherUserIdFromParams } = params;
+  const { chatId: otherUserIdFromParams } = React.use(params);
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -472,7 +472,7 @@ export default function ChatIdPage({
         setIsRecordingLocked(false);
         setRecordingStartTime(null);
         setRecordingDuration(0);
-    }, [chatId, authUser]);
+    }, [chatId, authUser, otherUser, firestore]);
 
     const handleLockRecording = () => {
         setIsRecordingLocked(true);
