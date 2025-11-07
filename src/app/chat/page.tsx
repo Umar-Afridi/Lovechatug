@@ -55,6 +55,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
                 // Add other required fields with default values
                 email: '',
                 username: '',
+                chatIds: [],
              });
         }
 
@@ -209,8 +210,16 @@ export default function ChatPage() {
                     if (chatDoc.exists()) {
                         const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
                         setChats(prevChats => {
-                            const otherChats = prevChats.filter(c => c.id !== chatDoc.id);
-                            return [...otherChats, chatData];
+                            const chatIndex = prevChats.findIndex(c => c.id === chatDoc.id);
+                            if (chatIndex > -1) {
+                                // Chat exists, update it in place
+                                const newChats = [...prevChats];
+                                newChats[chatIndex] = chatData;
+                                return newChats;
+                            } else {
+                                // New chat, add it to the list
+                                return [...prevChats, chatData];
+                            }
                         });
                     }
                 }));
