@@ -38,7 +38,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -92,7 +91,7 @@ async function getOrCreateChat(
         
         // 2. Add chatId to both users' profiles
         const currentUserRef = doc(firestore, 'users', currentUser.uid);
-        const otherUserRef = doc(firestore, 'users', otherUser.uid);
+        const otherUserRef = doc(firestore, 'users', otherUserId);
         batch.update(currentUserRef, { chatIds: arrayUnion(chatId) });
         batch.update(otherUserRef, { chatIds: arrayUnion(chatId) });
 
@@ -465,7 +464,7 @@ export default function ChatIdPage({
     />
     <div className="flex h-screen flex-col bg-background">
        {/* Chat Header */}
-        <header className="flex items-center gap-4 border-b bg-muted/40 px-4 py-3 shrink-0">
+        <header className="flex shrink-0 items-center gap-4 border-b bg-muted/40 px-4 py-3">
             <Button variant="ghost" size="icon" className="md:hidden" onClick={() => router.push('/chat')}>
                 <ArrowLeft className="h-5 w-5" />
                 <span className="sr-only">Back</span>
@@ -515,7 +514,7 @@ export default function ChatIdPage({
 
       {/* Messages Area */}
        <main className="flex-1 overflow-y-auto" ref={viewportRef}>
-          <div className="p-6 space-y-2">
+          <div className="space-y-2 p-6">
             {messages.map((msg) => (
               <div
                 key={msg.id}
@@ -528,24 +527,24 @@ export default function ChatIdPage({
                   onTouchEnd={() => handleTouchEnd(msg)}
                 >
                   <div
-                    className={`max-w-xs rounded-lg px-3 py-2 text-sm lg:max-w-md flex flex-col ${
+                    className={`flex max-w-xs flex-col rounded-lg px-3 py-2 text-sm lg:max-w-md ${
                       msg.senderId === authUser?.uid
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted'
                     }`}
                   >
                     {msg.replyTo && (
-                      <div className="p-2 rounded-md bg-black/10 border-l-2 border-primary-foreground/50 mb-1">
+                      <div className="mb-1 rounded-md border-l-2 border-primary-foreground/50 bg-black/10 p-2">
                         <p className="font-bold text-xs">
                           {msg.replyTo.senderId === authUser.uid ? 'You' : otherUser.displayName.split(' ')[0]}
                         </p>
-                        <p className="text-xs opacity-80 truncate">{msg.replyTo.content}</p>
+                        <p className="truncate text-xs opacity-80">{msg.replyTo.content}</p>
                       </div>
                     )}
                     <div className="flex items-end gap-2">
-                        <p className="whitespace-pre-wrap flex-1">{msg.content}</p>
-                        <div className="flex items-center gap-1 shrink-0">
-                            <span className="text-[10px] text-primary-foreground/70 -mb-1">
+                        <p className="flex-1 whitespace-pre-wrap">{msg.content}</p>
+                        <div className="flex shrink-0 items-center gap-1">
+                            <span className="-mb-1 text-[10px] text-primary-foreground/70">
                                 {formatTimestamp(msg.timestamp)}
                             </span>
                             {msg.senderId === authUser?.uid && (
@@ -561,16 +560,16 @@ export default function ChatIdPage({
         </main>
 
       {/* Message Input */}
-      <footer className="border-t bg-muted/40 p-2 shrink-0">
+      <footer className="shrink-0 border-t bg-muted/40 p-2">
          {replyToMessage && (
-            <div className="bg-muted p-2 rounded-t-lg flex items-center justify-between">
+            <div className="flex items-center justify-between rounded-t-lg bg-muted p-2">
                 <div className="flex items-center gap-2 overflow-hidden">
                     <Reply className="h-4 w-4 flex-shrink-0" />
                     <div className="overflow-hidden">
-                        <p className="font-bold text-sm truncate">
+                        <p className="truncate font-bold text-sm">
                             Replying to {replyToMessage.senderId === authUser.uid ? 'yourself' : otherUser.displayName.split(' ')[0]}
                         </p>
-                        <p className="text-xs text-muted-foreground truncate">{replyToMessage.content}</p>
+                        <p className="truncate text-xs text-muted-foreground">{replyToMessage.content}</p>
                     </div>
                 </div>
                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setReplyToMessage(null)}>
@@ -579,14 +578,14 @@ export default function ChatIdPage({
             </div>
         )}
         <div className="relative flex items-center p-2">
-          <Button variant="ghost" size="icon" className="absolute left-1 bottom-3">
+          <Button variant="ghost" size="icon" className="absolute bottom-3 left-1">
             <Smile className="h-5 w-5" />
             <span className="sr-only">Emoji</span>
           </Button>
           <Textarea 
             ref={inputRef}
             placeholder="Type a message..." 
-            className="pl-12 pr-24 resize-none min-h-[40px] max-h-[120px] py-2"
+            className="min-h-[40px] max-h-[120px] resize-none py-2 pl-12 pr-24"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
@@ -597,7 +596,7 @@ export default function ChatIdPage({
                 target.style.height = `${target.scrollHeight}px`;
             }}
           />
-          <div className="absolute right-1 bottom-1 flex items-center">
+          <div className="absolute bottom-1 right-1 flex items-center">
             <Button variant="ghost" size="icon">
               <Paperclip className="h-5 w-5" />
               <span className="sr-only">Attach file</span>
