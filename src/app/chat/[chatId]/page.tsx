@@ -392,33 +392,31 @@ export default function ChatIdPage({
         return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     };
     
-    // Start recording after a short delay (long press)
     const startRecording = useCallback(async () => {
         if (isRecording) return;
         
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            setShowRecordingUI(true);
-            setIsRecording(true);
-            setRecordingStartTime(Date.now());
-            audioChunksRef.current = [];
-            
             mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            
             mediaRecorderRef.current.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     audioChunksRef.current.push(event.data);
                 }
             };
+            
+            mediaRecorderRef.current.onstart = () => {
+                audioChunksRef.current = [];
+                setIsRecording(true);
+                setShowRecordingUI(true);
+                setRecordingStartTime(Date.now());
+            };
+
             mediaRecorderRef.current.start();
+
         } catch (error) {
             console.error("Error starting recording:", error);
             toast({ title: "Microphone Access Denied", description: "Please grant microphone access to record audio.", variant: "destructive"});
-            // Reset all states
-            setIsRecording(false);
-            setShowRecordingUI(false);
-            setIsRecordingLocked(false);
-            setRecordingStartTime(null);
-            if (recordingPressTimerRef.current) clearTimeout(recordingPressTimerRef.current);
             isPressingMic.current = false;
         }
     }, [isRecording, toast]);
@@ -431,28 +429,32 @@ export default function ChatIdPage({
 
         return new Promise<void>((resolve) => {
             mediaRecorderRef.current!.onstop = async () => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
-                
-                if (send && audioBlob.size > 100) { // Only send if there's actual data
-                    await sendAudioMessage(audioBlob);
+                const tracks = mediaRecorderRef.current?.stream.getTracks() ?? [];
+                tracks.forEach(track => track.stop());
+
+                if (send) {
+                    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                     if (audioBlob.size > 100) { 
+                        await sendAudioMessage(audioBlob);
+                    }
                 }
                 
-                // Cleanup
                 audioChunksRef.current = [];
-                mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop());
-                
                 setIsRecording(false);
                 setIsRecordingLocked(false);
                 setShowRecordingUI(false);
                 setRecordingStartTime(null);
                 setRecordingDuration(0);
                 if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+                if (recordingPressTimerRef.current) clearTimeout(recordingPressTimerRef.current);
                 isPressingMic.current = false;
                 resolve();
             };
             
             if (mediaRecorderRef.current?.state === 'recording') {
                 mediaRecorderRef.current.stop();
+            } else {
+                resolve();
             }
         });
     }, []);
@@ -521,7 +523,7 @@ export default function ChatIdPage({
     // --- Gesture Handling for Mic Button ---
 
     const handleMicButtonPress = useCallback((event: React.MouseEvent | React.TouchEvent) => {
-        if (inputValue.trim()) return; // Don't record if there's text
+        if (inputValue.trim() || isRecording) return; 
         event.preventDefault();
         isPressingMic.current = true;
 
@@ -529,62 +531,56 @@ export default function ChatIdPage({
         const rect = target.getBoundingClientRect();
         setMicButtonPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
 
-        // Start a timer. If held for 500ms, it's a long press -> start recording.
         recordingPressTimerRef.current = setTimeout(() => {
             if (isPressingMic.current) {
                 startRecording();
             }
         }, 500);
-    }, [inputValue, startRecording]);
+    }, [inputValue, startRecording, isRecording]);
 
     const handleMicButtonRelease = useCallback(() => {
         isPressingMic.current = false;
-        // If timer hasn't fired yet, it was a short click, so clear it.
         if (recordingPressTimerRef.current) {
             clearTimeout(recordingPressTimerRef.current);
         }
-        // If recording was happening but wasn't locked, send it.
         if (isRecording && !isRecordingLocked) {
             stopRecording(true);
         }
     }, [isRecording, isRecordingLocked, stopRecording]);
 
     const handleGestureMove = useCallback((clientX: number, clientY: number) => {
-        if (!isRecording) return;
+        if (!isRecording || isRecordingLocked) return;
         
-        // Lock logic: moved up significantly
         if (clientY < micButtonPosition.y - 50) {
             setIsRecordingLocked(true);
         }
 
-        // Cancel logic: moved left significantly
         if (clientX < micButtonPosition.x - 100) {
              stopRecording(false);
         }
-    }, [isRecording, micButtonPosition, stopRecording]);
+    }, [isRecording, isRecordingLocked, micButtonPosition, stopRecording]);
 
-    const handleTouchMove = (event: TouchEvent) => {
+    const handleTouchMoveForMic = (event: TouchEvent) => {
         if (isPressingMic.current && isRecording) {
             const touch = event.touches[0];
             handleGestureMove(touch.clientX, touch.clientY);
         }
     };
     
-    const handleMouseMove = (event: MouseEvent) => {
+    const handleMouseMoveForMic = (event: MouseEvent) => {
         if (isPressingMic.current && isRecording) {
             handleGestureMove(event.clientX, event.clientY);
         }
     };
 
     useEffect(() => {
-        window.addEventListener('touchmove', handleTouchMove);
-        window.addEventListener('mousemove', handleMouseMove);
-        // Add mouseup listener to the window to catch releases outside the button
+        window.addEventListener('touchmove', handleTouchMoveForMic);
+        window.addEventListener('mousemove', handleMouseMoveForMic);
         window.addEventListener('mouseup', handleMicButtonRelease);
 
         return () => {
-            window.removeEventListener('touchmove', handleTouchMove);
-            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('touchmove', handleTouchMoveForMic);
+            window.removeEventListener('mousemove', handleMouseMoveForMic);
             window.removeEventListener('mouseup', handleMicButtonRelease);
         };
     }, [handleGestureMove, handleMicButtonRelease]);
@@ -679,7 +675,6 @@ export default function ChatIdPage({
         const diffX = currentX - touchStartX.current;
         touchMoveX.current = currentX;
 
-        // If drag is more than a small threshold, consider it a drag
         if (Math.abs(diffX) > 10) {
           isDraggingReply.current = true;
         }
@@ -695,15 +690,12 @@ export default function ChatIdPage({
 
         const diffX = touchMoveX.current - touchStartX.current;
 
-        // Only trigger reply on a significant right-to-left swipe that is considered a drag
         if (isDraggingReply.current && diffX < -50) { 
             setReplyToMessage(msg);
             inputRef.current?.focus();
         }
 
-        // Reset style regardless of whether it triggered a reply
         target.style.transform = 'translateX(0)';
-        // Reset touch points and dragging state
         touchStartX.current = 0;
         touchMoveX.current = 0;
         isDraggingReply.current = false;
