@@ -211,7 +211,8 @@ export default function ChatPage() {
     const unsubProfileAndChats = onSnapshot(userDocRef, (docSnap) => {
         if (docSnap.exists()) {
             const userProfile = docSnap.data() as UserProfile;
-            
+            setProfile(userProfile); // also update profile state here
+
             // Unsubscribe from old chat listeners
             unsubChats.forEach(unsub => unsub());
             unsubChats = [];
@@ -252,6 +253,8 @@ export default function ChatPage() {
             }
         }
     }, (error) => {
+        const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'get' });
+        errorEmitter.emit('permission-error', permissionError);
         console.error("Error setting up combined profile and chat listener:", error);
     });
 
@@ -284,6 +287,14 @@ export default function ChatPage() {
 
     return () => unsubscribe();
   }, [firestore, user]);
+
+  const filteredChats = useMemo(() => {
+    const blockedUsers = profile?.blockedUsers ?? [];
+    return chats.filter(chat => {
+        const otherMemberId = chat.members.find(id => id !== user?.uid);
+        return otherMemberId && !blockedUsers.includes(otherMemberId);
+    });
+  }, [chats, profile, user]);
 
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -368,7 +379,7 @@ export default function ChatPage() {
     
     switch (activeTab) {
         case 'inbox':
-            return (loadingChats || loadingProfile || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} currentUserId={user.uid} />);
+            return (loadingChats || loadingProfile || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={filteredChats} currentUserId={user.uid} />);
         case 'groups':
             return <GroupsPage />;
         case 'stories':

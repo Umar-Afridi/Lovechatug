@@ -101,23 +101,22 @@ export default function ChatSettingsPage({
     }
 
     const currentUserRef = doc(firestore, 'users', user.uid);
+    const payload = { blockedUsers: arrayUnion(otherUserId) };
 
     try {
-      await updateDoc(currentUserRef, {
-        blockedUsers: arrayUnion(otherUserId),
-      });
+      await updateDoc(currentUserRef, payload);
 
       toast({
         title: 'User Blocked',
         description: `${otherUser?.displayName} has been blocked.`,
       });
-      router.push('/chat');
+      router.push('/chat'); // Redirect to chat list after blocking
     } catch (error: any) {
       if (error.code === 'permission-denied') {
         const permissionError = new FirestorePermissionError({
           path: currentUserRef.path,
           operation: 'update',
-          requestResourceData: { blockedUsers: arrayUnion(otherUserId) },
+          requestResourceData: payload,
         });
         errorEmitter.emit('permission-error', permissionError);
       } else {

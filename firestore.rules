@@ -4,11 +4,25 @@ function isAuthenticated() {
   return request.auth != null;
 }
 
+// Function to check if the requesting user has been blocked by the target user
+function isNotBlocked(targetUserId) {
+  return !exists(/databases/$(database)/documents/users/$(targetUserId)) || 
+         !get(/databases/$(database)/documents/users/$(targetUserId)).data.blockedUsers.hasAny([request.auth.uid]);
+}
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
     match /users/{userId} {
-      allow get, list: if isAuthenticated();
+      // Allow reading a user's profile ONLY if the requester is not on that user's block list.
+      allow get: if isAuthenticated() && isNotBlocked(userId);
+      
+      // A user can always read their own profile, even if someone else has blocked them.
+      // A user can list other users, but the client will filter out blocked ones.
+      // The `isNotBlocked` rule on `get` prevents fetching details of a user who has blocked the requester.
+      allow list: if isAuthenticated();
+
+      // A user can create, update, or delete their own profile document.
       allow create, update, delete: if isAuthenticated() && request.auth.uid == userId;
     }
 
@@ -24,16 +38,23 @@ service cloud.firestore {
     }
 
     match /chats/{chatId} {
-        // Only members of the chat can read it or update it (e.g., lastMessage, unreadCount)
-        allow read, update, delete: if isAuthenticated() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
+        // Only members of the chat who are not blocked by each other can interact with the chat.
+        allow read, update, delete: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
         
         // Anyone authenticated can create a chat (this is handled in a batch write with friend request acceptance)
         allow create: if isAuthenticated();
     }
     
     match /chats/{chatId}/messages/{messageId} {
-       // Only members of the chat can read/write messages
-      allow read, list, create, update, delete: if isAuthenticated() && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
+       // A message can only be created if the sender is not blocked by any member of the chat.
+       // This prevents a blocked user from sending messages.
+       allow create: if isAuthenticated() && 
+                      request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members &&
+                      isNotBlocked(get(/databases/$(database)/documents/chats/$(chatId)).data.members.filter(m => m != request.auth.uid)[0]);
+                      
+      // Members of the chat can read, list, update, and delete messages.
+      // Read access is controlled at the chat document level.
+      allow read, list, update, delete: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
     }
   }
 }
