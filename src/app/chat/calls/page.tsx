@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Phone,
   Video,
@@ -33,7 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, where, onSnapshot, doc, getDocs, writeBatch, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDocs, writeBatch, orderBy, Unsubscribe } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile, Call } from '@/lib/types';
@@ -100,79 +100,12 @@ export default function CallsPage() {
   const [isClearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const callsQuery = useMemo(() => {
-    if (!user || !firestore) return null;
-    return query(
-        collection(firestore, 'calls'),
-        where('participants', 'array-contains', user.uid),
-        orderBy('timestamp', 'desc')
-    );
-  }, [user, firestore]);
-  
-  useEffect(() => {
-    if (!callsQuery || !firestore || !user) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
-    const unsubscribe = onSnapshot(callsQuery, async (querySnapshot) => {
-        if (querySnapshot.empty) {
-            setCalls([]);
-            setLoading(false);
-            return;
-        }
-
-        const callsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Call));
-
-        const otherUserIds = [
-            ...new Set(callsData.flatMap(call => [call.callerId, call.receiverId]))
-        ].filter(uid => uid !== user.uid);
-        
-        const userProfiles = new Map<string, UserProfile>();
-        if (otherUserIds.length > 0) {
-            const usersRef = collection(firestore, 'users');
-            const usersQuery = query(usersRef, where('uid', 'in', otherUserIds));
-            try {
-                const usersSnapshot = await getDocs(usersQuery);
-                usersSnapshot.docs.forEach(doc => {
-                    userProfiles.set(doc.data().uid, doc.data() as UserProfile);
-                });
-            } catch (e) {
-                 const permissionError = new FirestorePermissionError({ path: usersRef.path, operation: 'list' });
-                 errorEmitter.emit('permission-error', permissionError);
-            }
-        }
-
-        const populatedCalls = callsData.map(call => {
-            const otherUserId = call.callerId === user.uid ? call.receiverId : call.callerId;
-            return {
-                ...call,
-                otherUser: userProfiles.get(otherUserId),
-                 // Determine direction for the current user
-                direction: call.callerId === user.uid ? 'outgoing' : 'incoming',
-            };
-        }).filter(call => call.otherUser); // Filter out calls where other user data could not be fetched
-        
-        setCalls(populatedCalls as CallWithUser[]);
-        setLoading(false);
-
-    }, (serverError: any) => {
-        const permissionError = new FirestorePermissionError({ path: 'calls', operation: 'list' });
-        errorEmitter.emit('permission-error', permissionError);
-        setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [callsQuery, firestore, user]);
-
-
   const handleClearAll = async () => {
     if (!firestore || !user || calls.length === 0) return;
 
     const batch = writeBatch(firestore);
     calls.forEach(call => {
+        // We need to delete calls where user is either caller or receiver
         const callRef = doc(firestore, 'calls', call.id);
         batch.delete(callRef);
     });
@@ -196,6 +129,115 @@ export default function CallsPage() {
         setClearAllDialogOpen(false);
     }
   };
+  
+  const processCallDocs = useCallback(async (
+    callDocs: any[],
+    currentUserUid: string,
+    userProfilesMap: Map<string, UserProfile>
+  ): Promise<CallWithUser[]> => {
+    
+    const otherUserIds = [
+      ...new Set(callDocs.flatMap(call => [call.callerId, call.receiverId]))
+    ].filter(uid => uid !== currentUserUid && !userProfilesMap.has(uid));
+
+    if (otherUserIds.length > 0 && firestore) {
+      const usersRef = collection(firestore, 'users');
+      const usersQuery = query(usersRef, where('uid', 'in', otherUserIds));
+      try {
+        const usersSnapshot = await getDocs(usersQuery);
+        usersSnapshot.forEach(doc => {
+          userProfilesMap.set(doc.data().uid, doc.data() as UserProfile);
+        });
+      } catch (e) {
+        const permissionError = new FirestorePermissionError({ path: usersRef.path, operation: 'list' });
+        errorEmitter.emit('permission-error', permissionError);
+      }
+    }
+    
+    return callDocs.map(call => {
+      const otherUserId = call.callerId === currentUserUid ? call.receiverId : call.callerId;
+      return {
+        ...call,
+        otherUser: userProfilesMap.get(otherUserId),
+        direction: call.callerId === currentUserUid ? 'outgoing' : 'incoming',
+      };
+    }).filter(call => call.otherUser) as CallWithUser[];
+
+  }, [firestore]);
+
+
+  useEffect(() => {
+    if (!user || !firestore) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const callsRef = collection(firestore, 'calls');
+
+    const incomingQuery = query(callsRef, where('receiverId', '==', user.uid));
+    const outgoingQuery = query(callsRef, where('callerId', '==', user.uid));
+    
+    let combinedCalls: Call[] = [];
+    const userProfiles = new Map<string, UserProfile>();
+
+    const handleSnapshot = async (
+        incomingSnapshot: any,
+        outgoingSnapshot: any
+    ) => {
+        setLoading(true);
+        const incomingDocs = incomingSnapshot.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+        const outgoingDocs = outgoingSnapshot.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+        
+        // Combine and remove duplicates
+        const allDocs = [...incomingDocs, ...outgoingDocs];
+        const uniqueDocs = Array.from(new Map(allDocs.map(item => [item.id, item])).values());
+
+        const populatedCalls = await processCallDocs(uniqueDocs, user.uid, userProfiles);
+        
+        // Sort by timestamp descending
+        populatedCalls.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+
+        setCalls(populatedCalls);
+        setLoading(false);
+    };
+
+    let unsubIncoming: Unsubscribe | null = null;
+    let unsubOutgoing: Unsubscribe | null = null;
+
+    const setupListeners = () => {
+        let incomingSnapshot: any = { docs: [] };
+        let outgoingSnapshot: any = { docs: [] };
+
+        unsubIncoming = onSnapshot(incomingQuery, (snapshot) => {
+            incomingSnapshot = snapshot;
+            handleSnapshot(incomingSnapshot, outgoingSnapshot);
+        }, (error) => {
+            console.error("Error fetching incoming calls:", error);
+            const permissionError = new FirestorePermissionError({ path: `calls where receiverId == ${user.uid}`, operation: 'list' });
+            errorEmitter.emit('permission-error', permissionError);
+            setLoading(false);
+        });
+
+        unsubOutgoing = onSnapshot(outgoingQuery, (snapshot) => {
+            outgoingSnapshot = snapshot;
+            handleSnapshot(incomingSnapshot, outgoingSnapshot);
+        }, (error) => {
+            console.error("Error fetching outgoing calls:", error);
+            const permissionError = new FirestorePermissionError({ path: `calls where callerId == ${user.uid}`, operation: 'list' });
+            errorEmitter.emit('permission-error', permissionError);
+            setLoading(false);
+        });
+    };
+
+    setupListeners();
+
+    return () => {
+        if (unsubIncoming) unsubIncoming();
+        if (unsubOutgoing) unsubOutgoing();
+    };
+
+  }, [user, firestore, processCallDocs]);
   
 
   return (
@@ -228,7 +270,7 @@ export default function CallsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setClearAllDialogOpen(true)} className="text-destructive">
+              <DropdownMenuItem onClick={() => setClearAllDialogOpen(true)} className="text-destructive" disabled={calls.length === 0}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 <span>Clear all call history</span>
               </DropdownMenuItem>
