@@ -628,7 +628,7 @@ export default function ChatIdPage({
             // Stop typing indicator
             const typingUpdate: { [key: string]: any } = {};
             typingUpdate[`typing.${authUser.uid}`] = false;
-            updateDoc(chatRef, typingUpdate);
+            await updateDoc(chatRef, typingUpdate);
             inputRef.current?.focus();
         }
     };
@@ -649,7 +649,7 @@ export default function ChatIdPage({
             clearTimeout(typingTimeoutRef.current);
         }
         typingTimeoutRef.current = setTimeout(() => {
-            const stopTypingUpdate: { [key-string]: any } = {};
+            const stopTypingUpdate: { [key: string]: any } = {};
             stopTypingUpdate[`typing.${authUser.uid}`] = false;
             updateDoc(chatRef, stopTypingUpdate);
         }, 2000); // 2 seconds timeout
