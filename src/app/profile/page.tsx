@@ -34,7 +34,7 @@ export default function ProfilePage() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
-  const [photoURL, setPhotoURL] = useState<string | null>('');
+  const [photoURL, setPhotoURL] = useState<string | null>(null);
   
   // State for the new image preview
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export default function ProfilePage() {
       // Set initial values from auth object
       setDisplayName(user.displayName ?? '');
       setEmail(user.email ?? '');
-      setPhotoURL(user.photoURL ?? '');
+      setPhotoURL(user.photoURL ?? null);
       
       // Fetch and set values from Firestore document
       const userDocRef = doc(firestore, 'users', user.uid);
@@ -112,7 +112,7 @@ export default function ProfilePage() {
     setNewPhotoPreview(null);
   };
   
-  const handleSaveChanges = async () => {
+ const handleSaveChanges = async () => {
     if (!user || !auth || !firestore) return;
 
     let finalPhotoURL: string | null = photoURL;
@@ -120,29 +120,33 @@ export default function ProfilePage() {
 
     // 1. Handle picture update if there's a new preview or a removal flag
     if (newPhotoPreview) {
-        const storage = getStorage();
-        const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
-        try {
-            await uploadString(photoRef, newPhotoPreview, 'data_url');
-            finalPhotoURL = await getDownloadURL(photoRef);
-            pictureUpdated = true;
-        } catch (error) {
-            console.error("Error uploading profile picture:", error);
-            toast({ title: "Upload Failed", description: "Could not upload your new profile picture.", variant: "destructive" });
-            return;
-        }
-    } else if (isRemovingPhoto) {
-        finalPhotoURL = null;
-        const storage = getStorage();
-        const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
-        try {
-            await deleteObject(photoRef);
-        } catch (error: any) {
-            if (error.code !== 'storage/object-not-found') {
-                console.warn("Could not delete old profile picture from storage:", error);
-            }
-        }
+      const storage = getStorage();
+      const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
+      try {
+        await uploadString(photoRef, newPhotoPreview, 'data_url');
+        finalPhotoURL = await getDownloadURL(photoRef);
         pictureUpdated = true;
+      } catch (error) {
+        console.error('Error uploading profile picture:', error);
+        toast({
+          title: 'Upload Failed',
+          description: 'Could not upload your new profile picture.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    } else if (isRemovingPhoto) {
+      finalPhotoURL = null;
+      const storage = getStorage();
+      const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
+      try {
+        await deleteObject(photoRef);
+      } catch (error: any) {
+        if (error.code !== 'storage/object-not-found') {
+          console.warn('Could not delete old profile picture from storage:', error);
+        }
+      }
+      pictureUpdated = true;
     }
 
     // 2. Prepare data for updates
@@ -249,7 +253,7 @@ export default function ProfilePage() {
                                 type="file" 
                                 ref={fileInputRef} 
                                 className="hidden" 
-                                accept="image/*"
+                                accept="image/png, image/jpeg, image/gif"
                                 onChange={handleFileChange}
                             />
                         </div>
