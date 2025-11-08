@@ -9,12 +9,12 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { Trash2, Edit } from 'lucide-react';
+import { Trash2, Edit, User as UserIcon } from 'lucide-react';
 
 interface ProfilePictureDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  currentPhotoURL: string;
+  currentPhotoURL: string | null;
   onRemove: () => void;
   onChange: () => void;
 }
@@ -27,14 +27,6 @@ export function ProfilePictureDialog({
   onChange,
 }: ProfilePictureDialogProps) {
 
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return 'U';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('');
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -43,9 +35,9 @@ export function ProfilePictureDialog({
         </DialogHeader>
         <div className="flex justify-center items-center my-8">
             <Avatar className="h-48 w-48 border-4 border-primary/20">
-                <AvatarImage src={currentPhotoURL} alt="Profile" />
-                <AvatarFallback className="text-6xl">
-                    {getInitials('User')}
+                <AvatarImage src={currentPhotoURL ?? undefined} alt="Profile" />
+                <AvatarFallback className="text-6xl bg-muted">
+                    <UserIcon className="h-24 w-24 text-muted-foreground" />
                 </AvatarFallback>
             </Avatar>
         </div>

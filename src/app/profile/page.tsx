@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ProfilePictureDialog } from '@/components/profile/profile-picture-dialog';
@@ -28,27 +29,34 @@ export default function ProfilePage() {
   
   const [isPictureDialogOpen, setPictureDialogOpen] = useState(false);
 
+  // States for current data from Firestore
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
   const [photoURL, setPhotoURL] = useState('');
   
+  // State for the new image preview
+  const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
+  const [isRemovingPhoto, setIsRemovingPhoto] = useState(false);
+  
+
   useEffect(() => {
     if (user && firestore) {
+      // Set initial values from auth object
       setDisplayName(user.displayName ?? '');
       setEmail(user.email ?? '');
       setPhotoURL(user.photoURL ?? '');
       
+      // Fetch and set values from Firestore document
       const userDocRef = doc(firestore, 'users', user.uid);
       getDoc(userDocRef).then(docSnap => {
           if (docSnap.exists()) {
               const data = docSnap.data();
+              setDisplayName(data.displayName ?? user.displayName ?? '');
               setUsername(data.username ?? '');
               setBio(data.bio ?? '');
-              if (data.photoURL) {
-                setPhotoURL(data.photoURL);
-              }
+              setPhotoURL(data.photoURL ?? user.photoURL ?? '');
           }
       });
     }
@@ -74,7 +82,6 @@ export default function ProfilePage() {
   };
 
   const handleAvatarClick = () => {
-    // Open the new dialog instead of the file input directly
     setPictureDialogOpen(true);
   };
   
@@ -88,10 +95,11 @@ export default function ProfilePage() {
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        const newPhotoURL = event.target?.result as string;
-        setPhotoURL(newPhotoURL);
-        // Immediately save the new photo
-        handleSaveProfilePicture(newPhotoURL);
+        const newPhotoDataUrl = event.target?.result as string;
+        // Set the preview, don't save yet
+        setNewPhotoPreview(newPhotoDataUrl);
+        setIsRemovingPhoto(false); // If we're changing, we're not removing
+        setPictureDialogOpen(false); // Close dialog after selecting
       };
       reader.readAsDataURL(file);
     }
@@ -99,66 +107,78 @@ export default function ProfilePage() {
   
   const handleRemovePicture = async () => {
     setPictureDialogOpen(false);
-    await handleSaveProfilePicture(''); // Save an empty string for photoURL
-  };
-  
-  const handleSaveProfilePicture = async (newPhotoURL: string) => {
-    if (!user || !auth || !firestore) return;
-    
-    setPhotoURL(newPhotoURL);
-
-    const userDocRef = doc(firestore, 'users', user.uid);
-    const updatedData = { photoURL: newPhotoURL };
-
-    try {
-        await updateDoc(userDocRef, updatedData);
-        if (newPhotoURL !== '') {
-            await updateProfile(user, { photoURL: newPhotoURL });
-        }
-        toast({
-            title: "Profile Picture Updated",
-            description: newPhotoURL === '' ? "Your profile picture has been removed." : "Your new profile picture has been saved.",
-        });
-    } catch (serverError: any) {
-        if (serverError.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-                path: userDocRef.path,
-                operation: 'update',
-                requestResourceData: updatedData,
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        } else {
-             toast({
-                variant: "destructive",
-                title: "Update Failed",
-                description: "Could not update your profile picture.",
-            });
-        }
-    }
+    // Set preview to null and flag for removal on save
+    setIsRemovingPhoto(true);
+    setNewPhotoPreview(null);
   };
   
   const handleSaveChanges = async () => {
     if (!user || !auth || !firestore) return;
+    
+    let finalPhotoURL = photoURL; // Start with the current photoURL
+    let pictureUpdated = false;
 
+    // 1. Handle picture update if there's a new preview or a removal flag
+    if (newPhotoPreview) {
+        const storage = getStorage();
+        const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
+        try {
+            await uploadString(photoRef, newPhotoPreview, 'data_url');
+            finalPhotoURL = await getDownloadURL(photoRef);
+            pictureUpdated = true;
+        } catch (error) {
+            console.error("Error uploading profile picture:", error);
+            toast({ title: "Upload Failed", description: "Could not upload your new profile picture.", variant: "destructive" });
+            return; // Stop saving if photo upload fails
+        }
+    } else if (isRemovingPhoto) {
+        finalPhotoURL = '';
+        const storage = getStorage();
+        const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
+        try {
+            // Attempt to delete existing photo from storage, but don't block if it fails
+            await deleteObject(photoRef);
+        } catch (error: any) {
+            if (error.code !== 'storage/object-not-found') {
+                console.warn("Could not delete old profile picture from storage:", error);
+            }
+        }
+        pictureUpdated = true;
+    }
+
+    // 2. Handle text fields update
     try {
-        // Only update display name in auth, as other fields are in Firestore
+        const updatedAuthProfile: { displayName?: string, photoURL?: string } = {};
         if (user.displayName !== displayName) {
-             await updateProfile(user, { displayName });
+            updatedAuthProfile.displayName = displayName;
+        }
+        if (pictureUpdated) {
+            updatedAuthProfile.photoURL = finalPhotoURL;
+        }
+        
+        if (Object.keys(updatedAuthProfile).length > 0) {
+            await updateProfile(user, updatedAuthProfile);
         }
 
         const userDocRef = doc(firestore, 'users', user.uid);
-        const updatedData = {
+        const updatedFirestoreData = {
             displayName: displayName,
             username: username.toLowerCase(),
             bio: bio,
+            photoURL: finalPhotoURL, // Always update with the final URL
         };
 
-        await updateDoc(userDocRef, updatedData);
+        await updateDoc(userDocRef, updatedFirestoreData);
         
         toast({
             title: "Profile Updated",
             description: "Your profile has been saved successfully.",
         });
+
+        // Reset preview state after successful save
+        setNewPhotoPreview(null);
+        setIsRemovingPhoto(false);
+        setPhotoURL(finalPhotoURL); // Update the main photoURL state
 
     } catch (error: any) {
         console.error("Error updating profile: ", error);
@@ -167,7 +187,7 @@ export default function ProfilePage() {
              const permissionError = new FirestorePermissionError({
                 path: `users/${user.uid}`,
                 operation: 'update',
-                requestResourceData: { displayName, username, bio },
+                requestResourceData: { displayName, username, bio, photoURL: finalPhotoURL },
             });
             errorEmitter.emit('permission-error', permissionError);
         } else {
@@ -188,12 +208,14 @@ export default function ProfilePage() {
     }
   };
 
+  const displayPhoto = newPhotoPreview ?? (isRemovingPhoto ? '' : photoURL);
+
   return (
     <>
         <ProfilePictureDialog 
             isOpen={isPictureDialogOpen}
             onOpenChange={setPictureDialogOpen}
-            currentPhotoURL={photoURL}
+            currentPhotoURL={displayPhoto}
             onRemove={handleRemovePicture}
             onChange={handleChangePicture}
         />
@@ -210,7 +232,7 @@ export default function ProfilePage() {
                     <div className="flex justify-center">
                         <div className="relative">
                             <Avatar className="h-32 w-32 cursor-pointer" onClick={handleAvatarClick}>
-                                <AvatarImage src={photoURL} alt={displayName} />
+                                <AvatarImage src={displayPhoto} alt={displayName} />
                                 <AvatarFallback className="text-4xl">
                                     {getInitials(displayName)}
                                 </AvatarFallback>
