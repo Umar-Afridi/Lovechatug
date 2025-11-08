@@ -221,7 +221,7 @@ export default function ChatIdPage({
 
   }, [firestore, authUser, otherUserIdFromParams, router, toast]);
 
-  // Real-time listener for chat document (for typing status and background)
+  // Real-time listener for chat document (for typing status)
   useEffect(() => {
       if (!firestore || !chatId) return;
 
@@ -558,12 +558,12 @@ export default function ChatIdPage({
     const handleSendMessage = () => {
       if (inputValue.trim() === '' || !firestore || !authUser || !chatId || !otherUser || !currentUser) return;
 
-      // Keep keyboard open by re-focusing
-      inputRef.current?.focus();
-
       const contentToSend = inputValue.trim();
       setInputValue(''); // Clear input immediately for better UX
       setTimeout(() => playSendMessageSound(), 50);
+
+      // Keep keyboard open by re-focusing
+      inputRef.current?.focus();
 
       const isOtherUserOnline = otherUser?.isOnline ?? false;
 
