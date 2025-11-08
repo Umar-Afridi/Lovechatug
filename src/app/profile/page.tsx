@@ -120,12 +120,12 @@ export default function ProfilePage() {
 
     // 1. Handle picture update if there's a new preview or a removal flag
     if (newPhotoPreview) {
+      pictureUpdated = true;
       const storage = getStorage();
       const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
       try {
         await uploadString(photoRef, newPhotoPreview, 'data_url');
         finalPhotoURL = await getDownloadURL(photoRef);
-        pictureUpdated = true;
       } catch (error) {
         console.error('Error uploading profile picture:', error);
         toast({
@@ -136,6 +136,7 @@ export default function ProfilePage() {
         return;
       }
     } else if (isRemovingPhoto) {
+      pictureUpdated = true;
       finalPhotoURL = null;
       const storage = getStorage();
       const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
@@ -146,25 +147,27 @@ export default function ProfilePage() {
           console.warn('Could not delete old profile picture from storage:', error);
         }
       }
-      pictureUpdated = true;
     }
 
     // 2. Prepare data for updates
     const updatedAuthProfile: { displayName?: string; photoURL?: string | null } = {};
-    const updatedFirestoreData: { displayName: string; username: string; bio: string; photoURL?: string | null } = {
+    if (user.displayName !== displayName) {
+        updatedAuthProfile.displayName = displayName;
+    }
+    if (pictureUpdated) {
+        updatedAuthProfile.photoURL = finalPhotoURL;
+    }
+    
+    // Always prepare Firestore data
+    const updatedFirestoreData: any = {
         displayName: displayName,
         username: username.toLowerCase(),
         bio: bio,
     };
-
-    if (user.displayName !== displayName) {
-        updatedAuthProfile.displayName = displayName;
-    }
-
     if (pictureUpdated) {
-        updatedAuthProfile.photoURL = finalPhotoURL;
         updatedFirestoreData.photoURL = finalPhotoURL;
     }
+
 
     // 3. Perform updates
     try {
