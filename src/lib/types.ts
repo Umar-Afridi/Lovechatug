@@ -8,7 +8,8 @@ export type UserProfile = {
   bio?: string;
   isOnline?: boolean;
   lastSeen?: any;
-  blockedUsers?: string[];
+  blockedUsers?: string[]; // Users this user has blocked
+  blockedBy?: string[];   // Users who have blocked this user
   chatIds?: string[]; 
   chatsCleared?: {
     [chatId: string]: any; // Store server timestamp for when a chat was cleared
@@ -50,6 +51,9 @@ export type Chat = {
   // New field for unread counts
   unreadCount?: {
     [key: string]: number; // key is userId, value is count
+  }
+  typing?: {
+    [key: string]: boolean;
   }
 };
 

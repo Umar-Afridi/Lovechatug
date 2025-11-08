@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
@@ -67,7 +67,7 @@ export default function ChatSettingsPage({
   }, [firestore, otherUserId, user, router, toast]);
 
   const handleBlockUser = async () => {
-    if (!firestore || !user || !otherUserId) {
+    if (!firestore || !user || !otherUser) {
       toast({
         title: 'Error',
         description: 'Cannot block user. Please try again.',
@@ -77,10 +77,16 @@ export default function ChatSettingsPage({
     }
 
     const currentUserRef = doc(firestore, 'users', user.uid);
-    const payload = { blockedUsers: arrayUnion(otherUserId) };
+    const otherUserRef = doc(firestore, 'users', otherUser.uid);
+    const batch = writeBatch(firestore);
+
+    // Add other user to current user's blockedUsers list
+    batch.update(currentUserRef, { blockedUsers: arrayUnion(otherUser.uid) });
+    // Add current user to other user's blockedBy list
+    batch.update(otherUserRef, { blockedBy: arrayUnion(user.uid) });
 
     try {
-      await updateDoc(currentUserRef, payload);
+      await batch.commit();
 
       toast({
         title: 'User Blocked',
@@ -90,9 +96,8 @@ export default function ChatSettingsPage({
     } catch (error: any) {
       if (error.code === 'permission-denied') {
         const permissionError = new FirestorePermissionError({
-          path: currentUserRef.path,
+          path: `batch operation for block`,
           operation: 'update',
-          requestResourceData: payload,
         });
         errorEmitter.emit('permission-error', permissionError);
       } else {
@@ -126,6 +131,10 @@ export default function ChatSettingsPage({
     // Remove each other from friends lists
     batch.update(currentUserRef, { friends: arrayRemove(otherUserId) });
     batch.update(otherUserRef, { friends: arrayRemove(user.uid) });
+    
+    // Also remove from chatIds list
+    batch.update(currentUserRef, { chatIds: arrayRemove(chatId) });
+    batch.update(otherUserRef, { chatIds: arrayRemove(chatId) });
 
     // Delete the chat document
     batch.delete(chatRef);

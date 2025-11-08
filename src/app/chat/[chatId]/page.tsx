@@ -39,6 +39,7 @@ import {
   Reply,
   Trash2,
   AlertCircle,
+  Ban,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
@@ -59,65 +60,6 @@ import Link from 'next/link';
 import { useSound } from '@/hooks/use-sound';
 import { cn } from '@/lib/utils';
 
-// Helper to get or create a chat
-async function getOrCreateChat(
-  firestore: any,
-  currentUser: UserProfile,
-  otherUser: UserProfile
-) {
-  const chatId = [currentUser.uid, otherUser.uid].sort().join('_');
-  const chatRef = doc(firestore, 'chats', chatId);
-  
-  try {
-    const chatSnap = await getDoc(chatRef);
-
-    if (!chatSnap.exists()) {
-        const batch = writeBatch(firestore);
-
-        // 1. Create the chat document
-        const chatData = {
-            members: [currentUser.uid, otherUser.uid],
-            createdAt: serverTimestamp(),
-            participantDetails: {
-                [currentUser.uid]: {
-                    displayName: currentUser.displayName,
-                    photoURL: currentUser.photoURL,
-                },
-                [otherUser.uid]: {
-                    displayName: otherUser.displayName,
-                    photoURL: otherUser.photoURL,
-                }
-            },
-            // Initialize unread counts
-            unreadCount: {
-                [currentUser.uid]: 0,
-                [otherUser.uid]: 0,
-            }
-        };
-        batch.set(chatRef, chatData);
-        
-        // 2. Add chatId to both users' profiles using set with merge
-        const currentUserRef = doc(firestore, 'users', currentUser.uid);
-        const otherUserRef = doc(firestore, 'users', otherUser.uid);
-        batch.set(currentUserRef, { chatIds: arrayUnion(chatId) }, { merge: true });
-        batch.set(otherUserRef, { chatIds: arrayUnion(chatId) }, { merge: true });
-
-        await batch.commit();
-    }
-    return chatId;
-  } catch (serverError: any) {
-     if (serverError.code === 'permission-denied') {
-        const permissionError = new FirestorePermissionError({
-            path: chatRef.path,
-            operation: 'get', 
-        });
-        errorEmitter.emit('permission-error', permissionError);
-     } else {
-        throw serverError; 
-     }
-     return null;
-  }
-}
 
 export default function ChatIdPage({
   params,
@@ -131,6 +73,7 @@ export default function ChatIdPage({
   const { toast } = useToast();
   
   const [chatId, setChatId] = useState<string | null>(null);
+  const [chatData, setChatData] = useState<ChatType | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
@@ -139,6 +82,11 @@ export default function ChatIdPage({
   const [inputValue, setInputValue] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<MessageType | null>(null);
 
+  // Block status state
+  const [amIBlocked, setAmIBlocked] = useState(false);
+  const [haveIBlocked, setHaveIBlocked] = useState(false);
+  const isBlocked = useMemo(() => amIBlocked || haveIBlocked, [amIBlocked, haveIBlocked]);
+
   // --- Voice Recording State ---
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -146,6 +94,7 @@ export default function ChatIdPage({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -158,6 +107,8 @@ export default function ChatIdPage({
   const playSendMessageSound = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/sound/short_click.mp3');
   const isFirstMessageLoad = useRef(true);
   
+  const isTyping = useMemo(() => chatData?.typing?.[otherUser?.uid ?? ''] === true, [chatData, otherUser]);
+
   // Swipe to go back logic for mobile
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
@@ -198,7 +149,14 @@ export default function ChatIdPage({
   }, [router]);
 
 
-  // Fetch users' profiles and determine chat ID
+  // Determine Chat ID
+  useEffect(() => {
+    if (!authUser || !otherUserIdFromParams) return;
+    const determinedChatId = [authUser.uid, otherUserIdFromParams].sort().join('_');
+    setChatId(determinedChatId);
+  }, [authUser, otherUserIdFromParams]);
+
+  // Fetch users' profiles, check block status
   useEffect(() => {
     if (!firestore || !authUser || !otherUserIdFromParams) return;
 
@@ -225,10 +183,10 @@ export default function ChatIdPage({
             setCurrentUser(currentUserData);
             setOtherUser(otherUserData);
 
-            const determinedChatId = await getOrCreateChat(firestore, currentUserData, otherUserData);
-            if (determinedChatId) {
-                setChatId(determinedChatId);
-            }
+            // Check block status
+            setHaveIBlocked(currentUserData.blockedUsers?.includes(otherUserIdFromParams) ?? false);
+            setAmIBlocked(currentUserData.blockedBy?.includes(otherUserIdFromParams) ?? false);
+
         } catch (error: any) {
             console.error("Error setting up chat page:", error);
             const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' });
@@ -239,31 +197,51 @@ export default function ChatIdPage({
     
     fetchProfilesAndSetupChat();
     
-    // Real-time listener for other user's profile changes (like online status)
-    const otherUserDocRef = doc(firestore, 'users', otherUserIdFromParams);
-    const unsubscribeUser = onSnapshot(otherUserDocRef, 
-        (docSnap) => {
-          if (docSnap.exists()) {
-            setOtherUser(docSnap.data() as UserProfile);
-          }
-        },
-        (error) => {
-            const permissionError = new FirestorePermissionError({
-                path: otherUserDocRef.path,
-                operation: 'get',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-            console.error("Error fetching other user's profile:", error);
+    // Real-time listener for other user's profile changes (like online status, block status)
+    const unsubCurrentUser = onSnapshot(doc(firestore, 'users', authUser.uid), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data() as UserProfile;
+            setCurrentUser(data);
+            setHaveIBlocked(data.blockedUsers?.includes(otherUserIdFromParams) ?? false);
+            setAmIBlocked(data.blockedBy?.includes(otherUserIdFromParams) ?? false);
         }
-    );
+    });
 
-    return () => unsubscribeUser();
+    const unsubOtherUser = onSnapshot(doc(firestore, 'users', otherUserIdFromParams), (docSnap) => {
+        if (docSnap.exists()) {
+            setOtherUser(docSnap.data() as UserProfile);
+        }
+    });
+
+    return () => {
+      unsubCurrentUser();
+      unsubOtherUser();
+    };
 
   }, [firestore, authUser, otherUserIdFromParams, router, toast]);
 
+  // Real-time listener for chat document (for typing status)
+  useEffect(() => {
+      if (!firestore || !chatId) return;
+
+      const chatRef = doc(firestore, 'chats', chatId);
+      const unsubscribe = onSnapshot(chatRef, (docSnap) => {
+          if (docSnap.exists()) {
+              setChatData(docSnap.data() as ChatType);
+          } else {
+              // Chat might not exist yet, this is handled by message sending creating it.
+              setChatData(null);
+          }
+      }, (error) => {
+          console.error("Error listening to chat document:", error);
+      });
+
+      return () => unsubscribe();
+  }, [firestore, chatId]);
+
   // Real-time listener for messages
   useEffect(() => {
-    if (!firestore || !chatId || !currentUser) return;
+    if (!firestore || !chatId || !currentUser || amIBlocked) return;
 
     setLoading(true);
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
@@ -300,11 +278,12 @@ export default function ChatIdPage({
     });
 
     return () => unsubscribe();
-  }, [firestore, chatId, currentUser, authUser, messages.length, playReceiveMessageSound]);
+  }, [firestore, chatId, currentUser, authUser, amIBlocked, messages.length, playReceiveMessageSound]);
+
 
   // Mark messages as read and reset unread count
   useEffect(() => {
-    if (!firestore || !chatId || !authUser) return;
+    if (!firestore || !chatId || !authUser || isBlocked) return;
     
     const unreadMessages = messages.filter(
         (msg) => msg.status !== 'read' && msg.senderId !== authUser.uid
@@ -339,12 +318,12 @@ export default function ChatIdPage({
         console.warn("Could not reset unread count:", serverError);
     });
 
-  }, [messages, firestore, chatId, authUser]);
+  }, [messages, firestore, chatId, authUser, isBlocked]);
   
   const prevOtherUserIsOnline = useRef(otherUser?.isOnline);
   // Update sent messages to delivered when the other user comes online
   useEffect(() => {
-    if (!firestore || !chatId || !authUser || !otherUser) return;
+    if (!firestore || !chatId || !authUser || !otherUser || isBlocked) return;
 
     // Check if the user just came online from an offline state
     if (otherUser.isOnline && !prevOtherUserIsOnline.current) {
@@ -375,7 +354,7 @@ export default function ChatIdPage({
 
     // Update the ref for the next render
     prevOtherUserIsOnline.current = otherUser.isOnline;
-  }, [otherUser, firestore, chatId, authUser]);
+  }, [otherUser, firestore, chatId, authUser, isBlocked]);
   
    useEffect(() => {
     // Scroll to bottom when messages change
@@ -426,8 +405,25 @@ export default function ChatIdPage({
             // 2. Upload the file
             const snapshot = await uploadBytes(audioFileRef, audioBlob);
             const downloadURL = await getDownloadURL(snapshot.ref);
+            
+            // 3. Ensure chat document exists before adding message
+            const chatRef = doc(firestore, 'chats', chatId);
+            const chatSnap = await getDoc(chatRef);
+             if (!chatSnap.exists()) {
+                const chatData = {
+                    members: [authUser.uid, otherUser.uid],
+                    createdAt: serverTimestamp(),
+                    participantDetails: {
+                        [authUser.uid]: { displayName: currentUser?.displayName, photoURL: currentUser?.photoURL },
+                        [otherUser.uid]: { displayName: otherUser.displayName, photoURL: otherUser.photoURL }
+                    },
+                    unreadCount: { [authUser.uid]: 0, [otherUser.uid]: 0, },
+                    typing: { [authUser.uid]: false, [otherUser.uid]: false, }
+                };
+                await setDoc(chatRef, chatData);
+            }
 
-            // 3. Add the real message to Firestore with the correct structure
+            // 4. Add the real message to Firestore with the correct structure
             const messagesRef = collection(firestore, 'chats', chatId, 'messages');
             const newAudioMessageData = {
                 senderId: authUser.uid,
@@ -440,15 +436,14 @@ export default function ChatIdPage({
             
             const docRef = await addDoc(messagesRef, newAudioMessageData);
 
-            // 4. Update the local message with the final ID from firestore
+            // 5. Update the local message with the final ID from firestore
              setMessages(prev => prev.map(msg => 
                 msg.id === localMessageId 
                 ? { ...msg, id: docRef.id, uploadFailed: false, mediaUrl: downloadURL } 
                 : msg
             ));
             
-            // 5. Update last message and unread count
-            const chatRef = doc(firestore, 'chats', chatId);
+            // 6. Update last message and unread count
             const lastMessageData = {
                 content: '🎤 Voice message',
                 timestamp: serverTimestamp(),
@@ -469,7 +464,7 @@ export default function ChatIdPage({
             ));
             toast({ title: 'Error', description: 'Could not send voice message.', variant: 'destructive' });
         }
-    }, [firestore, chatId, authUser, otherUser, toast]);
+    }, [firestore, chatId, authUser, otherUser, toast, currentUser]);
 
     const stopRecording = useCallback(async (send: boolean) => {
         if (recordingIntervalRef.current) {
@@ -553,81 +548,120 @@ export default function ChatIdPage({
     };
     // --- End Voice Recording Logic ---
 
-    const handleSendMessage = () => {
-    if (inputValue.trim() === '' || !firestore || !authUser || !chatId || !otherUser) return;
-    
-    playSendMessageSound();
+    const handleSendMessage = async () => {
+        if (inputValue.trim() === '' || !firestore || !authUser || !chatId || !otherUser || !currentUser) return;
+        
+        playSendMessageSound();
 
-    const messagesRef = collection(firestore, 'chats', chatId, 'messages');
-    const chatRef = doc(firestore, 'chats', chatId);
-    
-    const contentToSend = inputValue.trim();
-    setInputValue(''); // Clear input immediately for better UX
-    
-    const isOtherUserOnline = otherUser?.isOnline ?? false;
+        const contentToSend = inputValue.trim();
+        setInputValue(''); // Clear input immediately for better UX
+        
+        const isOtherUserOnline = otherUser?.isOnline ?? false;
 
-    const newMessage: any = {
-      senderId: authUser.uid,
-      content: contentToSend,
-      timestamp: serverTimestamp(),
-      type: 'text' as const,
-      status: isOtherUserOnline ? 'delivered' : 'sent'
-    };
-    
-    if (replyToMessage) {
-        newMessage.replyTo = {
-            messageId: replyToMessage.id,
-            content: replyToMessage.content,
-            senderId: replyToMessage.senderId,
-        };
-        setReplyToMessage(null); // Reset reply state after sending
-    }
-
-    addDoc(messagesRef, newMessage).catch((serverError) => {
-        toast({
-          title: "Error Sending Message",
-          description: "Could not send your message. Please try again.",
-          variant: "destructive",
-        });
-
-        const permissionError = new FirestorePermissionError({
-            path: messagesRef.path,
-            operation: 'create',
-            requestResourceData: newMessage,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    });
-    
-    const lastMessageData = {
-        content: newMessage.content,
+        const newMessage: any = {
+        senderId: authUser.uid,
+        content: contentToSend,
         timestamp: serverTimestamp(),
-        senderId: newMessage.senderId
+        type: 'text' as const,
+        status: isOtherUserOnline ? 'delivered' : 'sent'
+        };
+        
+        if (replyToMessage) {
+            newMessage.replyTo = {
+                messageId: replyToMessage.id,
+                content: replyToMessage.content,
+                senderId: replyToMessage.senderId,
+            };
+            setReplyToMessage(null); // Reset reply state after sending
+        }
+
+        const chatRef = doc(firestore, 'chats', chatId);
+        const messagesRef = collection(firestore, 'chats', chatId, 'messages');
+
+        try {
+            // Ensure chat document exists before adding a message
+            const chatSnap = await getDoc(chatRef);
+            if (!chatSnap.exists()) {
+                const chatData = {
+                    members: [authUser.uid, otherUser.uid],
+                    createdAt: serverTimestamp(),
+                    participantDetails: {
+                        [authUser.uid]: { displayName: currentUser.displayName, photoURL: currentUser.photoURL },
+                        [otherUser.uid]: { displayName: otherUser.displayName, photoURL: otherUser.photoURL }
+                    },
+                    unreadCount: { [authUser.uid]: 0, [otherUser.uid]: 0, },
+                    typing: { [authUser.uid]: false, [otherUser.uid]: false, }
+                };
+                await setDoc(chatRef, chatData);
+            }
+
+            // Add the message
+            await addDoc(messagesRef, newMessage);
+
+            // Update last message and unread count
+            const lastMessageData = {
+                content: newMessage.content,
+                timestamp: serverTimestamp(),
+                senderId: newMessage.senderId
+            };
+            const unreadCountUpdate: { [key: string]: any } = {
+                lastMessage: lastMessageData
+            };
+            unreadCountUpdate[`unreadCount.${otherUser.uid}`] = increment(1);
+
+            await updateDoc(chatRef, unreadCountUpdate);
+
+        } catch (serverError: any) {
+            toast({
+            title: "Error Sending Message",
+            description: "Could not send your message. Please try again.",
+            variant: "destructive",
+            });
+
+            const permissionError = new FirestorePermissionError({
+                path: messagesRef.path,
+                operation: 'create',
+                requestResourceData: newMessage,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        } finally {
+            // Stop typing indicator
+            const typingUpdate: { [key: string]: any } = {};
+            typingUpdate[`typing.${authUser.uid}`] = false;
+            updateDoc(chatRef, typingUpdate);
+            inputRef.current?.focus();
+        }
     };
     
-    const unreadCountUpdate: { [key: string]: any } = {
-        lastMessage: lastMessageData
+    const handleTyping = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setInputValue(e.target.value);
+        if (!firestore || !authUser || !chatId) return;
+
+        const chatRef = doc(firestore, 'chats', chatId);
+        
+        // Indicate user is typing
+        const startTypingUpdate: { [key: string]: any } = {};
+        startTypingUpdate[`typing.${authUser.uid}`] = true;
+        updateDoc(chatRef, startTypingUpdate);
+
+        // Debounce to stop typing indicator
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
+        }
+        typingTimeoutRef.current = setTimeout(() => {
+            const stopTypingUpdate: { [key-string]: any } = {};
+            stopTypingUpdate[`typing.${authUser.uid}`] = false;
+            updateDoc(chatRef, stopTypingUpdate);
+        }, 2000); // 2 seconds timeout
     };
-    unreadCountUpdate[`unreadCount.${otherUser.uid}`] = increment(1);
 
 
-    updateDoc(chatRef, unreadCountUpdate).catch((serverError) => {
-        const permissionError = new FirestorePermissionError({
-            path: chatRef.path,
-            operation: 'update',
-            requestResourceData: { lastMessage: lastMessageData },
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    });
-    
-    inputRef.current?.focus();
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault(); 
-        handleSendMessage();
-    }
-  };
+    const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault(); 
+            handleSendMessage();
+        }
+    };
   
     const handleReplyTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
         isDraggingReply.current = false; // Reset on new touch
@@ -751,8 +785,8 @@ export default function ChatIdPage({
                   </Avatar>
                   <div className="flex-1">
                   <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
-                    <p className={cn("text-xs", otherUser.isOnline ? "text-green-500" : "text-muted-foreground")}>
-                      {otherUser.isOnline ? 'Online' : formatLastSeen(otherUser.lastSeen)}
+                    <p className={cn("text-xs", isTyping || otherUser.isOnline ? "text-green-500" : "text-muted-foreground")}>
+                      {isTyping ? "typing..." : otherUser.isOnline ? 'Online' : formatLastSeen(otherUser.lastSeen)}
                   </p>
                   </div>
               </div>
@@ -786,56 +820,71 @@ export default function ChatIdPage({
 
         {/* Messages Area */}
         <main className={cn("flex-1 overflow-y-auto")} ref={viewportRef}>
-            <div className="space-y-2 p-6">
-              {messages.map((msg) => {
-                const messageRef = React.createRef<HTMLDivElement>();
-                return (
-                    <div
-                    key={msg.id}
-                    className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
-                    >
-                    <div
-                        className="relative transition-transform duration-200 ease-out"
-                        ref={messageRef}
-                        onTouchStart={(e) => handleReplyTouchStart(e)}
-                        onTouchMove={(e) => messageRef.current && handleReplyTouchMove(e, messageRef.current)}
-                        onTouchEnd={() => messageRef.current && handleReplyTouchEnd(msg, messageRef.current)}
-                    >
+             {amIBlocked ? (
+                <div className="flex h-full flex-col items-center justify-center text-center p-8 text-muted-foreground">
+                    <Ban className="h-16 w-16 mb-4" />
+                    <h2 className="text-xl font-semibold">You've been blocked</h2>
+                    <p className="mt-2">You can no longer send messages to this user.</p>
+                </div>
+            ) : (
+                <div className="space-y-2 p-6">
+                {messages.map((msg) => {
+                    const messageRef = React.createRef<HTMLDivElement>();
+                    return (
                         <div
-                        className={`flex max-w-xs flex-col rounded-lg px-3 py-2 text-sm lg:max-w-md ${
-                            msg.senderId === authUser?.uid
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted'
-                        }`}
+                        key={msg.id}
+                        className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
                         >
-                        {msg.replyTo && (
-                            <div className="mb-1 rounded-md border-l-2 border-primary-foreground/50 bg-black/10 p-2">
-                            <p className="font-bold text-xs">
-                                {msg.replyTo.senderId === authUser.uid ? 'You' : otherUser.displayName.split(' ')[0]}
-                            </p>
-                            <p className="truncate text-xs opacity-80">{msg.replyTo.content}</p>
+                        <div
+                            className="relative transition-transform duration-200 ease-out"
+                            ref={messageRef}
+                            onTouchStart={(e) => handleReplyTouchStart(e)}
+                            onTouchMove={(e) => messageRef.current && handleReplyTouchMove(e, messageRef.current)}
+                            onTouchEnd={() => messageRef.current && handleReplyTouchEnd(msg, messageRef.current)}
+                        >
+                            <div
+                            className={`flex max-w-xs flex-col rounded-lg px-3 py-2 text-sm lg:max-w-md ${
+                                msg.senderId === authUser?.uid
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted'
+                            }`}
+                            >
+                            {msg.replyTo && (
+                                <div className="mb-1 rounded-md border-l-2 border-primary-foreground/50 bg-black/10 p-2">
+                                <p className="font-bold text-xs">
+                                    {msg.replyTo.senderId === authUser.uid ? 'You' : otherUser.displayName.split(' ')[0]}
+                                </p>
+                                <p className="truncate text-xs opacity-80">{msg.replyTo.content}</p>
+                                </div>
+                            )}
+                            <div className="flex items-end gap-2">
+                                {renderMessageContent(msg)}
+                                <div className={`flex items-center gap-1 text-[10px] shrink-0 self-end ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
+                                    <span>{formatTimestamp(msg.timestamp)}</span>
+                                    {msg.senderId === authUser?.uid && !msg.isUploading && (
+                                        <MessageStatus status={msg.status} />
+                                    )}
+                                </div>
                             </div>
-                        )}
-                        <div className="flex items-end gap-2">
-                             {renderMessageContent(msg)}
-                            <div className={`flex items-center gap-1 text-[10px] shrink-0 self-end ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
-                                <span>{formatTimestamp(msg.timestamp)}</span>
-                                {msg.senderId === authUser?.uid && !msg.isUploading && (
-                                    <MessageStatus status={msg.status} />
-                                )}
                             </div>
                         </div>
                         </div>
-                    </div>
-                    </div>
-                );
-            })}
-            </div>
+                    );
+                })}
+                </div>
+            )}
           </main>
 
         {/* Message Input */}
-        <footer className="shrink-0 border-t bg-muted/40 p-4">
-           {isRecording ? (
+         <footer className="shrink-0 border-t bg-muted/40 p-4">
+            {isBlocked ? (
+                <div className="flex items-center justify-center gap-2 text-muted-foreground bg-background p-3 rounded-lg">
+                    <Ban className="h-5 w-5" />
+                    <p className="text-sm font-medium">
+                        {haveIBlocked ? "You have blocked this user. Unblock them to send a message." : "You cannot reply to this conversation."}
+                    </p>
+                </div>
+            ) : isRecording ? (
                 <div className="flex items-center gap-4 w-full h-[52px]">
                     <div className="flex-1 text-center font-mono text-destructive">
                          <div className="flex items-center justify-center gap-2">
@@ -880,7 +929,7 @@ export default function ChatIdPage({
                                 placeholder="Type a message..."
                                 className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-12 shadow-sm focus:border-primary focus:ring-primary"
                                 value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
+                                onChange={handleTyping}
                                 onKeyDown={handleKeyPress}
                                 rows={1}
                                 onInput={(e) => {

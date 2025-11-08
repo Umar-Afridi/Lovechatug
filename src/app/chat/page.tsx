@@ -50,6 +50,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
     };
 
     const participantId = useMemo(() => chat.members.find(id => id !== currentUserId), [chat.members, currentUserId]);
+    const isTyping = useMemo(() => chat.typing?.[participantId || ''] === true, [chat.typing, participantId]);
     
     useEffect(() => {
         if (!firestore || !participantId) return;
@@ -114,7 +115,9 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
           </div>
           <div className="flex-1 overflow-hidden">
             <p className="font-semibold truncate">{participant.displayName}</p>
-            <p className="text-sm text-muted-foreground truncate">{chat.lastMessage?.content ?? 'No messages yet'}</p>
+            <p className={cn("text-sm  truncate", isTyping ? "text-primary" : "text-muted-foreground")}>
+                {isTyping ? "typing..." : (chat.lastMessage?.content ?? 'No messages yet')}
+            </p>
           </div>
           <div className="flex flex-col items-end text-xs text-muted-foreground">
             <span>{formatTimestamp(chat.lastMessage?.timestamp)}</span>
@@ -250,33 +253,53 @@ export default function ChatPage() {
 
             if (userProfile.chatIds && userProfile.chatIds.length > 0 && firestore) {
                 setLoadingChats(true);
-                const chatRefs = userProfile.chatIds.map(id => doc(firestore, 'chats', id));
                 
-                unsubChats = chatRefs.map(chatRef => onSnapshot(chatRef, 
-                    (chatDoc) => {
-                        if (chatDoc.exists()) {
-                            const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
-                            setChats(prevChats => {
-                                const chatIndex = prevChats.findIndex(c => c.id === chatDoc.id);
-                                if (chatIndex > -1) {
-                                    const newChats = [...prevChats];
-                                    newChats[chatIndex] = chatData;
-                                    return newChats;
-                                } else {
-                                    return [...prevChats, chatData];
-                                }
-                            });
-                        }
-                    },
-                    (error) => {
-                         const permissionError = new FirestorePermissionError({
-                            path: chatRef.path,
-                            operation: 'get',
-                        });
-                        errorEmitter.emit('permission-error', permissionError);
-                        console.error(`Error listening to chat ${chatRef.id}:`, error);
-                    }
-                ));
+                // Filter out chats with users who have blocked the current user
+                const chatIdsToListen = userProfile.chatIds;
+                
+                if (chatIdsToListen.length > 0) {
+                  const chatRefs = chatIdsToListen.map(id => doc(firestore, 'chats', id));
+
+                  unsubChats = chatRefs.map(chatRef => onSnapshot(chatRef,
+                      (chatDoc) => {
+                          if (chatDoc.exists()) {
+                              const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
+                              
+                              // Check if the other member has blocked the current user
+                              const otherMemberId = chatData.members.find(id => id !== user.uid);
+                              const myBlockedBy = userProfile.blockedBy || [];
+
+                              if (otherMemberId && !myBlockedBy.includes(otherMemberId)) {
+                                  setChats(prevChats => {
+                                      const chatIndex = prevChats.findIndex(c => c.id === chatDoc.id);
+                                      if (chatIndex > -1) {
+                                          const newChats = [...prevChats];
+                                          newChats[chatIndex] = chatData;
+                                          return newChats;
+                                      } else {
+                                          return [...prevChats, chatData];
+                                      }
+                                  });
+                              } else {
+                                // If I am blocked, remove the chat from my list
+                                setChats(prevChats => prevChats.filter(c => c.id !== chatDoc.id));
+                              }
+
+                          } else {
+                            // Chat document might have been deleted (e.g., unfriend)
+                             setChats(prevChats => prevChats.filter(c => c.id !== chatRef.id));
+                          }
+                      },
+                      (error) => {
+                           const permissionError = new FirestorePermissionError({
+                              path: chatRef.path,
+                              operation: 'get',
+                          });
+                          errorEmitter.emit('permission-error', permissionError);
+                          console.error(`Error listening to chat ${chatRef.id}:`, error);
+                      }
+                  ));
+                }
                 setLoadingChats(false);
             } else {
                 setChats([]);
@@ -333,10 +356,14 @@ export default function ChatPage() {
 
   const filteredChats = useMemo(() => {
     if (!profile || !user) return [];
-    const blockedUsers = profile.blockedUsers || [];
+    const blockedByMe = profile.blockedUsers || [];
+    const whoBlockedMe = profile.blockedBy || [];
+    
     return chats.filter(chat => {
         const otherMemberId = chat.members.find(id => id !== user.uid);
-        return otherMemberId && !blockedUsers.includes(otherMemberId);
+        if (!otherMemberId) return false;
+        // Don't show chat if I blocked them, or if they blocked me
+        return !blockedByMe.includes(otherMemberId) && !whoBlockedMe.includes(otherMemberId);
     });
   }, [chats, profile, user]);
 
@@ -348,15 +375,22 @@ export default function ChatPage() {
         return;
       }
 
-      if (firestore && user) {
+      if (firestore && user && profile) {
         const usersRef = collection(firestore, 'users');
         const q = query(usersRef, where('username', '==', searchQuery.toLowerCase()));
         
         try {
           const querySnapshot = await getDocs(q);
+          const myBlockedList = profile.blockedUsers || [];
+          const whoBlockedMe = profile.blockedBy || [];
+
           const filteredUsers = querySnapshot.docs
                 .map(doc => doc.data() as UserProfile)
-                .filter(u => u.uid !== user.uid);
+                .filter(u => 
+                    u.uid !== user.uid && // Not me
+                    !myBlockedList.includes(u.uid) && // I haven't blocked them
+                    !whoBlockedMe.includes(u.uid) // They haven't blocked me
+                );
             
           setSearchResults(filteredUsers);
         } catch (serverError) {

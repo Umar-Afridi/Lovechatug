@@ -54,6 +54,13 @@
             "type": "string"
           }
         },
+        "blockedBy": {
+          "type": "array",
+          "description": "An array of UIDs of users who have blocked this user.",
+          "items": {
+            "type": "string"
+          }
+        },
         "chatsCleared": {
           "type": "object",
           "description": "A map of chatId to the timestamp when the user cleared the chat.",
@@ -117,6 +124,13 @@
           "type": "string",
           "format": "date-time",
           "description": "The timestamp when the chat was created."
+        },
+        "typing": {
+          "type": "object",
+          "description": "A map of userId to a boolean indicating if the user is typing.",
+          "additionalProperties": {
+            "type": "boolean"
+          }
         }
       },
       "required": ["members", "createdAt"]
