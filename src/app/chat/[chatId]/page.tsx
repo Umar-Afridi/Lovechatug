@@ -130,6 +130,7 @@ export default function ChatIdPage({
   const firestore = useFirestore();
   const { toast } = useToast();
   
+  const [chat, setChat] = useState<ChatType | null>(null);
   const [chatId, setChatId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
@@ -260,6 +261,22 @@ export default function ChatIdPage({
     return () => unsubscribeUser();
 
   }, [firestore, authUser, otherUserIdFromParams, router, toast]);
+
+    // Real-time listener for chat document (for background theme changes)
+  useEffect(() => {
+    if (!firestore || !chatId) return;
+
+    const chatDocRef = doc(firestore, 'chats', chatId);
+    const unsubscribe = onSnapshot(chatDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+            setChat(docSnap.data() as ChatType);
+        }
+    }, (error) => {
+        console.error("Error fetching real-time chat data:", error);
+    });
+
+    return () => unsubscribe();
+  }, [firestore, chatId]);
 
   // Real-time listener for messages
   useEffect(() => {
@@ -785,7 +802,7 @@ export default function ChatIdPage({
           </header>
 
         {/* Messages Area */}
-        <main className="flex-1 overflow-y-auto" ref={viewportRef}>
+        <main className={cn("flex-1 overflow-y-auto")} ref={viewportRef}>
             <div className="space-y-2 p-6">
               {messages.map((msg) => {
                 const messageRef = React.createRef<HTMLDivElement>();
@@ -925,3 +942,5 @@ export default function ChatIdPage({
     </>
   );
 }
+
+    
