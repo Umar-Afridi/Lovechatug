@@ -2,6 +2,7 @@
 
 import { useState, useRef, ChangeEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useUser } from '@/firebase/auth/use-user';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
