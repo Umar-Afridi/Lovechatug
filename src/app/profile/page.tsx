@@ -56,7 +56,7 @@ export default function ProfilePage() {
               setDisplayName(data.displayName ?? user.displayName ?? '');
               setUsername(data.username ?? '');
               setBio(data.bio ?? '');
-              setPhotoURL(data.photoURL ?? user.photoURL ?? '');
+              setPhotoURL(data.photoURL ?? user.photoURL ?? null);
           }
       });
     }
@@ -114,8 +114,8 @@ export default function ProfilePage() {
   
   const handleSaveChanges = async () => {
     if (!user || !auth || !firestore) return;
-    
-    let finalPhotoURL: string | null = photoURL; // Start with the current photoURL
+
+    let finalPhotoURL: string | null = photoURL;
     let pictureUpdated = false;
 
     // 1. Handle picture update if there's a new preview or a removal flag
@@ -129,14 +129,13 @@ export default function ProfilePage() {
         } catch (error) {
             console.error("Error uploading profile picture:", error);
             toast({ title: "Upload Failed", description: "Could not upload your new profile picture.", variant: "destructive" });
-            return; // Stop saving if photo upload fails
+            return;
         }
     } else if (isRemovingPhoto) {
-        finalPhotoURL = '';
+        finalPhotoURL = null;
         const storage = getStorage();
         const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
         try {
-            // Attempt to delete existing photo from storage, but don't block if it fails
             await deleteObject(photoRef);
         } catch (error: any) {
             if (error.code !== 'storage/object-not-found') {
@@ -146,48 +145,53 @@ export default function ProfilePage() {
         pictureUpdated = true;
     }
 
-    // 2. Handle text fields update
+    // 2. Prepare data for updates
+    const updatedAuthProfile: { displayName?: string; photoURL?: string | null } = {};
+    const updatedFirestoreData: { displayName: string; username: string; bio: string; photoURL?: string | null } = {
+        displayName: displayName,
+        username: username.toLowerCase(),
+        bio: bio,
+    };
+
+    if (user.displayName !== displayName) {
+        updatedAuthProfile.displayName = displayName;
+    }
+
+    if (pictureUpdated) {
+        updatedAuthProfile.photoURL = finalPhotoURL;
+        updatedFirestoreData.photoURL = finalPhotoURL;
+    }
+
+    // 3. Perform updates
     try {
-        const updatedAuthProfile: { displayName?: string, photoURL?: string } = {};
-        if (user.displayName !== displayName) {
-            updatedAuthProfile.displayName = displayName;
-        }
-        if (pictureUpdated) {
-            updatedAuthProfile.photoURL = finalPhotoURL;
-        }
-        
+        // Update Firebase Auth profile
         if (Object.keys(updatedAuthProfile).length > 0) {
             await updateProfile(user, updatedAuthProfile);
         }
 
+        // Update Firestore document
         const userDocRef = doc(firestore, 'users', user.uid);
-        const updatedFirestoreData = {
-            displayName: displayName,
-            username: username.toLowerCase(),
-            bio: bio,
-            photoURL: finalPhotoURL, // Always update with the final URL
-        };
-
         await updateDoc(userDocRef, updatedFirestoreData);
-        
+
         toast({
             title: "Profile Updated",
             description: "Your profile has been saved successfully.",
         });
 
-        // Reset preview state after successful save
+        // Reset temporary states after successful save
         setNewPhotoPreview(null);
         setIsRemovingPhoto(false);
-        setPhotoURL(finalPhotoURL); // Update the main photoURL state
+        if (pictureUpdated) {
+          setPhotoURL(finalPhotoURL);
+        }
 
     } catch (error: any) {
         console.error("Error updating profile: ", error);
-        
         if (error.code === 'permission-denied') {
-             const permissionError = new FirestorePermissionError({
+            const permissionError = new FirestorePermissionError({
                 path: `users/${user.uid}`,
                 operation: 'update',
-                requestResourceData: { displayName, username, bio, photoURL: finalPhotoURL },
+                requestResourceData: updatedFirestoreData,
             });
             errorEmitter.emit('permission-error', permissionError);
         } else {
@@ -198,7 +202,8 @@ export default function ProfilePage() {
             });
         }
     }
-  };
+};
+
 
   const handleSignOut = async () => {
     if (auth) {
