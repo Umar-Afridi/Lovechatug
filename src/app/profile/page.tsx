@@ -34,7 +34,7 @@ export default function ProfilePage() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
-  const [photoURL, setPhotoURL] = useState('');
+  const [photoURL, setPhotoURL] = useState<string | null>('');
   
   // State for the new image preview
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
@@ -115,7 +115,7 @@ export default function ProfilePage() {
   const handleSaveChanges = async () => {
     if (!user || !auth || !firestore) return;
     
-    let finalPhotoURL = photoURL; // Start with the current photoURL
+    let finalPhotoURL: string | null = photoURL; // Start with the current photoURL
     let pictureUpdated = false;
 
     // 1. Handle picture update if there's a new preview or a removal flag
@@ -208,7 +208,7 @@ export default function ProfilePage() {
     }
   };
 
-  const displayPhoto = newPhotoPreview ?? (isRemovingPhoto ? '' : photoURL);
+  const displayPhoto = newPhotoPreview ?? (isRemovingPhoto ? null : photoURL);
 
   return (
     <>
@@ -232,7 +232,7 @@ export default function ProfilePage() {
                     <div className="flex justify-center">
                         <div className="relative">
                             <Avatar className="h-32 w-32 cursor-pointer" onClick={handleAvatarClick}>
-                                <AvatarImage src={displayPhoto} alt={displayName} />
+                                <AvatarImage src={displayPhoto ?? undefined} alt={displayName} />
                                 <AvatarFallback className="text-4xl">
                                     {getInitials(displayName)}
                                 </AvatarFallback>
