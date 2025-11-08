@@ -66,7 +66,7 @@ export default function ChatIdPage({
 }: {
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
-  const { chatId: otherUserIdFromParams } = params;
+  const { chatId: otherUserIdFromParams } = React.use(params);
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -185,7 +185,7 @@ export default function ChatIdPage({
 
             // Check block status
             setHaveIBlocked(currentUserData.blockedUsers?.includes(otherUserIdFromParams) ?? false);
-            setAmIBlocked(currentUserData.blockedBy?.includes(otherUserIdFromParams) ?? false);
+            setAmIBlocked(otherUserData.blockedUsers?.includes(authUser.uid) ?? false);
 
         } catch (error: any) {
             console.error("Error setting up chat page:", error);
@@ -203,13 +203,14 @@ export default function ChatIdPage({
             const data = docSnap.data() as UserProfile;
             setCurrentUser(data);
             setHaveIBlocked(data.blockedUsers?.includes(otherUserIdFromParams) ?? false);
-            setAmIBlocked(data.blockedBy?.includes(otherUserIdFromParams) ?? false);
         }
     });
 
     const unsubOtherUser = onSnapshot(doc(firestore, 'users', otherUserIdFromParams), (docSnap) => {
         if (docSnap.exists()) {
-            setOtherUser(docSnap.data() as UserProfile);
+            const otherUserData = docSnap.data() as UserProfile;
+            setOtherUser(otherUserData);
+            setAmIBlocked(otherUserData.blockedUsers?.includes(authUser.uid) ?? false);
         }
     });
 
