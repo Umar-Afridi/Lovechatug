@@ -26,11 +26,11 @@
     --radius: 0.5rem;
     
     --chat-bg-default: hsl(var(--background));
-    --chat-bg-rose: 346.8 77.2% 49.8%;
-    --chat-bg-violet: 262.1 83.3% 57.8%;
-    --chat-bg-green: 142.1 70.2% 41.3%;
-    --chat-bg-yellow: 47.9 95.8% 53.1%;
-    --chat-bg-blue: 221.2 83.2% 53.3%;
+    --chat-bg-rose: hsl(346.8, 77.2%, 49.8%);
+    --chat-bg-violet: hsl(262.1, 83.3%, 57.8%);
+    --chat-bg-green: hsl(142.1, 70.2%, 41.3%);
+    --chat-bg-yellow: hsl(47.9, 95.8%, 53.1%);
+    --chat-bg-blue: hsl(221.2, 83.2%, 53.3%);
   }
 
   .dark {
@@ -55,11 +55,11 @@
     --ring: 142.1 76.2% 36.3%;
     
     --chat-bg-default: hsl(var(--background));
-    --chat-bg-rose: 346.8 77.2% 49.8%;
-    --chat-bg-violet: 262.1 83.3% 57.8%;
-    --chat-bg-green: 142.1 70.2% 41.3%;
-    --chat-bg-yellow: 47.9 95.8% 53.1%;
-    --chat-bg-blue: 221.2 83.2% 53.3%;
+    --chat-bg-rose: hsl(346.8, 77.2%, 49.8%);
+    --chat-bg-violet: hsl(262.1, 83.3%, 57.8%);
+    --chat-bg-green: hsl(142.1, 70.2%, 41.3%);
+    --chat-bg-yellow: hsl(47.9, 95.8%, 53.1%);
+    --chat-bg-blue: hsl(221.2, 83.2%, 53.3%);
   }
 }
 
