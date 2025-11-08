@@ -345,7 +345,7 @@ export default function ChatIdPage({
   useEffect(() => {
     if (!firestore || !chatId || !authUser || !otherUser) return;
 
-    // Check if the user just came online
+    // Check if the user just came online from an offline state
     if (otherUser.isOnline && !prevOtherUserIsOnline.current) {
       const messagesRef = collection(firestore, 'chats', chatId, 'messages');
       const q = query(
