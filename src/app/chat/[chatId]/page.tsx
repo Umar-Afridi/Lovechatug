@@ -66,7 +66,7 @@ export default function ChatIdPage({
 }: {
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
-  const { chatId: otherUserIdFromParams } = React.use(params);
+  const { chatId: otherUserIdFromParams } = params;
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -197,7 +197,7 @@ export default function ChatIdPage({
     
     fetchProfilesAndSetupChat();
     
-    // Real-time listener for other user's profile changes (like online status, block status)
+    // Real-time listener for user profile changes (like online status, block status)
     const unsubCurrentUser = onSnapshot(doc(firestore, 'users', authUser.uid), (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data() as UserProfile;
@@ -220,16 +220,16 @@ export default function ChatIdPage({
 
   }, [firestore, authUser, otherUserIdFromParams, router, toast]);
 
-  // Real-time listener for chat document (for typing status)
+  // Real-time listener for chat document (for typing status and background)
   useEffect(() => {
       if (!firestore || !chatId) return;
 
       const chatRef = doc(firestore, 'chats', chatId);
       const unsubscribe = onSnapshot(chatRef, (docSnap) => {
           if (docSnap.exists()) {
-              setChatData(docSnap.data() as ChatType);
+              const data = docSnap.data() as ChatType;
+              setChatData(data);
           } else {
-              // Chat might not exist yet, this is handled by message sending creating it.
               setChatData(null);
           }
       }, (error) => {
@@ -248,26 +248,32 @@ export default function ChatIdPage({
     const chatClearedTimestamp = currentUser?.chatsCleared?.[chatId] ?? null;
     
     let q = query(messagesRef, orderBy('timestamp', 'asc'));
-    if (chatClearedTimestamp && chatClearedTimestamp.toDate) {
-        q = query(q, where('timestamp', '>', Timestamp.fromDate(chatClearedTimestamp.toDate())));
+
+    // If chat was cleared, only fetch messages after the cleared timestamp
+    if (chatClearedTimestamp) {
+        // Ensure we're creating a Firestore Timestamp object if it's not already one
+        const clearedDate = chatClearedTimestamp.toDate ? chatClearedTimestamp.toDate() : new Date(chatClearedTimestamp);
+        q = query(q, where('timestamp', '>', Timestamp.fromDate(clearedDate)));
     }
+
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const msgs = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as MessageType)
       );
 
-      // Play sound for new incoming messages
+      // Play sound for new incoming messages only after initial load
       if (!isFirstMessageLoad.current && msgs.length > messages.length) {
           const newMessage = msgs[msgs.length - 1];
-          if (newMessage && newMessage.senderId !== authUser?.uid) {
+          // Check if the new message is not from the current user
+          if (newMessage && authUser && newMessage.senderId !== authUser.uid) {
               playReceiveMessageSound();
           }
       }
       
       setMessages(msgs);
       setLoading(false);
-      isFirstMessageLoad.current = false;
+      isFirstMessageLoad.current = false; // Mark initial load as complete
     }, (serverError) => {
         const permissionError = new FirestorePermissionError({
             path: messagesRef.path,
@@ -548,92 +554,91 @@ export default function ChatIdPage({
     };
     // --- End Voice Recording Logic ---
 
-    const handleSendMessage = async () => {
-        if (inputValue.trim() === '' || !firestore || !authUser || !chatId || !otherUser || !currentUser) return;
-        
-        // Refocus the input to keep keyboard open
-        inputRef.current?.focus();
+    const handleSendMessage = () => {
+      if (inputValue.trim() === '' || !firestore || !authUser || !chatId || !otherUser || !currentUser) return;
 
-        const contentToSend = inputValue.trim();
-        setInputValue(''); // Clear input immediately for better UX
+      // Keep keyboard open by re-focusing
+      inputRef.current?.focus();
 
-        // Play sound after a short delay to ensure focus is set
-        setTimeout(() => playSendMessageSound(), 50);
-        
-        const isOtherUserOnline = otherUser?.isOnline ?? false;
+      const contentToSend = inputValue.trim();
+      setInputValue(''); // Clear input immediately for better UX
+      setTimeout(() => playSendMessageSound(), 50);
 
-        const newMessage: any = {
+      const isOtherUserOnline = otherUser?.isOnline ?? false;
+
+      const newMessageData: any = {
         senderId: authUser.uid,
         content: contentToSend,
         timestamp: serverTimestamp(),
         type: 'text' as const,
         status: isOtherUserOnline ? 'delivered' : 'sent'
+      };
+
+      if (replyToMessage) {
+        newMessageData.replyTo = {
+          messageId: replyToMessage.id,
+          content: replyToMessage.content,
+          senderId: replyToMessage.senderId,
         };
-        
-        if (replyToMessage) {
-            newMessage.replyTo = {
-                messageId: replyToMessage.id,
-                content: replyToMessage.content,
-                senderId: replyToMessage.senderId,
-            };
-            setReplyToMessage(null); // Reset reply state after sending
+        setReplyToMessage(null); // Reset reply state
+      }
+
+      const chatRef = doc(firestore, 'chats', chatId);
+      const messagesRef = collection(firestore, 'chats', chatId, 'messages');
+      const typingUpdate: { [key: string]: any } = {};
+      typingUpdate[`typing.${authUser.uid}`] = false;
+
+
+      // Ensure chat doc exists, then add message and update last message
+      // This is all done in the background, not blocking the UI thread
+      getDoc(chatRef).then(chatSnap => {
+        const batch = writeBatch(firestore);
+
+        if (!chatSnap.exists()) {
+          const newChatData = {
+              members: [authUser.uid, otherUser.uid],
+              createdAt: serverTimestamp(),
+              participantDetails: {
+                  [authUser.uid]: { displayName: currentUser.displayName, photoURL: currentUser.photoURL },
+                  [otherUser.uid]: { displayName: otherUser.displayName, photoURL: otherUser.photoURL }
+              },
+              unreadCount: { [authUser.uid]: 0, [otherUser.uid]: 0 },
+              typing: { [authUser.uid]: false, [otherUser.uid]: false }
+          };
+          batch.set(chatRef, newChatData);
         }
 
-        const chatRef = doc(firestore, 'chats', chatId);
-        const messagesRef = collection(firestore, 'chats', chatId, 'messages');
+        const newMessageRef = doc(messagesRef); // Create a new doc ref for the message
+        batch.set(newMessageRef, newMessageData);
 
-        try {
-            // Ensure chat document exists before adding a message
-            const chatSnap = await getDoc(chatRef);
-            if (!chatSnap.exists()) {
-                const chatData = {
-                    members: [authUser.uid, otherUser.uid],
-                    createdAt: serverTimestamp(),
-                    participantDetails: {
-                        [authUser.uid]: { displayName: currentUser.displayName, photoURL: currentUser.photoURL },
-                        [otherUser.uid]: { displayName: otherUser.displayName, photoURL: otherUser.photoURL }
-                    },
-                    unreadCount: { [authUser.uid]: 0, [otherUser.uid]: 0, },
-                    typing: { [authUser.uid]: false, [otherUser.uid]: false, }
-                };
-                await setDoc(chatRef, chatData);
-            }
+        const lastMessageData = {
+          content: newMessageData.content,
+          timestamp: serverTimestamp(),
+          senderId: newMessageData.senderId
+        };
 
-            // Add the message
-            await addDoc(messagesRef, newMessage);
+        const unreadCountKey = `unreadCount.${otherUser.uid}`;
+        batch.update(chatRef, {
+            lastMessage: lastMessageData,
+            [unreadCountKey]: increment(1),
+            ...typingUpdate
+        });
 
-            // Update last message and unread count
-            const lastMessageData = {
-                content: newMessage.content,
-                timestamp: serverTimestamp(),
-                senderId: newMessage.senderId
-            };
-            const unreadCountUpdate: { [key: string]: any } = {
-                lastMessage: lastMessageData
-            };
-            unreadCountUpdate[`unreadCount.${otherUser.uid}`] = increment(1);
-
-            await updateDoc(chatRef, unreadCountUpdate);
-
-        } catch (serverError: any) {
-            toast({
+        return batch.commit();
+      })
+      .catch((serverError: any) => {
+          toast({
             title: "Error Sending Message",
             description: "Could not send your message. Please try again.",
             variant: "destructive",
-            });
-
-            const permissionError = new FirestorePermissionError({
-                path: messagesRef.path,
-                operation: 'create',
-                requestResourceData: newMessage,
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        } finally {
-            // Stop typing indicator
-            const typingUpdate: { [key: string]: any } = {};
-            typingUpdate[`typing.${authUser.uid}`] = false;
-            await updateDoc(chatRef, typingUpdate);
-        }
+          });
+          const permissionError = new FirestorePermissionError({
+              path: messagesRef.path,
+              operation: 'create',
+              requestResourceData: newMessageData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+      });
     };
     
     const handleTyping = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -652,7 +657,7 @@ export default function ChatIdPage({
             clearTimeout(typingTimeoutRef.current);
         }
         typingTimeoutRef.current = setTimeout(() => {
-            const stopTypingUpdate: { [key: string]: any } = {};
+            const stopTypingUpdate: { [key:string]: any } = {};
             stopTypingUpdate[`typing.${authUser.uid}`] = false;
             updateDoc(chatRef, stopTypingUpdate);
         }, 2000); // 2 seconds timeout
@@ -733,7 +738,11 @@ export default function ChatIdPage({
   const formatLastSeen = (timestamp: any) => {
       if (!timestamp) return 'Offline';
       const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-      return `Last seen at ${format(date, 'p')}`;
+      try {
+        return `Last seen at ${format(date, 'p')}`;
+      } catch (e) {
+        return 'Offline';
+      }
   };
   
   if (loading || !otherUser || !authUser) {
