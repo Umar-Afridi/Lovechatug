@@ -154,7 +154,7 @@ export default function ChatIdPage({
   const isDraggingReply = useRef(false);
 
   const playReceiveMessageSound = useSound('https://codeskulptor-demos.commondatastorage.googleapis.com/descent/gotitem.mp3');
-  const playSendMessageSound = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-button.m4a');
+  const playSendMessageSound = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/sound/short_click.mp3');
   const isFirstMessageLoad = useRef(true);
   
   // Swipe to go back logic for mobile
@@ -855,9 +855,7 @@ export default function ChatIdPage({
                         <div className="overflow-hidden">
                             <p className="truncate font-bold text-sm">
                             Replying to{' '}
-                            {replyToMessage.senderId === authUser.uid
-                                ? 'yourself'
-                                : otherUser.displayName.split(' ')[0]}
+                            {replyToMessage.senderId === authUser.uid ? 'yourself' : otherUser.displayName.split(' ')[0]}
                             </p>
                             <p className="truncate text-xs text-muted-foreground">
                             {replyToMessage.content}
@@ -926,3 +924,5 @@ export default function ChatIdPage({
     </>
   );
 }
+
+    
