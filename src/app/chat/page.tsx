@@ -428,7 +428,8 @@ export default function ChatPage() {
       }
       return (
         <ScrollArea className="flex-1">
-          {searchResults.map(foundUser => {
+          <div>
+            {searchResults.map(foundUser => {
               const isFriend = profile?.friends?.includes(foundUser.uid);
               const hasSentRequest = sentRequests.some(req => req.receiverId === foundUser.uid);
               
@@ -456,6 +457,7 @@ export default function ChatPage() {
                 </div>
               );
             })}
+          </div>
         </ScrollArea>
       );
     }
