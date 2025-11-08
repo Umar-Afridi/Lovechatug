@@ -124,6 +124,7 @@ export default function ProfilePage() {
       const storage = getStorage();
       const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
       try {
+        // Correctly use uploadString for data URLs
         await uploadString(photoRef, newPhotoPreview, 'data_url');
         finalPhotoURL = await getDownloadURL(photoRef);
       } catch (error) {
@@ -141,6 +142,7 @@ export default function ProfilePage() {
       const storage = getStorage();
       const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
       try {
+        // Attempt to delete, but don't block if it fails (e.g., file doesn't exist)
         await deleteObject(photoRef);
       } catch (error: any) {
         if (error.code !== 'storage/object-not-found') {
@@ -154,29 +156,27 @@ export default function ProfilePage() {
     if (user.displayName !== displayName) {
         updatedAuthProfile.displayName = displayName;
     }
+    // Only add photoURL to auth profile if it has been updated
     if (pictureUpdated) {
         updatedAuthProfile.photoURL = finalPhotoURL;
     }
     
-    // Always prepare Firestore data
+    // Always prepare Firestore data with all fields
     const updatedFirestoreData: any = {
         displayName: displayName,
         username: username.toLowerCase(),
         bio: bio,
+        photoURL: finalPhotoURL, // Always update photoURL in Firestore
     };
-    if (pictureUpdated) {
-        updatedFirestoreData.photoURL = finalPhotoURL;
-    }
-
 
     // 3. Perform updates
     try {
-        // Update Firebase Auth profile
+        // Update Firebase Auth profile only if there are changes
         if (Object.keys(updatedAuthProfile).length > 0) {
             await updateProfile(user, updatedAuthProfile);
         }
 
-        // Update Firestore document
+        // Always update Firestore document
         const userDocRef = doc(firestore, 'users', user.uid);
         await updateDoc(userDocRef, updatedFirestoreData);
 
@@ -188,9 +188,8 @@ export default function ProfilePage() {
         // Reset temporary states after successful save
         setNewPhotoPreview(null);
         setIsRemovingPhoto(false);
-        if (pictureUpdated) {
-          setPhotoURL(finalPhotoURL);
-        }
+        // Update the local state to reflect the saved photoURL
+        setPhotoURL(finalPhotoURL);
 
     } catch (error: any) {
         console.error("Error updating profile: ", error);
