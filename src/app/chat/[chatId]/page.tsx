@@ -21,6 +21,7 @@ import {
   where,
   Timestamp,
   getDocs,
+  setDoc,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -94,11 +95,11 @@ async function getOrCreateChat(
         };
         batch.set(chatRef, chatData);
         
-        // 2. Add chatId to both users' profiles
+        // 2. Add chatId to both users' profiles using set with merge
         const currentUserRef = doc(firestore, 'users', currentUser.uid);
         const otherUserRef = doc(firestore, 'users', otherUser.uid);
-        batch.update(currentUserRef, { chatIds: arrayUnion(chatId) });
-        batch.update(otherUserRef, { chatIds: arrayUnion(chatId) });
+        batch.set(currentUserRef, { chatIds: arrayUnion(chatId) }, { merge: true });
+        batch.set(otherUserRef, { chatIds: arrayUnion(chatId) }, { merge: true });
 
         await batch.commit();
     }

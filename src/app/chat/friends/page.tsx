@@ -114,12 +114,9 @@ export default function FriendsPage() {
     try {
         const batch = writeBatch(firestore);
 
-        batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
-        batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
-        
-        // Add chatId to both users' profiles
-        batch.update(currentUserRef, { chatIds: arrayUnion(chatId) });
-        batch.update(friendUserRef, { chatIds: arrayUnion(chatId) });
+        // Use set with merge to avoid "No document to update" errors
+        batch.set(currentUserRef, { friends: arrayUnion(request.senderId), chatIds: arrayUnion(chatId) }, { merge: true });
+        batch.set(friendUserRef, { friends: arrayUnion(user.uid), chatIds: arrayUnion(chatId) }, { merge: true });
         
         // Use a non-realtime get to avoid conflicts with listeners
         const currentUserSnap = await getDocNonRealTime(currentUserRef);
@@ -129,8 +126,9 @@ export default function FriendsPage() {
         const friendUserProfile = friendUserSnap.data() as UserProfile;
         
         if (!currentUserProfile || !friendUserProfile) {
-            toast({ title: 'Error', description: 'Could not find user profiles to create chat.', variant: 'destructive' });
-            return;
+            // Even if profiles are incomplete, we create them on the fly now with set merge.
+            // Let's ensure we have basic details for the chat participant list.
+            console.warn("One of the user profiles was missing, but proceeding.");
         }
 
         batch.set(chatRef, {
@@ -138,12 +136,12 @@ export default function FriendsPage() {
           createdAt: serverTimestamp(),
           participantDetails: {
             [user.uid]: {
-              displayName: currentUserProfile.displayName,
-              photoURL: currentUserProfile.photoURL,
+              displayName: currentUserProfile?.displayName || user.displayName,
+              photoURL: currentUserProfile?.photoURL || user.photoURL,
             },
             [request.senderId]: {
-              displayName: friendUserProfile.displayName,
-              photoURL: friendUserProfile.photoURL,
+              displayName: friendUserProfile?.displayName || request.fromUser.displayName,
+              photoURL: friendUserProfile?.photoURL || request.fromUser.photoURL,
             },
           },
         });
