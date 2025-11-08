@@ -13,7 +13,7 @@ import { ArrowLeft, Camera, LogOut, Shield } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { updateProfile } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -150,11 +150,12 @@ export default function ProfilePage() {
     }
 
     // 2. Prepare data for updates
+    const authProfileChanged = user.displayName !== displayName || pictureUpdated;
     const updatedAuthProfile: { displayName?: string; photoURL?: string | null } = {};
     if (user.displayName !== displayName) {
         updatedAuthProfile.displayName = displayName;
     }
-    if (pictureUpdated) {
+     if (pictureUpdated) {
         updatedAuthProfile.photoURL = finalPhotoURL;
     }
     
@@ -168,13 +169,13 @@ export default function ProfilePage() {
     // 3. Perform updates
     try {
         // Update Firebase Auth profile only if there are changes
-        if (Object.keys(updatedAuthProfile).length > 0) {
+        if (authProfileChanged) {
             await updateProfile(user, updatedAuthProfile);
         }
 
-        // Always update Firestore document
+        // Always update Firestore document using set with merge
         const userDocRef = doc(firestore, 'users', user.uid);
-        await updateDoc(userDocRef, updatedFirestoreData);
+        await setDoc(userDocRef, updatedFirestoreData, { merge: true });
 
         toast({
             title: "Profile Updated",
