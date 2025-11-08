@@ -314,14 +314,9 @@ export default function ChatAppLayout({
               </SidebarFooter>
           </Sidebar>
         )}
-        <main className={cn(
-          "flex-1 transition-all duration-300 w-full",
-          isMobile && isChatDetailPage ? "block" : "md:block",
-          isMobile && !isChatDetailPage ? "block" : "md:block",
-          !isMobile ? "flex" : ""
-        )}>
+        <SidebarInset>
           {children}
-        </main>
+        </SidebarInset>
       </SidebarProvider>
     </div>
   );
@@ -350,5 +345,3 @@ const menuItems = [
      label: 'Call History',
   },
 ];
-
-    
