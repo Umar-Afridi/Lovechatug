@@ -428,34 +428,36 @@ export default function ChatPage() {
 
     return (
         <ScrollArea className="flex-1">
-        {searchResults.map(foundUser => {
-            const isFriend = profile?.friends?.includes(foundUser.uid);
-            const hasSentRequest = sentRequests.some(req => req.receiverId === foundUser.uid);
-            
-            return (
-            <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
-                <div className="flex items-center gap-4">
-                <Avatar>
-                    <AvatarImage src={foundUser.photoURL || undefined} />
-                    <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
-                </Avatar>
-                <div>
-                    <p className="font-semibold">{foundUser.displayName}</p>
-                    <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
+          <div>
+            {searchResults.map(foundUser => {
+                const isFriend = profile?.friends?.includes(foundUser.uid);
+                const hasSentRequest = sentRequests.some(req => req.receiverId === foundUser.uid);
+                
+                return (
+                <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
+                    <div className="flex items-center gap-4">
+                    <Avatar>
+                        <AvatarImage src={foundUser.photoURL || undefined} />
+                        <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                        <p className="font-semibold">{foundUser.displayName}</p>
+                        <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
+                    </div>
+                    </div>
+                    {isFriend ? (
+                        <Button asChild size="sm">
+                            <Link href={`/chat/${foundUser.uid}`}>Message</Link>
+                        </Button>
+                    ) : hasSentRequest ? (
+                        <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel Request</Button>
+                    ) : (
+                        <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>Add Request</Button>
+                    )}
                 </div>
-                </div>
-                {isFriend ? (
-                    <Button asChild size="sm">
-                        <Link href={`/chat/${foundUser.uid}`}>Message</Link>
-                    </Button>
-                ) : hasSentRequest ? (
-                    <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel Request</Button>
-                ) : (
-                    <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>Add Request</Button>
-                )}
-            </div>
-            );
-        })}
+                );
+            })}
+          </div>
         </ScrollArea>
     );
   }
