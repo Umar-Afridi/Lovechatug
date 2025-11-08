@@ -551,10 +551,14 @@ export default function ChatIdPage({
     const handleSendMessage = async () => {
         if (inputValue.trim() === '' || !firestore || !authUser || !chatId || !otherUser || !currentUser) return;
         
-        playSendMessageSound();
+        // Refocus the input to keep keyboard open
+        inputRef.current?.focus();
 
         const contentToSend = inputValue.trim();
         setInputValue(''); // Clear input immediately for better UX
+
+        // Play sound after a short delay to ensure focus is set
+        setTimeout(() => playSendMessageSound(), 50);
         
         const isOtherUserOnline = otherUser?.isOnline ?? false;
 
@@ -629,7 +633,6 @@ export default function ChatIdPage({
             const typingUpdate: { [key: string]: any } = {};
             typingUpdate[`typing.${authUser.uid}`] = false;
             await updateDoc(chatRef, typingUpdate);
-            inputRef.current?.focus();
         }
     };
     
