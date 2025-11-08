@@ -78,7 +78,6 @@ async function getOrCreateChat(
         const chatData = {
             members: [currentUser.uid, otherUser.uid],
             createdAt: serverTimestamp(),
-            backgroundTheme: 'default',
             participantDetails: {
                 [currentUser.uid]: {
                     displayName: currentUser.displayName,
@@ -132,7 +131,6 @@ export default function ChatIdPage({
   const { toast } = useToast();
   
   const [chatId, setChatId] = useState<string | null>(null);
-  const [chatData, setChatData] = useState<ChatType | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
@@ -262,22 +260,6 @@ export default function ChatIdPage({
     return () => unsubscribeUser();
 
   }, [firestore, authUser, otherUserIdFromParams, router, toast]);
-
-  // Real-time listener for chat data (for background theme)
-  useEffect(() => {
-    if (!firestore || !chatId) return;
-
-    const chatDocRef = doc(firestore, 'chats', chatId);
-    const unsubscribe = onSnapshot(chatDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setChatData(docSnap.data() as ChatType);
-      }
-    }, (error) => {
-      console.error("Error fetching chat data:", error);
-    });
-
-    return () => unsubscribe();
-  }, [firestore, chatId]);
 
   // Real-time listener for messages
   useEffect(() => {
@@ -745,8 +727,6 @@ export default function ChatIdPage({
         }
     };
     
-    const backgroundClass = `chat-bg-${chatData?.backgroundTheme || 'default'}`;
-
   return (
     <>
       <ContactProfileSheet 
@@ -805,7 +785,7 @@ export default function ChatIdPage({
           </header>
 
         {/* Messages Area */}
-        <main className={cn("flex-1 overflow-y-auto", backgroundClass)} ref={viewportRef}>
+        <main className="flex-1 overflow-y-auto" ref={viewportRef}>
             <div className="space-y-2 p-6">
               {messages.map((msg) => {
                 const messageRef = React.createRef<HTMLDivElement>();

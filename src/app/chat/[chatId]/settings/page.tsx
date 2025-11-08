@@ -13,7 +13,7 @@ import {
   writeBatch,
   serverTimestamp,
 } from 'firebase/firestore';
-import { ArrowLeft, User, Trash2, UserX, ShieldX, Palette, Check } from 'lucide-react';
+import { ArrowLeft, User, Trash2, UserX, ShieldX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/lib/types';
@@ -21,25 +21,6 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import { ClearChatDialog } from '@/components/chat/clear-chat-dialog';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
-import { cn } from '@/lib/utils';
-
-
-const backgroundOptions = [
-  { name: 'Default', value: 'default', color: 'hsl(var(--background))' },
-  { name: 'Rose', value: 'rose', color: 'hsl(var(--chat-bg-rose))' },
-  { name: 'Violet', value: 'violet', color: 'hsl(var(--chat-bg-violet))' },
-  { name: 'Green', value: 'green', color: 'hsl(var(--chat-bg-green))' },
-  { name: 'Yellow', value: 'yellow', color: 'hsl(var(--chat-bg-yellow))' },
-  { name: 'Blue', value: 'blue', color: 'hsl(var(--chat-bg-blue))' },
-];
-
 
 export default function ChatSettingsPage({
   params,
@@ -53,48 +34,13 @@ export default function ChatSettingsPage({
   const { toast } = useToast();
   
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
-  const [chatData, setChatData] = useState<any>(null);
   const [isContactSheetOpen, setContactSheetOpen] = useState(false);
   const [isClearChatDialogOpen, setClearChatDialogOpen] = useState(false);
-  const [isBackgroundSheetOpen, setBackgroundSheetOpen] = useState(false);
 
-  const touchStartX = useRef(0);
-  const touchEndX = useRef(0);
-
-  // Swipe to go back logic
-  useEffect(() => {
-    const handleTouchStart = (e: TouchEvent) => {
-      touchStartX.current = e.targetTouches[0].clientX;
-      touchEndX.current = e.targetTouches[0].clientX;
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      touchEndX.current = e.targetTouches[0].clientX;
-    };
-
-    const handleTouchEnd = () => {
-      // Check if it's a swipe from left to right and it's significant
-      if (touchStartX.current < 50 && touchEndX.current > touchStartX.current + 100) {
-        router.back();
-      }
-    };
-
-    window.addEventListener('touchstart', handleTouchStart);
-    window.addEventListener('touchmove', handleTouchMove);
-    window.addEventListener('touchend', handleTouchEnd);
-
-    return () => {
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [router]);
-
-
+  // Fetch other user's profile
   useEffect(() => {
     if (!firestore || !otherUserId || !user) return;
     
-    // Fetch other user's profile
     const userDocRef = doc(firestore, 'users', otherUserId);
     getDoc(userDocRef).then((docSnap) => {
       if (docSnap.exists()) {
@@ -116,15 +62,6 @@ export default function ChatSettingsPage({
         });
         router.back();
       }
-    });
-    
-    // Fetch chat data
-    const chatId = [user.uid, otherUserId].sort().join('_');
-    const chatDocRef = doc(firestore, 'chats', chatId);
-    getDoc(chatDocRef).then((docSnap) => {
-        if(docSnap.exists()) {
-            setChatData(docSnap.data());
-        }
     });
 
   }, [firestore, otherUserId, user, router, toast]);
@@ -249,30 +186,6 @@ export default function ChatSettingsPage({
     }
   };
 
-  const handleBackgroundChange = async (theme: string) => {
-    if (!firestore || !user || !otherUserId) return;
-    const chatId = [user.uid, otherUserId].sort().join('_');
-    const chatRef = doc(firestore, 'chats', chatId);
-    const payload = { backgroundTheme: theme };
-    try {
-        await updateDoc(chatRef, payload);
-        setChatData((prev: any) => ({ ...prev, backgroundTheme: theme }));
-        toast({ title: "Background Updated", description: "Your chat background has been changed."});
-    } catch (error: any) {
-        if (error.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-                path: chatRef.path,
-                operation: 'update',
-                requestResourceData: payload,
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        } else {
-            console.error("Error updating background:", error);
-            toast({ title: "Error", description: "Could not update chat background.", variant: "destructive" });
-        }
-    }
-  }
-
 
   if (!otherUser) {
     return (
@@ -295,36 +208,6 @@ export default function ChatSettingsPage({
         onConfirm={handleClearChat}
         userName={otherUser.displayName}
       />
-       <Sheet open={isBackgroundSheetOpen} onOpenChange={setBackgroundSheetOpen}>
-            <SheetContent>
-                <SheetHeader>
-                    <SheetTitle>Change Background</SheetTitle>
-                    <SheetDescription>
-                        Select a new background for your chat with {otherUser.displayName.split(' ')[0]}.
-                    </SheetDescription>
-                </SheetHeader>
-                <div className="grid grid-cols-2 gap-4 py-8">
-                    {backgroundOptions.map((option) => (
-                        <div key={option.value} onClick={() => handleBackgroundChange(option.value)} className="cursor-pointer">
-                            <div 
-                                className="h-24 w-full rounded-lg flex items-center justify-center border-2"
-                                style={{ 
-                                    backgroundColor: option.color,
-                                    borderColor: chatData?.backgroundTheme === option.value ? 'hsl(var(--primary))' : 'transparent'
-                                }}
-                            >
-                               {chatData?.backgroundTheme === option.value && (
-                                   <div className="bg-primary/80 rounded-full p-1">
-                                    <Check className="h-6 w-6 text-primary-foreground" />
-                                   </div>
-                               )}
-                            </div>
-                            <p className="text-center text-sm mt-2 font-medium">{option.name}</p>
-                        </div>
-                    ))}
-                </div>
-            </SheetContent>
-        </Sheet>
       <div className="flex min-h-screen flex-col bg-background">
         <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
@@ -342,14 +225,6 @@ export default function ChatSettingsPage({
             >
               <User className="mr-4 h-5 w-5" />
               View Contact
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-start text-base py-6"
-              onClick={() => setBackgroundSheetOpen(true)}
-            >
-              <Palette className="mr-4 h-5 w-5" />
-              Change Background
             </Button>
             <Button
               variant="outline"
