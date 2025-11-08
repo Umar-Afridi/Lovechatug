@@ -49,7 +49,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { Message as MessageType, UserProfile } from '@/lib/types';
+import type { Message as MessageType, UserProfile, Chat as ChatType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -57,6 +57,7 @@ import { format } from 'date-fns';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import Link from 'next/link';
 import { useSound } from '@/hooks/use-sound';
+import { cn } from '@/lib/utils';
 
 // Helper to get or create a chat
 async function getOrCreateChat(
@@ -77,6 +78,7 @@ async function getOrCreateChat(
         const chatData = {
             members: [currentUser.uid, otherUser.uid],
             createdAt: serverTimestamp(),
+            backgroundTheme: 'default',
             participantDetails: {
                 [currentUser.uid]: {
                     displayName: currentUser.displayName,
@@ -130,6 +132,7 @@ export default function ChatIdPage({
   const { toast } = useToast();
   
   const [chatId, setChatId] = useState<string | null>(null);
+  const [chatData, setChatData] = useState<ChatType | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
@@ -259,6 +262,22 @@ export default function ChatIdPage({
     return () => unsubscribeUser();
 
   }, [firestore, authUser, otherUserIdFromParams, router, toast]);
+
+  // Real-time listener for chat data (for background theme)
+  useEffect(() => {
+    if (!firestore || !chatId) return;
+
+    const chatDocRef = doc(firestore, 'chats', chatId);
+    const unsubscribe = onSnapshot(chatDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setChatData(docSnap.data() as ChatType);
+      }
+    }, (error) => {
+      console.error("Error fetching chat data:", error);
+    });
+
+    return () => unsubscribe();
+  }, [firestore, chatId]);
 
   // Real-time listener for messages
   useEffect(() => {
@@ -725,6 +744,8 @@ export default function ChatIdPage({
                 return null;
         }
     };
+    
+    const backgroundClass = `chat-bg-${chatData?.backgroundTheme || 'default'}`;
 
   return (
     <>
@@ -784,7 +805,7 @@ export default function ChatIdPage({
           </header>
 
         {/* Messages Area */}
-        <main className="flex-1 overflow-y-auto" ref={viewportRef}>
+        <main className={cn("flex-1 overflow-y-auto", backgroundClass)} ref={viewportRef}>
             <div className="space-y-2 p-6">
               {messages.map((msg) => {
                 const messageRef = React.createRef<HTMLDivElement>();

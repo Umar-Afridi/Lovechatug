@@ -24,6 +24,13 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 142.1 76.2% 36.3%;
     --radius: 0.5rem;
+    
+    --chat-bg-default: 0 0% 100%;
+    --chat-bg-rose: 346.8 77.2% 49.8%;
+    --chat-bg-violet: 262.1 83.3% 57.8%;
+    --chat-bg-green: 142.1 70.2% 41.3%;
+    --chat-bg-yellow: 47.9 95.8% 53.1%;
+    --chat-bg-blue: 221.2 83.2% 53.3%;
   }
 
   .dark {
@@ -46,6 +53,13 @@
     --border: 215 27.9% 16.9%;
     --input: 215 27.9% 16.9%;
     --ring: 142.1 76.2% 36.3%;
+    
+    --chat-bg-default: 224 71.4% 4.1%;
+    --chat-bg-rose: 346.8 77.2% 49.8%;
+    --chat-bg-violet: 262.1 83.3% 57.8%;
+    --chat-bg-green: 142.1 70.2% 41.3%;
+    --chat-bg-yellow: 47.9 95.8% 53.1%;
+    --chat-bg-blue: 221.2 83.2% 53.3%;
   }
 }
 
@@ -58,6 +72,13 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  
+  .chat-bg-default { background-color: hsl(var(--chat-bg-default)); }
+  .chat-bg-rose { background-color: hsl(var(--chat-bg-rose)); }
+  .chat-bg-violet { background-color: hsl(var(--chat-bg-violet)); }
+  .chat-bg-green { background-color: hsl(var(--chat-bg-green)); }
+  .chat-bg-yellow { background-color: hsl(var(--chat-bg-yellow)); }
+  .chat-bg-blue { background-color: hsl(var(--chat-bg-blue)); }
 }
 
 @layer utilities {
