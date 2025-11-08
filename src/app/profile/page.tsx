@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef, ChangeEvent, useEffect } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -16,6 +15,7 @@ import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { ProfilePictureDialog } from '@/components/profile/profile-picture-dialog';
 
 export default function ProfilePage() {
   const auth = useAuth();
@@ -24,6 +24,8 @@ export default function ProfilePage() {
   const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [isPictureDialogOpen, setPictureDialogOpen] = useState(false);
 
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
@@ -43,7 +45,6 @@ export default function ProfilePage() {
               const data = docSnap.data();
               setUsername(data.username ?? '');
               setBio(data.bio ?? '');
-              // Use photo from Firestore if it exists, as it might be a data URI
               if (data.photoURL) {
                 setPhotoURL(data.photoURL);
               }
@@ -72,17 +73,66 @@ export default function ProfilePage() {
   };
 
   const handleAvatarClick = () => {
-    fileInputRef.current?.click();
+    // Open the new dialog instead of the file input directly
+    setPictureDialogOpen(true);
   };
+  
+  const handleChangePicture = () => {
+    setPictureDialogOpen(false);
+    fileInputRef.current?.click();
+  }
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setPhotoURL(event.target?.result as string);
+        const newPhotoURL = event.target?.result as string;
+        setPhotoURL(newPhotoURL);
+        // Immediately save the new photo
+        handleSaveProfilePicture(newPhotoURL);
       };
       reader.readAsDataURL(file);
+    }
+  };
+  
+  const handleRemovePicture = async () => {
+    setPictureDialogOpen(false);
+    await handleSaveProfilePicture(''); // Save an empty string for photoURL
+  };
+  
+  const handleSaveProfilePicture = async (newPhotoURL: string) => {
+    if (!user || !auth || !firestore) return;
+    
+    setPhotoURL(newPhotoURL);
+
+    const userDocRef = doc(firestore, 'users', user.uid);
+    const updatedData = { photoURL: newPhotoURL };
+
+    try {
+        await updateDoc(userDocRef, updatedData);
+        if (newPhotoURL !== '') {
+            await updateProfile(user, { photoURL: newPhotoURL });
+        }
+        toast({
+            title: "Profile Picture Updated",
+            description: newPhotoURL === '' ? "Your profile picture has been removed." : "Your new profile picture has been saved.",
+        });
+    } catch (serverError: any) {
+        if (serverError.code === 'permission-denied') {
+            const permissionError = new FirestorePermissionError({
+                path: userDocRef.path,
+                operation: 'update',
+                requestResourceData: updatedData,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        } else {
+             toast({
+                variant: "destructive",
+                title: "Update Failed",
+                description: "Could not update your profile picture.",
+            });
+        }
     }
   };
   
@@ -90,43 +140,42 @@ export default function ProfilePage() {
     if (!user || !auth || !firestore) return;
 
     try {
-        // Update Firebase Auth profile first (only for properties that are not data URIs)
-        await updateProfile(user, {
-            displayName: displayName,
-        });
+        // Only update display name in auth, as other fields are in Firestore
+        if (user.displayName !== displayName) {
+             await updateProfile(user, { displayName });
+        }
 
-        // Then update the Firestore document, which can store the data URI for the photo
         const userDocRef = doc(firestore, 'users', user.uid);
         const updatedData = {
             displayName: displayName,
             username: username.toLowerCase(),
-            photoURL: photoURL,
             bio: bio,
         };
 
-        updateDoc(userDocRef, updatedData)
-            .then(() => {
-                 toast({
-                    title: "Profile Updated",
-                    description: "Your profile has been saved successfully.",
-                });
-            })
-            .catch((serverError) => {
-                const permissionError = new FirestorePermissionError({
-                    path: userDocRef.path,
-                    operation: 'update',
-                    requestResourceData: updatedData,
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            });
+        await updateDoc(userDocRef, updatedData);
+        
+        toast({
+            title: "Profile Updated",
+            description: "Your profile has been saved successfully.",
+        });
 
     } catch (error: any) {
-        console.error("Error updating auth profile: ", error);
-        toast({
-            variant: "destructive",
-            title: "Update Failed",
-            description: error.message || "Could not update your authentication profile.",
-        });
+        console.error("Error updating profile: ", error);
+        
+        if (error.code === 'permission-denied') {
+             const permissionError = new FirestorePermissionError({
+                path: `users/${user.uid}`,
+                operation: 'update',
+                requestResourceData: { displayName, username, bio },
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        } else {
+            toast({
+                variant: "destructive",
+                title: "Update Failed",
+                description: error.message || "Could not update your profile.",
+            });
+        }
     }
   };
 
@@ -139,94 +188,103 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-        <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
-            <Button variant="ghost" size="icon" onClick={() => router.back()}>
-                <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <h1 className="text-xl font-bold">Edit Profile</h1>
-        </header>
+    <>
+        <ProfilePictureDialog 
+            isOpen={isPictureDialogOpen}
+            onOpenChange={setPictureDialogOpen}
+            currentPhotoURL={photoURL}
+            onRemove={handleRemovePicture}
+            onChange={handleChangePicture}
+        />
+        <div className="flex min-h-screen flex-col bg-background">
+            <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
+                <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                    <ArrowLeft className="h-5 w-5" />
+                </Button>
+                <h1 className="text-xl font-bold">Edit Profile</h1>
+            </header>
 
-        <main className="flex-1 p-4 md:p-8">
-            <div className="mx-auto max-w-xl space-y-8">
-                <div className="flex justify-center">
-                    <div className="relative">
-                        <Avatar className="h-32 w-32 cursor-pointer" onClick={handleAvatarClick}>
-                            <AvatarImage src={photoURL} alt={displayName} />
-                            <AvatarFallback className="text-4xl">
-                                {getInitials(displayName)}
-                            </AvatarFallback>
-                        </Avatar>
-                        <button className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground" onClick={handleAvatarClick}>
-                            <Camera className="h-5 w-5" />
-                        </button>
-                        <input 
-                            type="file" 
-                            ref={fileInputRef} 
-                            className="hidden" 
-                            accept="image/*"
-                            onChange={handleFileChange}
-                        />
+            <main className="flex-1 p-4 md:p-8">
+                <div className="mx-auto max-w-xl space-y-8">
+                    <div className="flex justify-center">
+                        <div className="relative">
+                            <Avatar className="h-32 w-32 cursor-pointer" onClick={handleAvatarClick}>
+                                <AvatarImage src={photoURL} alt={displayName} />
+                                <AvatarFallback className="text-4xl">
+                                    {getInitials(displayName)}
+                                </AvatarFallback>
+                            </Avatar>
+                            <button className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground" onClick={handleChangePicture}>
+                                <Camera className="h-5 w-5" />
+                            </button>
+                            <input 
+                                type="file" 
+                                ref={fileInputRef} 
+                                className="hidden" 
+                                accept="image/*"
+                                onChange={handleFileChange}
+                            />
+                        </div>
                     </div>
-                </div>
-                
-                <div className="space-y-6">
-                    <div className="space-y-2">
-                        <Label htmlFor="displayName">Full Name</Label>
-                        <Input 
-                            id="displayName" 
-                            value={displayName} 
-                            onChange={(e) => setDisplayName(e.target.value)} 
-                        />
-                    </div>
+                    
+                    <div className="space-y-6">
+                        <div className="space-y-2">
+                            <Label htmlFor="displayName">Full Name</Label>
+                            <Input 
+                                id="displayName" 
+                                value={displayName} 
+                                onChange={(e) => setDisplayName(e.target.value)} 
+                            />
+                        </div>
 
-                     <div className="space-y-2">
-                        <Label htmlFor="username">Username</Label>
-                        <Input 
-                            id="username" 
-                            value={username} 
-                            onChange={(e) => setUsername(e.target.value)} 
-                        />
+                        <div className="space-y-2">
+                            <Label htmlFor="username">Username</Label>
+                            <Input 
+                                id="username" 
+                                value={username} 
+                                onChange={(e) => setUsername(e.target.value)} 
+                            />
+                        </div>
+                        
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Email Address</Label>
+                            <Input 
+                                id="email" 
+                                type="email" 
+                                value={email} 
+                                readOnly
+                                className="focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 cursor-not-allowed opacity-70"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="bio">Bio</Label>
+                            <Textarea 
+                                id="bio" 
+                                value={bio} 
+                                onChange={(e) => setBio(e.target.value)}
+                                placeholder="Tell us a little about yourself"
+                                rows={3}
+                            />
+                        </div>
                     </div>
                     
                     <div className="space-y-2">
-                        <Label htmlFor="email">Email Address</Label>
-                        <Input 
-                            id="email" 
-                            type="email" 
-                            value={email} 
-                            readOnly
-                            className="focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 cursor-not-allowed opacity-70"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="bio">Bio</Label>
-                        <Textarea 
-                            id="bio" 
-                            value={bio} 
-                            onChange={(e) => setBio(e.target.value)}
-                            placeholder="Tell us a little about yourself"
-                            rows={3}
-                        />
+                        <Button className="w-full" onClick={handleSaveChanges}>Save Changes</Button>
+                        <Button className="w-full" variant="outline" asChild>
+                            <Link href="/settings">
+                                <Shield className="mr-2 h-4 w-4" />
+                                Privacy & Security
+                            </Link>
+                        </Button>
+                        <Button className="w-full" variant="outline" onClick={handleSignOut}>
+                            <LogOut className="mr-2 h-4 w-4" />
+                            Logout
+                        </Button>
                     </div>
                 </div>
-                
-                <div className="space-y-2">
-                    <Button className="w-full" onClick={handleSaveChanges}>Save Changes</Button>
-                    <Button className="w-full" variant="outline" asChild>
-                        <Link href="/settings">
-                            <Shield className="mr-2 h-4 w-4" />
-                            Privacy & Security
-                        </Link>
-                    </Button>
-                    <Button className="w-full" variant="outline" onClick={handleSignOut}>
-                        <LogOut className="mr-2 h-4 w-4" />
-                        Logout
-                    </Button>
-                </div>
-            </div>
-        </main>
-    </div>
+            </main>
+        </div>
+    </>
   );
 }
