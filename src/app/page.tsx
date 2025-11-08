@@ -16,7 +16,7 @@ export default function Home() {
         </Card>
       </div>
        <footer className="absolute bottom-4 text-center text-sm text-muted-foreground">
-          <p>Powered by Firebase and Google AI</p>
+          <p>Powered by Umar Afridi Developer</p>
         </footer>
     </main>
   );
