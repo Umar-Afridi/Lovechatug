@@ -14,10 +14,10 @@ export default function Home() {
             <LoginForm />
           </CardContent>
         </Card>
-      </div>
-       <footer className="absolute bottom-4 text-center text-sm text-muted-foreground">
+         <footer className="mt-8 text-center text-sm text-muted-foreground">
           <p>Powered by Umar Afridi Developer</p>
         </footer>
+      </div>
     </main>
   );
 }
