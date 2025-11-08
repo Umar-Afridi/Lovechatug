@@ -25,7 +25,7 @@
     --ring: 142.1 76.2% 36.3%;
     --radius: 0.5rem;
     
-    --chat-bg-default: 0 0% 100%;
+    --chat-bg-default: hsl(var(--background));
     --chat-bg-rose: 346.8 77.2% 49.8%;
     --chat-bg-violet: 262.1 83.3% 57.8%;
     --chat-bg-green: 142.1 70.2% 41.3%;
@@ -54,7 +54,7 @@
     --input: 215 27.9% 16.9%;
     --ring: 142.1 76.2% 36.3%;
     
-    --chat-bg-default: 224 71.4% 4.1%;
+    --chat-bg-default: hsl(var(--background));
     --chat-bg-rose: 346.8 77.2% 49.8%;
     --chat-bg-violet: 262.1 83.3% 57.8%;
     --chat-bg-green: 142.1 70.2% 41.3%;
@@ -73,12 +73,12 @@
     -moz-osx-font-smoothing: grayscale;
   }
   
-  .chat-bg-default { background-color: hsl(var(--chat-bg-default)); }
-  .chat-bg-rose { background-color: hsl(var(--chat-bg-rose)); }
-  .chat-bg-violet { background-color: hsl(var(--chat-bg-violet)); }
-  .chat-bg-green { background-color: hsl(var(--chat-bg-green)); }
-  .chat-bg-yellow { background-color: hsl(var(--chat-bg-yellow)); }
-  .chat-bg-blue { background-color: hsl(var(--chat-bg-blue)); }
+  .chat-bg-default { background-color: var(--chat-bg-default); }
+  .chat-bg-rose { background-color: var(--chat-bg-rose); }
+  .chat-bg-violet { background-color: var(--chat-bg-violet); }
+  .chat-bg-green { background-color: var(--chat-bg-green); }
+  .chat-bg-yellow { background-color: var(--chat-bg-yellow); }
+  .chat-bg-blue { background-color: var(--chat-bg-blue); }
 }
 
 @layer utilities {
