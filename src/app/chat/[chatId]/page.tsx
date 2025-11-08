@@ -55,6 +55,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { format } from 'date-fns';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import Link from 'next/link';
+import { useSound } from '@/hooks/use-sound';
 
 // Helper to get or create a chat
 async function getOrCreateChat(
@@ -150,6 +151,9 @@ export default function ChatIdPage({
   const touchStartX = useRef(0);
   const touchMoveX = useRef(0);
   const isDraggingReply = useRef(false);
+
+  const playMessageSound = useSound('https://codeskulptor-demos.commondatastorage.googleapis.com/descent/gotitem.mp3');
+  const isFirstMessageLoad = useRef(true);
   
   // Swipe to go back logic for mobile
   useEffect(() => {
@@ -271,9 +275,18 @@ export default function ChatIdPage({
       const msgs = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as MessageType)
       );
+
+      // Play sound for new incoming messages
+      if (!isFirstMessageLoad.current && msgs.length > messages.length) {
+          const newMessage = msgs[msgs.length - 1];
+          if (newMessage && newMessage.senderId !== authUser?.uid) {
+              playMessageSound();
+          }
+      }
       
       setMessages(msgs);
       setLoading(false);
+      isFirstMessageLoad.current = false;
     }, (serverError) => {
         const permissionError = new FirestorePermissionError({
             path: messagesRef.path,
@@ -284,7 +297,7 @@ export default function ChatIdPage({
     });
 
     return () => unsubscribe();
-  }, [firestore, chatId, currentUser]);
+  }, [firestore, chatId, currentUser, authUser, messages.length, playMessageSound]);
 
   // Mark messages as read and reset unread count
   useEffect(() => {

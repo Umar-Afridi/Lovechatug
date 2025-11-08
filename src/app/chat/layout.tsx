@@ -35,7 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -44,6 +44,7 @@ import type { UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getDatabase, ref, onValue, off, onDisconnect, serverTimestamp as rtdbServerTimestamp, set } from 'firebase/database';
+import { useSound } from '@/hooks/use-sound';
 
 
 // Custom hook to get user profile data in real-time
@@ -170,6 +171,9 @@ export default function ChatAppLayout({
   const [requestCount, setRequestCount] = useState(0);
   const { toast } = useToast();
   
+  const playRequestSound = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a');
+  const isFirstRequestLoad = useRef(true);
+  
   useEffect(() => {
     if (!firestore || !user?.uid) return;
 
@@ -178,7 +182,12 @@ export default function ChatAppLayout({
 
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {
-        setRequestCount(snapshot.size);
+        const newSize = snapshot.size;
+        if (!isFirstRequestLoad.current && newSize > requestCount) {
+          playRequestSound();
+        }
+        setRequestCount(newSize);
+        isFirstRequestLoad.current = false;
       },
       (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -191,7 +200,7 @@ export default function ChatAppLayout({
     );
 
     return () => unsubscribe();
-  }, [firestore, user]);
+  }, [firestore, user, requestCount, playRequestSound]);
 
 
   useEffect(() => {
