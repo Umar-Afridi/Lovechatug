@@ -153,7 +153,8 @@ export default function ChatIdPage({
   const touchMoveX = useRef(0);
   const isDraggingReply = useRef(false);
 
-  const playMessageSound = useSound('https://codeskulptor-demos.commondatastorage.googleapis.com/descent/gotitem.mp3');
+  const playReceiveMessageSound = useSound('https://codeskulptor-demos.commondatastorage.googleapis.com/descent/gotitem.mp3');
+  const playSendMessageSound = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-button.m4a');
   const isFirstMessageLoad = useRef(true);
   
   // Swipe to go back logic for mobile
@@ -281,7 +282,7 @@ export default function ChatIdPage({
       if (!isFirstMessageLoad.current && msgs.length > messages.length) {
           const newMessage = msgs[msgs.length - 1];
           if (newMessage && newMessage.senderId !== authUser?.uid) {
-              playMessageSound();
+              playReceiveMessageSound();
           }
       }
       
@@ -298,7 +299,7 @@ export default function ChatIdPage({
     });
 
     return () => unsubscribe();
-  }, [firestore, chatId, currentUser, authUser, messages.length, playMessageSound]);
+  }, [firestore, chatId, currentUser, authUser, messages.length, playReceiveMessageSound]);
 
   // Mark messages as read and reset unread count
   useEffect(() => {
@@ -553,6 +554,8 @@ export default function ChatIdPage({
 
     const handleSendMessage = () => {
     if (inputValue.trim() === '' || !firestore || !authUser || !chatId || !otherUser) return;
+    
+    playSendMessageSound();
 
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
     const chatRef = doc(firestore, 'chats', chatId);
