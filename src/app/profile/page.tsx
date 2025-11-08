@@ -9,15 +9,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Camera, LogOut, Shield } from 'lucide-react';
+import { ArrowLeft, Camera, LogOut, Shield, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
-import { updateProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { deleteUser, updateProfile } from 'firebase/auth';
+import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ProfilePictureDialog } from '@/components/profile/profile-picture-dialog';
+import { DeleteAccountDialog } from '@/components/profile/delete-account-dialog';
 
 export default function ProfilePage() {
   const auth = useAuth();
@@ -28,6 +29,7 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isPictureDialogOpen, setPictureDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // States for current data from Firestore
   const [displayName, setDisplayName] = useState('');
@@ -152,7 +154,7 @@ export default function ProfilePage() {
     // 2. Prepare data for updates
     const authProfileChanged = user.displayName !== displayName || pictureUpdated;
     const updatedAuthProfile: { displayName?: string; photoURL?: string | null } = {};
-    if (user.displayName !== displayName) {
+     if (user.displayName !== displayName) {
         updatedAuthProfile.displayName = displayName;
     }
      if (pictureUpdated) {
@@ -160,16 +162,18 @@ export default function ProfilePage() {
     }
     
     const updatedFirestoreData: any = {
+        uid: user.uid,
         displayName: displayName,
         username: username.toLowerCase(),
         bio: bio,
+        email: email,
         photoURL: finalPhotoURL,
     };
 
     // 3. Perform updates
     try {
         // Update Firebase Auth profile only if there are changes
-        if (authProfileChanged) {
+        if (Object.keys(updatedAuthProfile).length > 0) {
             await updateProfile(user, updatedAuthProfile);
         }
 
@@ -206,6 +210,69 @@ export default function ProfilePage() {
     }
 };
 
+ const handleDeleteAccount = async () => {
+    if (!user || !firestore) return;
+    
+    const userDocRef = doc(firestore, 'users', user.uid);
+    const storage = getStorage();
+    const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
+
+    try {
+      // 1. Delete profile picture from Storage
+      try {
+        await deleteObject(photoRef);
+      } catch (error: any) {
+        // If the object doesn't exist, we can ignore the error and proceed.
+        if (error.code !== 'storage/object-not-found') {
+          throw error; // Re-throw other storage errors
+        }
+      }
+
+      // 2. Delete user document from Firestore
+      await deleteDoc(userDocRef);
+
+      // 3. Delete user from Firebase Authentication
+      await deleteUser(user);
+
+      toast({
+        title: "Account Deleted",
+        description: "Your account has been permanently deleted.",
+      });
+
+      router.push('/'); // Redirect to home/login page
+    } catch (error: any) {
+      console.error("Error deleting account:", error);
+       // Handle re-authentication if needed
+      if (error.code === 'auth/requires-recent-login') {
+          toast({
+            variant: "destructive",
+            title: "Action Required",
+            description: "This is a sensitive action. Please log out and log back in before deleting your account.",
+        });
+      } else if (error.code === 'permission-denied') {
+          const permissionError = new FirestorePermissionError({
+                path: userDocRef.path,
+                operation: 'delete',
+            });
+          errorEmitter.emit('permission-error', permissionError);
+          toast({
+            variant: "destructive",
+            title: "Deletion Failed",
+            description: "You do not have permission to delete this account.",
+        });
+      }
+      else {
+        toast({
+          variant: "destructive",
+          title: "Deletion Failed",
+          description: error.message || "Could not delete your account. Please try again.",
+        });
+      }
+    } finally {
+        setDeleteDialogOpen(false);
+    }
+  };
+
 
   const handleSignOut = async () => {
     if (auth) {
@@ -225,6 +292,11 @@ export default function ProfilePage() {
             currentPhotoURL={displayPhoto}
             onRemove={handleRemovePicture}
             onChange={handleChangePicture}
+        />
+        <DeleteAccountDialog
+            isOpen={isDeleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+            onConfirm={handleDeleteAccount}
         />
         <div className="flex min-h-screen flex-col bg-background">
             <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
@@ -306,6 +378,10 @@ export default function ProfilePage() {
                                 <Shield className="mr-2 h-4 w-4" />
                                 Privacy & Security
                             </Link>
+                        </Button>
+                        <Button className="w-full" variant="outline" onClick={() => setDeleteDialogOpen(true)} >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete Account
                         </Button>
                         <Button className="w-full" variant="outline" onClick={handleSignOut}>
                             <LogOut className="mr-2 h-4 w-4" />
