@@ -123,7 +123,7 @@ export default function ChatIdPage({
 }: {
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
-  const { chatId: otherUserIdFromParams } = React.use(params);
+  const { chatId: otherUserIdFromParams } = params;
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -924,5 +924,3 @@ export default function ChatIdPage({
     </>
   );
 }
-
-    
