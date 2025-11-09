@@ -11,6 +11,8 @@ service cloud.firestore {
       allow read, update, delete: if request.auth != null && request.auth.uid == userId;
     }
 
+    // Composite index for calls collection
+    // index: calls(participants ASC, timestamp DESC)
     // A user can only list, read, write, or delete calls if they are a participant in the call.
     match /calls/{callId} {
         allow read, list, write, delete: if request.auth != null && request.auth.uid in resource.data.participants;
