@@ -1,54 +1,75 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 1. Users can only create their own user document.
-    // 2. Authenticated users can only read, update, or delete their own profile.
+    // Helper function to ensure user is signed in
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // =========================================================================
+    // 1. Users Collection (Profile Data & Sign-up FIX)
+    // =========================================================================
     match /users/{userId} {
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-      // Allow any user (even unauthenticated) to query the users collection to find other users by username during signup.
+      // FIX: Allow 'create' (Sign-up) and 'update' (Profile Change) 
+      // ONLY if the UID matches the document ID.
+      allow create, update: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Allow any signed-in user to read any profile (for contact list/display)
+      allow read: if isAuthenticated();
+
+      // Allow anyone to query for usernames to check for availability during signup.
       allow list: if true;
     }
 
-    // A user can only read, write, or delete a call if they are a participant.
+    // =========================================================================
+    // 2. Calls Collection (Voice/Video Call Records)
+    // =========================================================================
     match /calls/{callId} {
-        allow read, write, delete: if request.auth != null && request.auth.uid in resource.data.participants;
-        // A user can list calls they are a participant in.
-        allow list: if request.auth != null && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
+      // Allow read/update only if the user is a participant. 
+      allow read, update, create: if isAuthenticated() && request.auth.uid in request.resource.data.participants;
+      allow list: if isAuthenticated() && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
     }
-
-    // Rules for friend requests
+    
+    // =========================================================================
+    // 3. Requests (Friend Requests)
+    // =========================================================================
     match /friendRequests/{requestId} {
-      // Allow a user to create a request where they are the sender.
-      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
-      
-      // Only the sender or receiver can read, update or delete a friend request.
-      allow read, update, delete: if request.auth != null && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
-
-      // A user can list friend requests sent to them OR by them.
-      allow list: if request.auth != null && 
+      // Allow read/update only if the user is the receiver, and create if they are the sender.
+      allow read, update, delete: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.senderId;
+      allow list: if isAuthenticated() && 
                     ((request.query.where[0].field == 'receiverId' && request.query.where[0].op == '==' && request.query.where[0].value == request.auth.uid) ||
                      (request.query.where[0].field == 'senderId' && request.query.where[0].op == '==' && request.query.where[0].value == request.auth.uid));
     }
     
-    // Allow users to read/write to the chat document if they are a participant.
+    // =========================================================================
+    // 4. Chats and Messages
+    // =========================================================================
     match /chats/{chatId} {
-      allow read, write: if request.auth != null && request.auth.uid in resource.data.members;
+      allow read, write: if isAuthenticated() && request.auth.uid in resource.data.members;
     }
     
-    // Secure Read/Write for messages: Only participants of the chat can read/write.
     match /chats/{chatId}/messages/{messageId} {
-        allow read, write: if request.auth != null 
+      allow read, write: if isAuthenticated() 
                             && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
     }
 
-    // Stores emails of deleted users to prevent re-registration.
-    // Allow creation by anyone (triggered server-side or by user before deletion).
-    // Prevent reading to protect privacy.
-     match /deletedUsers/{email} {
+    // =========================================================================
+    // 5. Deleted Users (Tombstone)
+    // =========================================================================
+    match /deletedUsers/{email} {
       allow create: if true;
       allow read, write, delete: if false;
+    }
+
+    // =========================================================================
+    // 6. Default/Fallback Rule (Restrictive)
+    // =========================================================================
+    // This denies access to any collection not specifically named above.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
