@@ -59,6 +59,7 @@ export function SignupForm() {
     const usersRef = collection(firestore, 'users');
 
     try {
+        // Step 1: Check if username is already taken
         const q = query(usersRef, where('username', '==', username));
         const usernameQuerySnapshot = await getDocs(q);
         if (!usernameQuerySnapshot.empty) {
@@ -66,15 +67,16 @@ export function SignupForm() {
             return;
         }
 
-        // Create the user but don't sign them in yet.
+        // Step 2: Create the user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // Update profile and create Firestore document
+        // Step 3: Update the user's profile in Firebase Auth (e.g., display name)
         await updateProfile(user, {
           displayName: fullName,
         });
         
+        // Step 4: Create the user document in Firestore
         const userDocRef = doc(firestore, 'users', user.uid);
         const userData: UserProfile = {
           uid: user.uid,
@@ -82,17 +84,21 @@ export function SignupForm() {
           email: email,
           username: username,
           photoURL: user.photoURL ?? '',
+          friends: [],
+          bio: '',
+          isOnline: false,
+          lastSeen: serverTimestamp(),
+          blockedUsers: [],
+          blockedBy: [],
         };
         await setDoc(userDocRef, userData);
         
-        // Send verification email
+        // Step 5: Send verification email
         await sendEmailVerification(user);
 
-        // Show success message
+        // Step 6: Show success message and sign the user out
         setMessage("A verification email has been sent. Please check your inbox and verify your email before logging in.");
         (event.target as HTMLFormElement).reset();
-        
-        // Sign the user out so they have to verify before logging in
         await auth.signOut();
 
       } catch (err: any) {

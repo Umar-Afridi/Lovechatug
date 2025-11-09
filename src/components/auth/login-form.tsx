@@ -19,7 +19,7 @@ import { Label } from '../ui/label';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { ForgotPasswordDialog } from './forgot-password-dialog';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import type { UserProfile } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -59,10 +59,11 @@ export function LoginForm() {
                 friends: [],
                 bio: '',
                 isOnline: true,
-                lastSeen: new Date().toISOString(),
+                lastSeen: serverTimestamp(),
                 blockedUsers: [],
+                blockedBy: [],
             };
-            setDoc(userDocRef, newUserProfile).catch((serverError) => {
+            await setDoc(userDocRef, newUserProfile).catch((serverError) => {
               const permissionError = new FirestorePermissionError({
                 path: userDocRef.path,
                 operation: 'create',
