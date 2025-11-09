@@ -66,7 +66,6 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
                 // Add other required fields with default values
                 email: '',
                 username: '',
-                chatIds: [],
              });
         }
 
@@ -603,3 +602,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    

@@ -561,6 +561,7 @@ export default function ChatIdPage({
 
       const contentToSend = inputValue.trim();
       setInputValue(''); // Clear input immediately for better UX
+      
       setTimeout(() => playSendMessageSound(), 50);
 
       // Keep keyboard open by re-focusing
@@ -993,3 +994,5 @@ export default function ChatIdPage({
     </>
   );
 }
+
+    
