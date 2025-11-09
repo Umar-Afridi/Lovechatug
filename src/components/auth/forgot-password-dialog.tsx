@@ -44,9 +44,15 @@ export function ForgotPasswordDialog() {
     } catch (error: any) {
       console.error('Error sending password reset email:', error);
       let description = 'Could not send password reset email. Please try again.';
-      if (error.code === 'auth/user-not-found') {
-        description = 'No user found with this email address.';
+      // A generic message is better for security to avoid email enumeration.
+      if (process.env.NODE_ENV === 'development') {
+         if (error.code === 'auth/user-not-found') {
+          description = 'No user found with this email address.';
+        }
+      } else {
+        description = "If an account exists for this email, a reset link has been sent."
       }
+     
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -64,9 +70,9 @@ export function ForgotPasswordDialog() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Forgot Password</DialogTitle>
+          <DialogTitle>Reset Your Password</DialogTitle>
           <DialogDescription>
-            Enter your email address and we will send you a link to reset your
+            Enter your registered email address and we will send you a link to reset your
             password.
           </DialogDescription>
         </DialogHeader>
