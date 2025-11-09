@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -53,18 +53,29 @@ export function SignupForm() {
 
     const username = usernameInput.toLowerCase();
 
-    // Check if username already exists
-    const usersRef = collection(firestore, 'users');
-    const q = query(usersRef, where('username', '==', username));
-    
-    getDocs(q).then(async (querySnapshot) => {
-      if (!querySnapshot.empty) {
-        setError('This username is already taken. Please try another one.');
-        return;
-      }
+    try {
+        // --- Start: New Validation Logic ---
+        
+        // 1. Check if email is in the deletedUsers collection
+        const deletedUserRef = doc(firestore, 'deletedUsers', email);
+        const deletedUserSnap = await getDoc(deletedUserRef);
+        if (deletedUserSnap.exists()) {
+            setError("This email is associated with a deleted account. Please use a different email.");
+            return;
+        }
 
-      // If username is available, create the user
-      try {
+        // 2. Check if username is already taken
+        const usersRef = collection(firestore, 'users');
+        const q = query(usersRef, where('username', '==', username));
+        const usernameQuerySnapshot = await getDocs(q);
+        if (!usernameQuerySnapshot.empty) {
+            setError('This username is already taken. Please try another one.');
+            return;
+        }
+
+        // --- End: New Validation Logic ---
+
+        // 3. If all checks pass, create the user
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(userCredential.user, {
           displayName: fullName,
@@ -84,35 +95,25 @@ export function SignupForm() {
           blockedUsers: [],
         };
 
-        setDoc(userDocRef, userData)
-          .then(() => {
-            router.push('/chat');
-          })
-          .catch((serverError) => {
-            const permissionError = new FirestorePermissionError({
-              path: userDocRef.path,
-              operation: 'create',
-              requestResourceData: userData,
-            });
-            errorEmitter.emit('permission-error', permissionError);
-            setError('Could not save user profile. Insufficient permissions.');
-          });
+        await setDoc(userDocRef, userData);
+        router.push('/chat');
+
       } catch (err: any) {
         // Handle Firebase auth errors (e.g., email-already-in-use)
         if (err.code === 'auth/email-already-in-use') {
            setError('This email address is already in use by another account.');
-        } else {
+        } else if (err.code === 'permission-denied') {
+            const permissionError = new FirestorePermissionError({
+                path: 'users or deletedUsers', // This is a simplification for the user
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            setError('Could not complete signup. Insufficient permissions.');
+        }
+        else {
            setError(err.message);
         }
       }
-    }).catch((serverError) => {
-        const permissionError = new FirestorePermissionError({
-            path: usersRef.path,
-            operation: 'list',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-        setError('Could not check if username is available. Insufficient permissions.');
-    });
   };
 
   return (

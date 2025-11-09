@@ -13,7 +13,7 @@ import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck } from 'lucide-re
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -224,14 +224,24 @@ export default function ProfilePage() {
 };
 
  const handleDeleteAccount = async () => {
-    if (!user || !firestore || !auth) return;
+    if (!user || !firestore || !auth || !user.email) {
+      toast({ title: "Error", description: "User session is not valid.", variant: "destructive" });
+      return;
+    }
     
     const userDocRef = doc(firestore, 'users', user.uid);
+    const deletedUserDocRef = doc(firestore, 'deletedUsers', user.email);
     const storage = getStorage();
     const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
 
     try {
-      // 1. Delete profile picture from Storage, if it exists
+      // 1. Tombstone the user's email to prevent re-registration
+      await setDoc(deletedUserDocRef, {
+        email: user.email,
+        deletedAt: serverTimestamp(),
+      });
+      
+      // 2. Delete profile picture from Storage, if it exists
       if (photoURL) {
         try {
           await deleteObject(photoRef);
@@ -242,11 +252,10 @@ export default function ProfilePage() {
         }
       }
 
-      // 2. Delete user document from Firestore
+      // 3. Delete user document from Firestore
       await deleteDoc(userDocRef);
 
-      // 3. Delete user from Firebase Authentication
-      // This is the final and most critical step.
+      // 4. Delete user from Firebase Authentication
       await deleteUser(auth.currentUser!);
 
       toast({
@@ -254,8 +263,6 @@ export default function ProfilePage() {
         description: "Your account has been permanently deleted.",
       });
 
-      // This will trigger a redirect via the auth state listener in the layout
-      // but we can also push manually for a faster response.
       router.push('/');
     } catch (error: any) {
       console.error("Error deleting account:", error);
@@ -267,11 +274,10 @@ export default function ProfilePage() {
         });
       } else if (error.code === 'permission-denied') {
           const permissionError = new FirestorePermissionError({
-                path: userDocRef.path,
-                operation: 'delete',
+                path: userDocRef.path, // or deletedUserDocRef.path
+                operation: 'delete', // or 'create'
             });
           errorEmitter.emit('permission-error', permissionError);
-          // Don't show a generic toast here, the dev overlay is better.
       }
       else {
         toast({

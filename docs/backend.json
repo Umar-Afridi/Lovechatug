@@ -220,6 +220,24 @@
         }
       },
       "required": ["callerId", "receiverId", "type", "status", "timestamp", "direction"]
+    },
+    "DeletedUser": {
+        "title": "Deleted User",
+        "description": "Represents a user who has deleted their account, storing their email to prevent re-registration.",
+        "type": "object",
+        "properties": {
+            "email": {
+                "type": "string",
+                "format": "email",
+                "description": "The email of the deleted user."
+            },
+            "deletedAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "The timestamp when the user was deleted."
+            }
+        },
+        "required": ["email", "deletedAt"]
     }
   },
   "auth": {
@@ -255,6 +273,12 @@
             "$ref": "#/entities/Call"
         },
         "description": "Stores all call records between users."
+    },
+    "/deletedUsers/{email}": {
+        "schema": {
+            "$ref": "#/entities/DeletedUser"
+        },
+        "description": "Stores the emails of users who have deleted their accounts to prevent re-registration."
     }
   }
 }
