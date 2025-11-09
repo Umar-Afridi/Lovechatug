@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification, updateProfile } from 'firebase/auth';
-import { doc, setDoc, collection, query, where, getDocs, getDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs, getDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -82,11 +82,6 @@ export function SignupForm() {
           email: email,
           username: username,
           photoURL: user.photoURL ?? '',
-          friends: [],
-          bio: '',
-          isOnline: true,
-          lastSeen: new Date().toISOString(),
-          blockedUsers: [],
         };
         await setDoc(userDocRef, userData);
         

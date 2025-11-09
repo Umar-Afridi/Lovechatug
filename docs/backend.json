@@ -104,6 +104,10 @@
           "type": "string",
           "enum": ["pending", "accepted", "rejected"],
           "description": "The status of the friend request."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
         }
       },
       "required": ["senderId", "receiverId", "status"]

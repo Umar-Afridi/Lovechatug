@@ -75,6 +75,7 @@ export type FriendRequest = {
     senderId: string; // user id
     receiverId: string; // user id
     status: 'pending' | 'accepted' | 'rejected';
+    createdAt: any; // Firestore ServerTimestamp
 }
 
 export type Call = {
