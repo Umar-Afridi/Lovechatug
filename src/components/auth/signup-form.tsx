@@ -109,7 +109,7 @@ export function SignupForm() {
                 operation: 'list',
             });
             errorEmitter.emit('permission-error', permissionError);
-            setError('A permission error occurred while checking the username. This has been logged.');
+            setError('A permission error occurred while checking the username. Please check the developer console for more details.');
         }
         else {
            setError(err.message || "An unknown error occurred during signup.");

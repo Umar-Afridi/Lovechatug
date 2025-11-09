@@ -1,4 +1,3 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -12,7 +11,7 @@ service cloud.firestore {
     // 1. Users Collection (Profile Data & Sign-up FIX)
     // =========================================================================
     match /users/{userId} {
-      // FIX: Allow 'create' (Sign-up) and 'update' (Profile Change) 
+      // Allow 'create' (Sign-up) and 'update' (Profile Change) 
       // ONLY if the UID matches the document ID.
       allow create, update: if isAuthenticated() && request.auth.uid == userId;
       
@@ -27,19 +26,17 @@ service cloud.firestore {
     // 2. Calls Collection (Voice/Video Call Records)
     // =========================================================================
     match /calls/{callId} {
-      // Allow read/update only if the user is a participant. 
-      allow read, update, create: if isAuthenticated() && request.auth.uid in request.resource.data.participants;
-      allow list: if isAuthenticated() && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
+        allow read, write, delete: if request.auth != null && request.auth.uid in resource.data.participants;
+        allow list: if request.auth != null && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
     }
     
     // =========================================================================
-    // 3. Requests (Friend Requests)
+    // 3. Friend Requests
     // =========================================================================
     match /friendRequests/{requestId} {
-      // Allow read/update only if the user is the receiver, and create if they are the sender.
-      allow read, update, delete: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
-      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.senderId;
-      allow list: if isAuthenticated() && 
+      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
+      allow read, update, delete: if request.auth != null && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
+      allow list: if request.auth != null && 
                     ((request.query.where[0].field == 'receiverId' && request.query.where[0].op == '==' && request.query.where[0].value == request.auth.uid) ||
                      (request.query.where[0].field == 'senderId' && request.query.where[0].op == '==' && request.query.where[0].value == request.auth.uid));
     }
