@@ -24,3 +24,7 @@ service cloud.firestore {
     }
   }
 }
+
+// Composite index for calls collection
+// This comment is added to trigger an index deployment.
+// index: calls(participants ASC, timestamp DESC)
