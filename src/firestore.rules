@@ -1,37 +1,31 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to ensure user is signed in
+    // Helper: Checks if any user is signed in
     function isAuthenticated() {
       return request.auth != null;
     }
 
     // =========================================================================
-    // 1. Users Collection (Profile Data & Sign-up FIX)
+    // 1. Users Collection (Sign-up FIX)
     // =========================================================================
     match /users/{userId} {
-      // Allow 'create' (Sign-up) and 'update' (Profile Change) 
+      // FIX: Allow 'create' (Sign-up) and 'update' (Profile Change) 
       // ONLY if the UID matches the document ID.
       allow create, update: if isAuthenticated() && request.auth.uid == userId;
       
-      // Allow any signed-in user to read any profile (for contact list/display)
+      // Allow any signed-in user to read any profile (for contact list)
       allow read: if isAuthenticated();
 
-      // Allow anyone to query for usernames to check for availability during signup.
+      // Allow any user (even unauthenticated) to query the users collection
+      // to find other users by username during signup. THIS IS THE FIX.
       allow list: if true;
     }
 
     // =========================================================================
-    // 2. Calls Collection (Voice/Video Call Records)
-    // =========================================================================
-    match /calls/{callId} {
-        allow read, write, delete: if request.auth != null && request.auth.uid in resource.data.participants;
-        allow list: if request.auth != null && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
-    }
-    
-    // =========================================================================
-    // 3. Friend Requests
+    // 2. Friend Requests
     // =========================================================================
     match /friendRequests/{requestId} {
       allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
@@ -42,7 +36,7 @@ service cloud.firestore {
     }
     
     // =========================================================================
-    // 4. Chats and Messages
+    // 3. Chats and Messages
     // =========================================================================
     match /chats/{chatId} {
       allow read, write: if isAuthenticated() && request.auth.uid in resource.data.members;
@@ -54,6 +48,14 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // 4. Calls Collection
+    // =========================================================================
+    match /calls/{callId} {
+        allow read, write, delete: if request.auth != null && request.auth.uid in resource.data.participants;
+        allow list: if request.auth != null && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
+    }
+
+    // =========================================================================
     // 5. Deleted Users (Tombstone)
     // =========================================================================
     match /deletedUsers/{email} {
@@ -61,12 +63,5 @@ service cloud.firestore {
       allow read, write, delete: if false;
     }
 
-    // =========================================================================
-    // 6. Default/Fallback Rule (Restrictive)
-    // =========================================================================
-    // This denies access to any collection not specifically named above.
-    match /{document=**} {
-      allow read, write: if false;
-    }
   }
 }
