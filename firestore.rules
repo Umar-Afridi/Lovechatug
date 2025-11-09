@@ -15,7 +15,7 @@ service cloud.firestore {
     match /calls/{callId} {
         allow read, write, delete: if request.auth != null && request.auth.uid in resource.data.participants;
         // A user can list calls they are a participant in.
-        allow list: if request.auth != null && request.query.where.participants.hasAny([request.auth.uid]);
+        allow list: if request.auth != null && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
     }
 
     // Rules for friend requests
