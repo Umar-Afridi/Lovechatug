@@ -19,10 +19,21 @@ service cloud.firestore {
         allow read, write, delete: if request.auth != null && request.auth.uid in resource.data.participants;
         allow list: if request.auth != null;
     }
+
+    // Rules for friend requests
+    match /friendRequests/{requestId} {
+      // Any authenticated user can create a friend request.
+      allow create: if request.auth != null;
+      
+      // A user can only list friend requests sent to them.
+      allow list: if request.auth != null && request.query.resource.data.receiverId == request.auth.uid;
+      
+      // Only the sender or receiver can read, update or delete a friend request.
+      allow read, update, delete: if request.auth != null && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
+    }
     
-    // Allow authenticated users to read/write to all other data 
-    // (chats, friends, etc.), but not the users or calls collection which have stricter rules.
-    match /{path=**}/documents/{document} {
+    // Allow authenticated users to read/write to chat data.
+    match /chats/{chatId}/{document=**} {
       allow read, write: if request.auth != null;
     }
   }
