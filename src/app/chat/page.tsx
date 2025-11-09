@@ -22,6 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow, isToday, isYesterday, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { VerifiedBadge } from '@/components/ui/verified-badge';
 
 
 const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: string }) => {
@@ -114,7 +115,12 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
             )}
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="font-semibold truncate">{participant.displayName}</p>
+            <div className="flex items-center gap-2">
+                <p className="font-semibold truncate">{participant.displayName}</p>
+                {participant.verifiedBadge?.showBadge && (
+                    <VerifiedBadge color={participant.verifiedBadge.badgeColor} />
+                )}
+            </div>
             <p className={cn("text-sm  truncate", isTyping ? "text-primary" : "text-muted-foreground")}>
                 {isTyping ? "typing..." : (chat.lastMessage?.content ?? 'No messages yet')}
             </p>
@@ -475,7 +481,12 @@ export default function ChatPage() {
                         <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
                     </Avatar>
                     <div>
-                        <p className="font-semibold">{foundUser.displayName}</p>
+                        <div className="flex items-center gap-2">
+                           <p className="font-semibold">{foundUser.displayName}</p>
+                            {foundUser.verifiedBadge?.showBadge && (
+                                <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
+                            )}
+                        </div>
                         <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
                     </div>
                     </div>

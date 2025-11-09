@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Camera, LogOut, Shield, Trash2 } from 'lucide-react';
+import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
@@ -19,6 +19,10 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ProfilePictureDialog } from '@/components/profile/profile-picture-dialog';
 import { DeleteAccountDialog } from '@/components/profile/delete-account-dialog';
+import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { Separator } from '@/components/ui/separator';
 
 export default function ProfilePage() {
   const auth = useAuth();
@@ -37,6 +41,10 @@ export default function ProfilePage() {
   const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
   const [photoURL, setPhotoURL] = useState<string | null>(null);
+
+  // Verified Badge State
+  const [showBadge, setShowBadge] = useState(false);
+  const [badgeColor, setBadgeColor] = useState<'blue' | 'gold' | 'green'>('blue');
   
   // State for the new image preview
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
@@ -59,6 +67,8 @@ export default function ProfilePage() {
               setUsername(data.username ?? '');
               setBio(data.bio ?? '');
               setPhotoURL(data.photoURL ?? user.photoURL ?? null);
+              setShowBadge(data.verifiedBadge?.showBadge ?? false);
+              setBadgeColor(data.verifiedBadge?.badgeColor ?? 'blue');
           }
       });
     }
@@ -168,6 +178,10 @@ export default function ProfilePage() {
         bio: bio,
         email: email,
         photoURL: finalPhotoURL,
+        verifiedBadge: {
+          showBadge: showBadge,
+          badgeColor: badgeColor
+        }
     };
 
     // 3. Perform updates
@@ -369,6 +383,61 @@ export default function ProfilePage() {
                                 rows={3}
                             />
                         </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Verified Badge Settings */}
+                    <div className="space-y-6">
+                        <div className="space-y-2">
+                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                                <CheckCheck className="h-5 w-5 text-primary" />
+                                Verified Badge Settings
+                            </h3>
+                            <div className="flex items-center justify-between rounded-lg border p-4">
+                                <Label htmlFor="show-badge" className="flex-grow">
+                                    Show Verified Badge
+                                </Label>
+                                <Switch
+                                    id="show-badge"
+                                    checked={showBadge}
+                                    onCheckedChange={setShowBadge}
+                                />
+                            </div>
+                        </div>
+
+                        {showBadge && (
+                             <div className="space-y-4 rounded-lg border p-4">
+                                <Label>Badge Color</Label>
+                                <RadioGroup
+                                    value={badgeColor}
+                                    onValueChange={(value) => setBadgeColor(value as 'blue' | 'gold' | 'green')}
+                                    className="flex flex-col space-y-2"
+                                >
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="blue" id="color-blue" />
+                                        <Label htmlFor="color-blue" className="flex items-center gap-2">
+                                            <VerifiedBadge color="blue" />
+                                            <span>Blue</span>
+                                        </Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="gold" id="color-gold" />
+                                        <Label htmlFor="color-gold" className="flex items-center gap-2">
+                                            <VerifiedBadge color="gold" />
+                                            <span>Gold</span>
+                                        </Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="green" id="color-green" />
+                                        <Label htmlFor="color-green" className="flex items-center gap-2">
+                                            <VerifiedBadge color="green" />
+                                            <span>Green</span>
+                                        </Label>
+                                    </div>
+                                </RadioGroup>
+                            </div>
+                        )}
                     </div>
                     
                     <div className="space-y-2">

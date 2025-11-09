@@ -14,6 +14,10 @@ export type UserProfile = {
   chatsCleared?: {
     [chatId: string]: any; // Store server timestamp for when a chat was cleared
   }
+  verifiedBadge?: {
+    showBadge: boolean;
+    badgeColor: 'blue' | 'gold' | 'green';
+  }
 }
 
 export type Message = {

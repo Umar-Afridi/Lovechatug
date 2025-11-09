@@ -68,6 +68,21 @@
             "type": "string",
             "format": "date-time"
           }
+        },
+        "verifiedBadge": {
+            "type": "object",
+            "description": "Settings for the user's verified badge.",
+            "properties": {
+                "showBadge": {
+                    "type": "boolean",
+                    "description": "Whether to show the verified badge."
+                },
+                "badgeColor": {
+                    "type": "string",
+                    "enum": ["blue", "gold", "green"],
+                    "description": "The color of the verified badge."
+                }
+            }
         }
       },
       "required": ["uid", "displayName", "email", "username"]

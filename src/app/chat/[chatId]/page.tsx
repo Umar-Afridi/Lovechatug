@@ -59,6 +59,7 @@ import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import Link from 'next/link';
 import { useSound } from '@/hooks/use-sound';
 import { cn } from '@/lib/utils';
+import { VerifiedBadge } from '@/components/ui/verified-badge';
 
 
 export default function ChatIdPage({
@@ -797,7 +798,12 @@ export default function ChatIdPage({
                       <AvatarFallback>{getInitials(otherUser.displayName)}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
-                  <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
+                    {otherUser.verifiedBadge?.showBadge && (
+                         <VerifiedBadge color={otherUser.verifiedBadge.badgeColor} />
+                    )}
+                  </div>
                     <p className={cn("text-xs", isTyping || otherUser.isOnline ? "text-green-500" : "text-muted-foreground")}>
                       {isTyping ? "typing..." : otherUser.isOnline ? 'Online' : formatLastSeen(otherUser.lastSeen)}
                   </p>
