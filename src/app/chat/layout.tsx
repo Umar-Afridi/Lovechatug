@@ -175,8 +175,9 @@ export default function ChatAppLayout({
   const isFirstRequestLoad = useRef(true);
   
   useEffect(() => {
-    // **FIX:** Ensure user and firestore are available before running query.
-    if (!firestore || !user?.uid) return;
+    if (!firestore || !user?.uid) {
+      return;
+    }
 
     const requestsRef = collection(firestore, 'friendRequests');
     const q = query(requestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
@@ -201,11 +202,10 @@ export default function ChatAppLayout({
     );
 
     return () => unsubscribe();
-  }, [firestore, user, requestCount, playRequestSound]);
+  }, [firestore, user?.uid, requestCount, playRequestSound]);
 
 
   useEffect(() => {
-    // **FIX:** Wait for auth to finish loading before redirecting.
     if (!authLoading && !user && pathname !== '/') {
       router.push('/');
     }
@@ -226,10 +226,8 @@ export default function ChatAppLayout({
     }
   };
 
-  // **FIX:** Combine auth and profile loading states.
   const loading = authLoading || profileLoading;
 
-  // **FIX:** Show a loading screen until authentication is complete.
   if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
@@ -238,10 +236,7 @@ export default function ChatAppLayout({
     );
   }
   
-  // **FIX:** Redirect if not authenticated AFTER loading.
   if (!user) {
-    // The useEffect hook will handle the redirect, but we can return null or a loader here
-    // to prevent rendering the children for a split second.
     return (
        <div className="flex h-screen w-full items-center justify-center">
         <p>Redirecting...</p>
