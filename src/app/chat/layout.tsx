@@ -175,6 +175,7 @@ export default function ChatAppLayout({
   const isFirstRequestLoad = useRef(true);
   
   useEffect(() => {
+    // **FIX:** Ensure user and firestore are available before running query.
     if (!firestore || !user?.uid) return;
 
     const requestsRef = collection(firestore, 'friendRequests');
@@ -204,6 +205,7 @@ export default function ChatAppLayout({
 
 
   useEffect(() => {
+    // **FIX:** Wait for auth to finish loading before redirecting.
     if (!authLoading && !user && pathname !== '/') {
       router.push('/');
     }
@@ -224,9 +226,11 @@ export default function ChatAppLayout({
     }
   };
 
+  // **FIX:** Combine auth and profile loading states.
   const loading = authLoading || profileLoading;
 
-  if (loading || (!user && pathname !== '/')) {
+  // **FIX:** Show a loading screen until authentication is complete.
+  if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <p>Loading...</p>
@@ -234,8 +238,15 @@ export default function ChatAppLayout({
     );
   }
   
+  // **FIX:** Redirect if not authenticated AFTER loading.
   if (!user) {
-    return <>{children}</>;
+    // The useEffect hook will handle the redirect, but we can return null or a loader here
+    // to prevent rendering the children for a split second.
+    return (
+       <div className="flex h-screen w-full items-center justify-center">
+        <p>Redirecting...</p>
+      </div>
+    );
   }
 
   const getInitials = (name: string | null | undefined) => {
