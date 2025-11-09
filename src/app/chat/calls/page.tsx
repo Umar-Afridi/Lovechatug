@@ -182,8 +182,6 @@ export default function CallsPage() {
 
 
   useEffect(() => {
-    // **FIX:** Early return if user or firestore is not yet available.
-    // This prevents queries from running before auth is initialized, fixing permission errors.
     if (!user || !user.uid || !firestore) {
       setLoading(false);
       return;
@@ -191,9 +189,10 @@ export default function CallsPage() {
 
     setLoading(true);
     const callsRef = collection(firestore, 'calls');
-
-    // Query for calls where the current user is a participant.
-    // This is more efficient than two separate queries.
+    
+    // This query MUST exactly match the composite index defined in firestore.indexes.json
+    // 1. Where clause on 'participants'
+    // 2. OrderBy clause on 'timestamp'
     const q = query(
         callsRef, 
         where('participants', 'array-contains', user.uid),
@@ -203,14 +202,14 @@ export default function CallsPage() {
     const userProfiles = new Map<string, UserProfile>();
 
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-        setLoading(true);
         const docs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         const populatedCalls = await processCallDocs(docs, user.uid, userProfiles);
         setCalls(populatedCalls);
         setLoading(false);
     }, (error) => {
         console.error("Error fetching call history:", error);
-        const permissionError = new FirestorePermissionError({ path: `calls where participants contains ${user.uid}`, operation: 'list' });
+        // This could be a permission error or an index error if the query changes.
+        const permissionError = new FirestorePermissionError({ path: `calls query for user ${user.uid}`, operation: 'list' });
         errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
