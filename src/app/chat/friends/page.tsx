@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile, FriendRequest as FriendRequestType } from '@/lib/types';
+import { VerifiedBadge } from '@/components/ui/verified-badge';
 
 interface FriendRequestWithUser extends FriendRequestType {
     id: string;
@@ -205,7 +206,12 @@ export default function FriendsPage() {
                             <AvatarFallback>{getInitials(request.fromUser?.displayName)}</AvatarFallback>
                         </Avatar>
                         <div>
-                            <p className="font-semibold">{request.fromUser?.displayName ?? 'Loading...'}</p>
+                            <div className="flex items-center gap-2">
+                                <p className="font-semibold">{request.fromUser?.displayName ?? 'Loading...'}</p>
+                                {request.fromUser?.verifiedBadge?.showBadge && (
+                                    <VerifiedBadge color={request.fromUser.verifiedBadge.badgeColor} />
+                                )}
+                            </div>
                             <p className="text-sm text-muted-foreground">@{request.fromUser?.username ?? '...'}</p>
                         </div>
                     </div>
