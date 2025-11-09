@@ -5,11 +5,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { PhoneOff } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { UserProfile, Call } from '@/lib/types';
 
 export default function OutgoingCallPage() {
@@ -56,7 +55,9 @@ export default function OutgoingCallPage() {
           setTimeout(() => router.back(), 2000); // Go back after 2 seconds
         } else if (data.status === 'answered') {
           // Navigate to active call screen (to be implemented)
-          // router.push(`/chat/call/active/${callId}`);
+          // For now, just log and go back
+          console.log("Call answered!");
+          setTimeout(() => router.back(), 1000);
         }
       } else {
         // Call document deleted (e.g., cancelled by caller)
@@ -75,11 +76,10 @@ export default function OutgoingCallPage() {
     }
     const callDocRef = doc(firestore, 'calls', callId);
     try {
-      // If the call was just outgoing, we can just delete it.
-      // If it was ringing, we might want to update status to 'missed'.
-      if (callData?.status === 'outgoing' || callData?.status === 'ringing') {
-         await updateDoc(callDocRef, { status: 'missed' });
-      }
+      // If the call was outgoing or ringing, we can just delete it
+      // as the other user hasn't interacted yet.
+      // If it's answered, we would update status, but for now we delete.
+      await deleteDoc(callDocRef);
     } catch (error) {
       console.error("Error hanging up call:", error);
     } finally {
@@ -105,6 +105,7 @@ export default function OutgoingCallPage() {
 
   const getStatusText = () => {
     if (callData?.status === 'declined') return 'Call Declined';
+    if (callData?.status === 'missed' && !otherUser.isOnline) return 'Unavailable';
     if (callData?.status === 'missed') return 'Call Unanswered';
     return callStatus;
   }
@@ -136,4 +137,3 @@ export default function OutgoingCallPage() {
     </div>
   );
 }
-

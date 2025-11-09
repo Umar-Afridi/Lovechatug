@@ -729,6 +729,7 @@ export default function ChatIdPage({
             type: type,
             status: 'outgoing', // Status from the caller's perspective
             timestamp: serverTimestamp(),
+            direction: 'outgoing',
         };
     
         try {
@@ -1023,5 +1024,3 @@ export default function ChatIdPage({
     </>
   );
 }
-
-    
