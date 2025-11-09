@@ -82,13 +82,19 @@ export function SignupForm() {
         // 3. If all checks pass, create the user
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         
-        // 4. Send verification email in a separate try/catch
-        try {
-            await sendEmailVerification(userCredential.user);
-        } catch (verificationError) {
-            console.error("Failed to send verification email:", verificationError);
-            setError("Account created, but failed to send verification email. Please try logging in to trigger a new email.");
-            // Even if email fails, the account is created, so we proceed with db write
+        // 4. Send verification email
+        if (auth.currentUser) {
+            try {
+                await sendEmailVerification(auth.currentUser);
+            } catch (verificationError) {
+                console.error("Failed to send verification email:", verificationError);
+                // The account is created, so proceed with db write but show an error.
+                setError("Account created, but failed to send verification email. Please try logging in to trigger a new email.");
+            }
+        } else {
+             // This case is unlikely but handled for safety
+            console.error("No current user found after account creation.");
+            setError("Account created, but could not find user to send verification email.");
         }
         
         // 5. Update profile and create Firestore document
