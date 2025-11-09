@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Phone,
   Video,
@@ -33,7 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, where, onSnapshot, doc, getDocs, writeBatch, orderBy, Unsubscribe } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDocs, writeBatch, orderBy } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile, Call } from '@/lib/types';
@@ -45,8 +45,7 @@ interface CallWithUser extends Call {
 }
 
 const CallItem = ({ call }: { call: CallWithUser }) => {
-  const { user } = useUser();
-  if (!user || !call.otherUser) return null;
+  if (!call.otherUser) return null;
 
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
 
@@ -66,12 +65,6 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
     } catch (e) {
         return '';
     }
-  }
-
-  const getCallDescription = (call: Call) => {
-    const directionText = call.direction === 'incoming' ? 'Incoming' : 'Outgoing';
-    const statusText = call.status.charAt(0).toUpperCase() + call.status.slice(1);
-    return `${directionText} ${call.type} call - ${statusText}`;
   }
 
   return (
@@ -105,15 +98,18 @@ export default function CallsPage() {
   const [loading, setLoading] = useState(true);
   const [isClearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const { toast } = useToast();
+  
+  const userProfilesCache = React.useRef(new Map<string, UserProfile>());
 
   const handleClearAll = async () => {
     if (!firestore || !user || calls.length === 0) return;
 
     const batch = writeBatch(firestore);
     calls.forEach(call => {
-        // We need to delete calls where user is either caller or receiver
-        const callRef = doc(firestore, 'calls', call.id);
-        batch.delete(callRef);
+        if(call.id) {
+            const callRef = doc(firestore, 'calls', call.id);
+            batch.delete(callRef);
+        }
     });
 
     try {
@@ -135,54 +131,9 @@ export default function CallsPage() {
         setClearAllDialogOpen(false);
     }
   };
-  
-  const processCallDocs = useCallback(async (
-    callDocs: any[],
-    currentUserUid: string,
-    userProfilesMap: Map<string, UserProfile>
-  ): Promise<CallWithUser[]> => {
-    
-    const otherUserIds = [
-      ...new Set(callDocs.flatMap(call => [call.callerId, call.receiverId]))
-    ].filter(uid => uid !== currentUserUid && !userProfilesMap.has(uid));
-
-    if (otherUserIds.length > 0 && firestore) {
-      const usersRef = collection(firestore, 'users');
-      // Firestore 'in' query can handle up to 30 items. For more, you'd need to chunk the requests.
-      const chunks = [];
-      for (let i = 0; i < otherUserIds.length; i += 30) {
-        chunks.push(otherUserIds.slice(i, i + 30));
-      }
-      
-      try {
-        const userPromises = chunks.map(chunk => getDocs(query(usersRef, where('uid', 'in', chunk))));
-        const userSnapshots = await Promise.all(userPromises);
-        userSnapshots.forEach(snapshot => {
-          snapshot.forEach(doc => {
-            userProfilesMap.set(doc.data().uid, doc.data() as UserProfile);
-          });
-        });
-      } catch (e) {
-        const permissionError = new FirestorePermissionError({ path: usersRef.path, operation: 'list' });
-        errorEmitter.emit('permission-error', permissionError);
-      }
-    }
-    
-    return callDocs.map(call => {
-      const otherUserId = call.callerId === currentUserUid ? call.receiverId : call.callerId;
-      return {
-        ...call,
-        otherUser: userProfilesMap.get(otherUserId),
-        // Determine direction based on who is viewing the history
-        direction: call.callerId === currentUserUid ? 'outgoing' : 'incoming',
-      };
-    }).filter(call => call.otherUser) as CallWithUser[];
-
-  }, [firestore]);
-
 
   useEffect(() => {
-    if (!user || !user.uid || !firestore) {
+    if (!user || !firestore) {
       setLoading(false);
       return;
     }
@@ -191,24 +142,56 @@ export default function CallsPage() {
     const callsRef = collection(firestore, 'calls');
     
     // This query MUST exactly match the composite index defined in firestore.indexes.json
-    // 1. Where clause on 'participants' using 'array-contains'
-    // 2. OrderBy clause on 'timestamp' in descending order
     const q = query(
         callsRef, 
         where('participants', 'array-contains', user.uid),
         orderBy('timestamp', 'desc')
     );
     
-    const userProfiles = new Map<string, UserProfile>();
-
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-        const docs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        const populatedCalls = await processCallDocs(docs, user.uid, userProfiles);
+        const callDocs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Call));
+        
+        // Find which user profiles we need to fetch
+        const otherUserIdsToFetch = [
+            ...new Set(callDocs.flatMap(call => [call.callerId, call.receiverId]))
+        ].filter(uid => uid !== user.uid && !userProfilesCache.current.has(uid));
+
+        // Fetch missing user profiles
+        if (otherUserIdsToFetch.length > 0 && firestore) {
+            const usersRef = collection(firestore, 'users');
+            try {
+                // Firestore 'in' query can handle up to 30 items.
+                const userPromises = [];
+                for (let i = 0; i < otherUserIdsToFetch.length; i += 30) {
+                    const chunk = otherUserIdsToFetch.slice(i, i + 30);
+                    userPromises.push(getDocs(query(usersRef, where('uid', 'in', chunk))));
+                }
+                const userSnapshots = await Promise.all(userPromises);
+                userSnapshots.forEach(snapshot => {
+                    snapshot.forEach(doc => {
+                        userProfilesCache.current.set(doc.data().uid, doc.data() as UserProfile);
+                    });
+                });
+            } catch (e) {
+                const permissionError = new FirestorePermissionError({ path: usersRef.path, operation: 'list' });
+                errorEmitter.emit('permission-error', permissionError);
+            }
+        }
+        
+        // Populate calls with user data from cache
+        const populatedCalls = callDocs.map(call => {
+            const otherUserId = call.callerId === user.uid ? call.receiverId : call.callerId;
+            return {
+                ...call,
+                otherUser: userProfilesCache.current.get(otherUserId),
+                direction: call.callerId === user.uid ? 'outgoing' : 'incoming',
+            };
+        }).filter(call => call.otherUser) as CallWithUser[];
+
         setCalls(populatedCalls);
         setLoading(false);
     }, (error) => {
         console.error("Error fetching call history:", error);
-        // This could be a permission error or an index error if the query changes.
         const permissionError = new FirestorePermissionError({ path: `calls query for user ${user.uid}`, operation: 'list' });
         errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
@@ -216,7 +199,7 @@ export default function CallsPage() {
 
     return () => unsubscribe();
 
-  }, [user, firestore, processCallDocs]);
+  }, [user, firestore]);
   
 
   return (
@@ -231,7 +214,7 @@ export default function CallsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleClearAll}>
+            <AlertDialogAction onClick={handleClearAll} className="bg-destructive hover:bg-destructive/90">
               Yes, clear history
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -249,7 +232,7 @@ export default function CallsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setClearAllDialogOpen(true)} className="text-destructive" disabled={calls.length === 0}>
+              <DropdownMenuItem onClick={() => setClearAllDialogOpen(true)} className="text-destructive focus:bg-destructive/10 focus:text-destructive" disabled={calls.length === 0}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 <span>Clear all call history</span>
               </DropdownMenuItem>

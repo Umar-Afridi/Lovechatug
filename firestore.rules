@@ -23,13 +23,13 @@ service cloud.firestore {
       // Allow a user to create a request where they are the sender.
       allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
       
-      // A user can only list friend requests sent to them OR by them.
-      allow list: if request.auth != null && 
-                    (request.query.where.receiverId == request.auth.uid || 
-                     request.query.where.senderId == request.auth.uid);
-      
       // Only the sender or receiver can read, update or delete a friend request.
       allow read, update, delete: if request.auth != null && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
+
+      // A user can list friend requests sent to them OR by them.
+      allow list: if request.auth != null && 
+                    ((request.query.where[0].field == 'receiverId' && request.query.where[0].op == '==' && request.query.where[0].value == request.auth.uid) ||
+                     (request.query.where[0].field == 'senderId' && request.query.where[0].op == '==' && request.query.where[0].value == request.auth.uid));
     }
     
     // Allow users to read/write to the chat document if they are a participant.
