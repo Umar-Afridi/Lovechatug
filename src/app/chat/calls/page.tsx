@@ -201,7 +201,6 @@ export default function CallsPage() {
         setCalls(populatedCalls);
         setLoading(false); // This now correctly runs after all processing is done.
     }, (error) => {
-        console.error("Error fetching call history:", error);
         const permissionError = new FirestorePermissionError({ path: `calls query for user ${user.uid}`, operation: 'list' });
         errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
