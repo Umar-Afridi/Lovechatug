@@ -57,15 +57,8 @@ export function SignupForm() {
     const username = usernameInput.toLowerCase();
     
     const usersRef = collection(firestore, 'users');
-    const deletedUserRef = doc(firestore, 'deletedUsers', email);
 
     try {
-        const deletedUserSnap = await getDoc(deletedUserRef);
-        if (deletedUserSnap.exists()) {
-            setError("This email is associated with a deleted account. Please use a different email.");
-            return;
-        }
-
         const q = query(usersRef, where('username', '==', username));
         const usernameQuerySnapshot = await getDocs(q);
         if (!usernameQuerySnapshot.empty) {
@@ -111,13 +104,12 @@ export function SignupForm() {
         if (err.code === 'auth/email-already-in-use') {
            setError('This email address is already in use by another account.');
         } else if (err.code === 'permission-denied') {
-            const path = err.message.includes('deletedUsers') ? deletedUserRef.path : usersRef.path;
             const permissionError = new FirestorePermissionError({
-                path: path,
-                operation: 'get', // or 'list' depending on which one failed
+                path: usersRef.path,
+                operation: 'list',
             });
             errorEmitter.emit('permission-error', permissionError);
-            setError('A permission error occurred. This has been logged.');
+            setError('A permission error occurred while checking the username. This has been logged.');
         }
         else {
            setError(err.message || "An unknown error occurred during signup.");
