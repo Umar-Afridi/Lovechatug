@@ -14,7 +14,6 @@ service cloud.firestore {
     // Composite index for calls collection
     // index: calls(participants ASC, timestamp DESC)
     // A user can only read, write, or delete a call if they are a participant.
-    // Any authenticated user can list calls, but the app query ensures they only see their own.
     match /calls/{callId} {
         allow read, write, delete: if request.auth != null && request.auth.uid in resource.data.participants;
         allow list: if request.auth != null;
@@ -22,8 +21,8 @@ service cloud.firestore {
 
     // Rules for friend requests
     match /friendRequests/{requestId} {
-      // Any authenticated user can create a friend request.
-      allow create: if request.auth != null;
+      // Allow a user to create a request where they are the sender.
+      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
       
       // A user can only list friend requests sent to them.
       allow list: if request.auth != null && request.query.resource.data.receiverId == request.auth.uid;
@@ -32,9 +31,15 @@ service cloud.firestore {
       allow read, update, delete: if request.auth != null && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
     }
     
-    // Allow authenticated users to read/write to chat data.
-    match /chats/{chatId}/{document=**} {
-      allow read, write: if request.auth != null;
+    // Allow users to read/write to the chat document if they are a participant.
+    match /chats/{chatId} {
+      allow read, write: if request.auth != null && request.auth.uid in resource.data.members;
+    }
+    
+    // Secure Read/Write for messages: Only participants of the chat can read/write.
+    match /chats/{chatId}/messages/{messageId} {
+        allow read, write: if request.auth != null 
+                            && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
     }
   }
 }

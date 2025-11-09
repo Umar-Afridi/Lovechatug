@@ -496,7 +496,7 @@ export default function ChatPage() {
                     ) : hasSentRequest ? (
                         <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel Request</Button>
                     ) : (
-                        <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>Add Request</Button>
+                        <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>Add friend</Button>
                     )}
                 </div>
               );

@@ -134,6 +134,7 @@ export default function FriendsPage() {
 
         batch.set(chatRef, {
           members: [user.uid, request.senderId],
+          participants: [user.uid, request.senderId], // For security rules
           createdAt: serverTimestamp(),
           participantDetails: {
             [user.uid]: {

@@ -420,6 +420,7 @@ export default function ChatIdPage({
              if (!chatSnap.exists()) {
                 const chatData = {
                     members: [authUser.uid, otherUser.uid],
+                    participants: [authUser.uid, otherUser.uid], // For security rules
                     createdAt: serverTimestamp(),
                     participantDetails: {
                         [authUser.uid]: { displayName: currentUser?.displayName, photoURL: currentUser?.photoURL },
@@ -600,6 +601,7 @@ export default function ChatIdPage({
         if (!chatSnap.exists()) {
           const newChatData = {
               members: [authUser.uid, otherUser.uid],
+              participants: [authUser.uid, otherUser.uid], // For security rules
               createdAt: serverTimestamp(),
               participantDetails: {
                   [authUser.uid]: { displayName: currentUser.displayName, photoURL: currentUser.photoURL },

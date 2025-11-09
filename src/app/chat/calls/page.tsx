@@ -184,7 +184,7 @@ export default function CallsPage() {
   useEffect(() => {
     // **FIX:** Early return if user or firestore is not yet available.
     // This prevents queries from running before auth is initialized, fixing permission errors.
-    if (!user || !firestore) {
+    if (!user || !user.uid || !firestore) {
       setLoading(false);
       return;
     }
