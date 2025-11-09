@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Phone,
   Video,
@@ -36,12 +36,15 @@ import { useFirestore } from '@/firebase/provider';
 import { collection, query, where, onSnapshot, doc, getDocs, writeBatch, orderBy } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import type { UserProfile, Call } from '@/lib/types';
+import type { UserProfile, Call, Chat } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 
 
 interface CallWithUser extends Call {
-  otherUser?: UserProfile;
+  otherUser?: {
+    displayName: string;
+    photoURL: string;
+  };
 }
 
 const CallItem = ({ call }: { call: CallWithUser }) => {
@@ -99,7 +102,8 @@ export default function CallsPage() {
   const [isClearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const { toast } = useToast();
   
-  const userProfilesCache = React.useRef(new Map<string, UserProfile>());
+  // A simplified cache for chat data to find user details.
+  const chatDetailsCache = React.useRef(new Map<string, Chat>());
 
   const handleClearAll = async () => {
     if (!firestore || !user || calls.length === 0) return;
@@ -151,45 +155,51 @@ export default function CallsPage() {
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
         const callDocs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Call));
         
-        // Find which user profiles we need to fetch
-        const otherUserIdsToFetch = [
-            ...new Set(callDocs.flatMap(call => [call.callerId, call.receiverId]))
-        ].filter(uid => uid !== user.uid && !userProfilesCache.current.has(uid));
+        // Find chat IDs for calls where we don't have participant details yet
+        const chatIdsToFetch = [
+            ...new Set(callDocs.map(call => [call.callerId, call.receiverId].sort().join('_')))
+        ].filter(chatId => !chatDetailsCache.current.has(chatId));
 
-        // Fetch missing user profiles
-        if (otherUserIdsToFetch.length > 0 && firestore) {
-            const usersRef = collection(firestore, 'users');
+        // Fetch missing chat documents to get participant details
+        if (chatIdsToFetch.length > 0 && firestore) {
+            const chatsRef = collection(firestore, 'chats');
             try {
-                // Firestore 'in' query can handle up to 30 items.
-                const userPromises = [];
-                for (let i = 0; i < otherUserIdsToFetch.length; i += 30) {
-                    const chunk = otherUserIdsToFetch.slice(i, i + 30);
-                    userPromises.push(getDocs(query(usersRef, where('uid', 'in', chunk))));
+                // Firestore 'in' query can handle up to 30 items. Chunk if necessary.
+                const chunks = [];
+                for (let i = 0; i < chatIdsToFetch.length; i += 30) {
+                    chunks.push(chatIdsToFetch.slice(i, i + 30));
                 }
-                const userSnapshots = await Promise.all(userPromises);
-                userSnapshots.forEach(snapshot => {
-                    snapshot.forEach(doc => {
-                        userProfilesCache.current.set(doc.data().uid, doc.data() as UserProfile);
+
+                for (const chunk of chunks) {
+                    const chatsQuery = query(chatsRef, where('__name__', 'in', chunk));
+                    const chatsSnapshot = await getDocs(chatsQuery);
+                    chatsSnapshot.forEach(doc => {
+                        chatDetailsCache.current.set(doc.id, doc.data() as Chat);
                     });
-                });
+                }
             } catch (e) {
-                const permissionError = new FirestorePermissionError({ path: usersRef.path, operation: 'list' });
+                // This is a background fetch, so we don't block the UI, just log the error.
+                console.error("Error pre-fetching chat details for calls:", e);
+                const permissionError = new FirestorePermissionError({ path: chatsRef.path, operation: 'list' });
                 errorEmitter.emit('permission-error', permissionError);
             }
         }
         
-        // Populate calls with user data from cache
+        // Populate calls with user data from the chat details cache
         const populatedCalls = callDocs.map(call => {
             const otherUserId = call.callerId === user.uid ? call.receiverId : call.callerId;
+            const chatId = [call.callerId, call.receiverId].sort().join('_');
+            const chatData = chatDetailsCache.current.get(chatId);
+            
             return {
                 ...call,
-                otherUser: userProfilesCache.current.get(otherUserId),
+                otherUser: chatData?.participantDetails?.[otherUserId],
                 direction: call.callerId === user.uid ? 'outgoing' : 'incoming',
             };
         }).filter(call => call.otherUser) as CallWithUser[];
 
         setCalls(populatedCalls);
-        setLoading(false);
+        setLoading(false); // This now correctly runs after all processing is done.
     }, (error) => {
         console.error("Error fetching call history:", error);
         const permissionError = new FirestorePermissionError({ path: `calls query for user ${user.uid}`, operation: 'list' });
@@ -243,7 +253,7 @@ export default function CallsPage() {
         {/* Content */}
         <ScrollArea className="flex-1">
           {loading ? (
-             <div className="flex flex-col items-center justify-center h-full text-center p-8">
+             <div className="flex flex-col items-center justify-center h-full text-center p-8 text-muted-foreground">
                 <p>Loading call history...</p>
             </div>
           ) : calls.length > 0 ? (
