@@ -11,7 +11,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth, useFirestore } from '@/firebase/provider';
-import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification, updateProfile } from 'firebase/auth';
 import { doc, setDoc, collection, query, where, getDocs, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -31,7 +31,7 @@ export function SignupForm() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError(null); // Reset error on new submission
+    setError(null);
     setMessage(null);
     if (!auth || !firestore) {
         setError("Authentication service is not available.");
@@ -49,7 +49,6 @@ export function SignupForm() {
         return;
     }
     
-    // Enforce lowercase username
     if (usernameInput !== usernameInput.toLowerCase()) {
       setError("Username must be all lowercase.");
       return;
@@ -58,9 +57,6 @@ export function SignupForm() {
     const username = usernameInput.toLowerCase();
 
     try {
-        // --- Start: New Validation Logic ---
-        
-        // 1. Check if email is in the deletedUsers collection
         const deletedUserRef = doc(firestore, 'deletedUsers', email);
         const deletedUserSnap = await getDoc(deletedUserRef);
         if (deletedUserSnap.exists()) {
@@ -68,7 +64,6 @@ export function SignupForm() {
             return;
         }
 
-        // 2. Check if username is already taken
         const usersRef = collection(firestore, 'users');
         const q = query(usersRef, where('username', '==', username));
         const usernameQuerySnapshot = await getDocs(q);
@@ -77,67 +72,54 @@ export function SignupForm() {
             return;
         }
 
-        // --- End: New Validation Logic ---
-
-        // 3. If all checks pass, create the user
+        // Create the user but don't sign them in yet.
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        
-        // 4. Send verification email
-        if (auth.currentUser) {
-            try {
-                await sendEmailVerification(auth.currentUser);
-            } catch (verificationError) {
-                console.error("Failed to send verification email:", verificationError);
-                // The account is created, so proceed with db write but show an error.
-                setError("Account created, but failed to send verification email. Please try logging in to trigger a new email.");
-            }
-        } else {
-             // This case is unlikely but handled for safety
-            console.error("No current user found after account creation.");
-            setError("Account created, but could not find user to send verification email.");
-        }
-        
-        // 5. Update profile and create Firestore document
-        await updateProfile(userCredential.user, {
+        const user = userCredential.user;
+
+        // Update profile and create Firestore document
+        await updateProfile(user, {
           displayName: fullName,
         });
         
-        const userDocRef = doc(firestore, 'users', userCredential.user.uid);
+        const userDocRef = doc(firestore, 'users', user.uid);
         const userData: UserProfile = {
-          uid: userCredential.user.uid,
+          uid: user.uid,
           displayName: fullName,
           email: email,
           username: username,
-          photoURL: userCredential.user.photoURL ?? '',
+          photoURL: user.photoURL ?? '',
           friends: [],
           bio: '',
           isOnline: true,
           lastSeen: new Date().toISOString(),
           blockedUsers: [],
         };
-
         await setDoc(userDocRef, userData);
         
-        // 6. Show success message instead of redirecting
-        setMessage("A verification email has been sent. Please check your inbox and verify your email before logging in.");
-        // Clear the form fields if needed
-        (event.target as HTMLFormElement).reset();
+        // Send verification email
+        await sendEmailVerification(user);
 
+        // Show success message
+        setMessage("A verification email has been sent. Please check your inbox and verify your email before logging in.");
+        (event.target as HTMLFormElement).reset();
+        
+        // Sign the user out so they have to verify before logging in
+        await auth.signOut();
 
       } catch (err: any) {
-        // Handle Firebase auth errors (e.g., email-already-in-use)
+        console.error("Signup Error:", err);
         if (err.code === 'auth/email-already-in-use') {
            setError('This email address is already in use by another account.');
         } else if (err.code === 'permission-denied') {
             const permissionError = new FirestorePermissionError({
-                path: 'users or deletedUsers', // This is a simplification for the user
+                path: 'users or deletedUsers',
                 operation: 'list',
             });
             errorEmitter.emit('permission-error', permissionError);
             setError('Could not complete signup. Insufficient permissions.');
         }
         else {
-           setError(err.message);
+           setError(err.message || "An unknown error occurred during signup.");
         }
       }
   };
