@@ -44,7 +44,7 @@ export default function ProfilePage() {
 
   // Verified Badge State
   const [showBadge, setShowBadge] = useState(false);
-  const [badgeColor, setBadgeColor] = useState<'blue' | 'gold' | 'green'>('blue');
+  const [badgeColor, setBadgeColor] = useState<'blue' | 'gold' | 'green' | 'red'>('blue');
   
   // State for the new image preview
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
@@ -82,7 +82,7 @@ export default function ProfilePage() {
 
 
   if (loading || !user) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+    return <div class="flex h-screen items-center justify-center">Loading...</div>;
   }
   
   const getInitials = (name: string | null | undefined) => {
@@ -411,7 +411,7 @@ export default function ProfilePage() {
                                 <Label>Badge Color</Label>
                                 <RadioGroup
                                     value={badgeColor}
-                                    onValueChange={(value) => setBadgeColor(value as 'blue' | 'gold' | 'green')}
+                                    onValueChange={(value) => setBadgeColor(value as 'blue' | 'gold' | 'green' | 'red')}
                                     className="flex flex-col space-y-2"
                                 >
                                     <div className="flex items-center space-x-2">
@@ -433,6 +433,13 @@ export default function ProfilePage() {
                                         <Label htmlFor="color-green" className="flex items-center gap-2">
                                             <VerifiedBadge color="green" />
                                             <span>Green</span>
+                                        </Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="red" id="color-red" />
+                                        <Label htmlFor="color-red" className="flex items-center gap-2">
+                                            <VerifiedBadge color="red" />
+                                            <span>Red</span>
                                         </Label>
                                     </div>
                                 </RadioGroup>

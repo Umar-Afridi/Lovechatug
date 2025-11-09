@@ -4,7 +4,7 @@ import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface VerifiedBadgeProps {
-  color?: 'blue' | 'gold' | 'green';
+  color?: 'blue' | 'gold' | 'green' | 'red';
   className?: string;
 }
 
@@ -13,6 +13,7 @@ export function VerifiedBadge({ color = 'blue', className }: VerifiedBadgeProps)
     blue: 'text-[#1877F2]',
     gold: 'text-[#FFD700]',
     green: 'text-[#07F26C]',
+    red: 'text-[#FF0000]',
   };
 
   return (
