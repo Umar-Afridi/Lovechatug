@@ -109,7 +109,18 @@ export function LoginForm() {
     const password = formData.get('password') as string;
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      if (!userCredential.user.emailVerified) {
+        setError("Please verify your email before logging in.");
+        toast({
+          variant: "destructive",
+          title: "Email Not Verified",
+          description: "Please check your inbox and verify your email address.",
+        });
+        // Optionally, re-send verification email
+        // await sendEmailVerification(userCredential.user);
+        return; // Stop the login process
+      }
       router.push('/chat');
     } catch (err: any) {
       setError(err.message);
