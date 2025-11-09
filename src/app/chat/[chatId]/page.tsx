@@ -732,12 +732,9 @@ export default function ChatIdPage({
         };
     
         try {
-            await addDoc(callsRef, newCall);
-            toast({
-                title: 'Calling...',
-                description: `Starting ${type} call with ${otherUser.displayName}.`,
-            });
-            // Here you would navigate to a call screen
+            const docRef = await addDoc(callsRef, newCall);
+            // Navigate to the new calling screen
+            router.push(`/chat/call/outgoing/${otherUser.uid}?callId=${docRef.id}`);
         } catch (error) {
             console.error('Error initiating call:', error);
             const permissionError = new FirestorePermissionError({ path: 'calls', operation: 'create', requestResourceData: newCall });
