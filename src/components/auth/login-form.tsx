@@ -11,7 +11,7 @@ import {
 import { GoogleIcon } from '@/components/icons/google-icon';
 import Link from 'next/link';
 import { useAuth, useFirestore } from '@/firebase/provider';
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
@@ -118,7 +118,7 @@ export function LoginForm() {
           description: "Please check your inbox and verify your email address.",
         });
         // Optionally, re-send verification email
-        // await sendEmailVerification(userCredential.user);
+        await sendEmailVerification(userCredential.user);
         return; // Stop the login process
       }
       router.push('/chat');

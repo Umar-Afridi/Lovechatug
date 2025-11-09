@@ -54,7 +54,7 @@ import type { Message as MessageType, UserProfile, Chat as ChatType } from '@/li
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { format } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import Link from 'next/link';
 import { useSound } from '@/hooks/use-sound';
@@ -772,7 +772,7 @@ export default function ChatIdPage({
       if (!timestamp) return 'Offline';
       const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
       try {
-        return `Last seen at ${format(date, 'p')}`;
+        return `Last seen ${formatDistanceToNowStrict(date, { addSuffix: true })}`;
       } catch (e) {
         return 'Offline';
       }

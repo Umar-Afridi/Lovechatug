@@ -128,7 +128,7 @@ function usePresence() {
         onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
 
         // 3. Also update the Firestore document to show the user is online.
-        const firestoreUpdateData = { isOnline: true };
+        const firestoreUpdateData = { isOnline: true, lastSeen: serverTimestamp() };
         updateDoc(userStatusFirestoreRef, firestoreUpdateData).catch(err => {
           if (err.code === 'permission-denied') {
             const permissionError = new FirestorePermissionError({ path: userStatusFirestoreRef.path, operation: 'update', requestResourceData: firestoreUpdateData });

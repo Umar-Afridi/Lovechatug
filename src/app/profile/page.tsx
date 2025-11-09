@@ -13,7 +13,7 @@ import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck } from 'lucide-re
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -23,6 +23,8 @@ import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Separator } from '@/components/ui/separator';
+import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
+
 
 export default function ProfilePage() {
   const auth = useAuth();
@@ -293,10 +295,17 @@ export default function ProfilePage() {
 
 
   const handleSignOut = async () => {
-    if (auth) {
+    if (auth && user && firestore) {
+      const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
+      const db = getDatabase();
+      const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
+
+      // Set offline in both databases before signing out
+      await updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() });
+      await set(userStatusDatabaseRef, { isOnline: false, lastSeen: rtdbServerTimestamp() });
+
       await auth.signOut();
       router.push('/');
-      toast({ title: "Logged Out", description: "You have been successfully logged out." });
     }
   };
 
