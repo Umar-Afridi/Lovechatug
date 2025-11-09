@@ -82,7 +82,7 @@ export default function ProfilePage() {
 
 
   if (loading || !user) {
-    return <div class="flex h-screen items-center justify-center">Loading...</div>;
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
   
   const getInitials = (name: string | null | undefined) => {
