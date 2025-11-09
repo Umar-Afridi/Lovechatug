@@ -51,7 +51,7 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
 
   const CallStatusIcon = ({ direction, status }: { direction: string, status: string }) => {
-    const className = status === 'missed' ? 'text-destructive' : 'text-muted-foreground';
+    const className = status === 'missed' || status === 'declined' ? 'text-destructive' : 'text-muted-foreground';
     if (direction === 'incoming') {
       return <PhoneIncoming className={className + " h-4 w-4"} />
     }
@@ -68,6 +68,12 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
     }
   }
 
+  const getCallDescription = (call: Call) => {
+    const directionText = call.direction === 'incoming' ? 'Incoming' : 'Outgoing';
+    const statusText = call.status.charAt(0).toUpperCase() + call.status.slice(1);
+    return `${directionText} ${call.type} call - ${statusText}`;
+  }
+
   return (
      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -76,7 +82,7 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
                 <AvatarFallback>{getInitials(call.otherUser?.displayName)}</AvatarFallback>
             </Avatar>
             <div>
-                <p className={`font-semibold ${call.status === 'missed' ? 'text-destructive' : ''}`}>
+                <p className={`font-semibold ${call.status === 'missed' || call.status === 'declined' ? 'text-destructive' : ''}`}>
                     {call.otherUser?.displayName}
                 </p>
                 <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -142,11 +148,19 @@ export default function CallsPage() {
 
     if (otherUserIds.length > 0 && firestore) {
       const usersRef = collection(firestore, 'users');
-      const usersQuery = query(usersRef, where('uid', 'in', otherUserIds));
+      // Firestore 'in' query can handle up to 30 items. For more, you'd need to chunk the requests.
+      const chunks = [];
+      for (let i = 0; i < otherUserIds.length; i += 30) {
+        chunks.push(otherUserIds.slice(i, i + 30));
+      }
+      
       try {
-        const usersSnapshot = await getDocs(usersQuery);
-        usersSnapshot.forEach(doc => {
-          userProfilesMap.set(doc.data().uid, doc.data() as UserProfile);
+        const userPromises = chunks.map(chunk => getDocs(query(usersRef, where('uid', 'in', chunk))));
+        const userSnapshots = await Promise.all(userPromises);
+        userSnapshots.forEach(snapshot => {
+          snapshot.forEach(doc => {
+            userProfilesMap.set(doc.data().uid, doc.data() as UserProfile);
+          });
         });
       } catch (e) {
         const permissionError = new FirestorePermissionError({ path: usersRef.path, operation: 'list' });
@@ -159,6 +173,7 @@ export default function CallsPage() {
       return {
         ...call,
         otherUser: userProfilesMap.get(otherUserId),
+        // Determine direction based on who is viewing the history
         direction: call.callerId === currentUserUid ? 'outgoing' : 'incoming',
       };
     }).filter(call => call.otherUser) as CallWithUser[];
@@ -175,67 +190,30 @@ export default function CallsPage() {
     setLoading(true);
     const callsRef = collection(firestore, 'calls');
 
-    const incomingQuery = query(callsRef, where('receiverId', '==', user.uid));
-    const outgoingQuery = query(callsRef, where('callerId', '==', user.uid));
+    // Query for calls where the current user is a participant.
+    // This is more efficient than two separate queries.
+    const q = query(
+        callsRef, 
+        where('participants', 'array-contains', user.uid),
+        orderBy('timestamp', 'desc')
+    );
     
-    let combinedCalls: Call[] = [];
     const userProfiles = new Map<string, UserProfile>();
 
-    const handleSnapshot = async (
-        incomingSnapshot: any,
-        outgoingSnapshot: any
-    ) => {
+    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
         setLoading(true);
-        const incomingDocs = incomingSnapshot.docs.map((d: any) => ({ id: d.id, ...d.data() }));
-        const outgoingDocs = outgoingSnapshot.docs.map((d: any) => ({ id: d.id, ...d.data() }));
-        
-        // Combine and remove duplicates
-        const allDocs = [...incomingDocs, ...outgoingDocs];
-        const uniqueDocs = Array.from(new Map(allDocs.map(item => [item.id, item])).values());
-
-        const populatedCalls = await processCallDocs(uniqueDocs, user.uid, userProfiles);
-        
-        // Sort by timestamp descending
-        populatedCalls.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
-
+        const docs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        const populatedCalls = await processCallDocs(docs, user.uid, userProfiles);
         setCalls(populatedCalls);
         setLoading(false);
-    };
+    }, (error) => {
+        console.error("Error fetching call history:", error);
+        const permissionError = new FirestorePermissionError({ path: `calls where participants contains ${user.uid}`, operation: 'list' });
+        errorEmitter.emit('permission-error', permissionError);
+        setLoading(false);
+    });
 
-    let unsubIncoming: Unsubscribe | null = null;
-    let unsubOutgoing: Unsubscribe | null = null;
-
-    const setupListeners = () => {
-        let incomingSnapshot: any = { docs: [] };
-        let outgoingSnapshot: any = { docs: [] };
-
-        unsubIncoming = onSnapshot(incomingQuery, (snapshot) => {
-            incomingSnapshot = snapshot;
-            handleSnapshot(incomingSnapshot, outgoingSnapshot);
-        }, (error) => {
-            console.error("Error fetching incoming calls:", error);
-            const permissionError = new FirestorePermissionError({ path: `calls where receiverId == ${user.uid}`, operation: 'list' });
-            errorEmitter.emit('permission-error', permissionError);
-            setLoading(false);
-        });
-
-        unsubOutgoing = onSnapshot(outgoingQuery, (snapshot) => {
-            outgoingSnapshot = snapshot;
-            handleSnapshot(incomingSnapshot, outgoingSnapshot);
-        }, (error) => {
-            console.error("Error fetching outgoing calls:", error);
-            const permissionError = new FirestorePermissionError({ path: `calls where callerId == ${user.uid}`, operation: 'list' });
-            errorEmitter.emit('permission-error', permissionError);
-            setLoading(false);
-        });
-    };
-
-    setupListeners();
-
-    return () => {
-        if (unsubIncoming) unsubIncoming();
-        if (unsubOutgoing) unsubOutgoing();
-    };
+    return () => unsubscribe();
 
   }, [user, firestore, processCallDocs]);
   

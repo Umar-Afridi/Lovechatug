@@ -717,6 +717,38 @@ export default function ChatIdPage({
         touchMoveX.current = 0;
         isDraggingReply.current = false;
     };
+    
+    const handleInitiateCall = async (type: 'audio' | 'video') => {
+        if (!firestore || !authUser || !otherUser) return;
+    
+        const callsRef = collection(firestore, 'calls');
+        const newCall = {
+            callerId: authUser.uid,
+            receiverId: otherUser.uid,
+            participants: [authUser.uid, otherUser.uid],
+            type: type,
+            status: 'outgoing', // Status from the caller's perspective
+            timestamp: serverTimestamp(),
+        };
+    
+        try {
+            await addDoc(callsRef, newCall);
+            toast({
+                title: 'Calling...',
+                description: `Starting ${type} call with ${otherUser.displayName}.`,
+            });
+            // Here you would navigate to a call screen
+        } catch (error) {
+            console.error('Error initiating call:', error);
+            const permissionError = new FirestorePermissionError({ path: 'calls', operation: 'create', requestResourceData: newCall });
+            errorEmitter.emit('permission-error', permissionError);
+            toast({
+                title: 'Call Failed',
+                description: `Could not start ${type} call.`,
+                variant: 'destructive',
+            });
+        }
+    };
   
   const MessageStatus = ({ status }: { status: MessageType['status'] }) => {
     if (status === 'read') {
@@ -811,11 +843,11 @@ export default function ChatIdPage({
                   </div>
               </div>
               <div className="ml-auto flex items-center gap-2">
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" onClick={() => handleInitiateCall('audio')}>
                   <Phone className="h-5 w-5" />
                   <span className="sr-only">Audio Call</span>
               </Button>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" onClick={() => handleInitiateCall('video')}>
                   <Video className="h-5 w-5" />
                   <span className="sr-only">Video Call</span>
               </Button>

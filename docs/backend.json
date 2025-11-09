@@ -194,6 +194,11 @@
           "type": "string",
           "description": "The UID of the user who received the call."
         },
+        "participants": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "An array containing the UIDs of both the caller and the receiver."
+        },
         "type": {
           "type": "string",
           "enum": ["audio", "video"],
@@ -219,7 +224,7 @@
             "description": "Duration of the call in seconds (if answered)."
         }
       },
-      "required": ["callerId", "receiverId", "type", "status", "timestamp", "direction"]
+      "required": ["callerId", "receiverId", "type", "status", "timestamp", "direction", "participants"]
     },
     "DeletedUser": {
         "title": "Deleted User",
