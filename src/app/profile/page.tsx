@@ -176,7 +176,7 @@ export default function ProfilePage() {
         username: username.toLowerCase(),
         bio: bio,
         email: email,
-        photoURL: finalPhotoURL, // Ensure this is always included
+        photoURL: finalPhotoURL,
         verifiedBadge: {
           showBadge: showBadge,
           badgeColor: badgeColor
@@ -224,20 +224,21 @@ export default function ProfilePage() {
 };
 
  const handleDeleteAccount = async () => {
-    if (!user || !firestore) return;
+    if (!user || !firestore || !auth) return;
     
     const userDocRef = doc(firestore, 'users', user.uid);
     const storage = getStorage();
     const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
 
     try {
-      // 1. Delete profile picture from Storage
-      try {
-        await deleteObject(photoRef);
-      } catch (error: any) {
-        // If the object doesn't exist, we can ignore the error and proceed.
-        if (error.code !== 'storage/object-not-found') {
-          throw error; // Re-throw other storage errors
+      // 1. Delete profile picture from Storage, if it exists
+      if (photoURL) {
+        try {
+          await deleteObject(photoRef);
+        } catch (storageError: any) {
+          if (storageError.code !== 'storage/object-not-found') {
+            console.warn('Could not delete profile picture, but proceeding with account deletion.', storageError);
+          }
         }
       }
 
@@ -245,17 +246,19 @@ export default function ProfilePage() {
       await deleteDoc(userDocRef);
 
       // 3. Delete user from Firebase Authentication
-      await deleteUser(user);
+      // This is the final and most critical step.
+      await deleteUser(auth.currentUser!);
 
       toast({
         title: "Account Deleted",
         description: "Your account has been permanently deleted.",
       });
 
-      router.push('/'); // Redirect to home/login page
+      // This will trigger a redirect via the auth state listener in the layout
+      // but we can also push manually for a faster response.
+      router.push('/');
     } catch (error: any) {
       console.error("Error deleting account:", error);
-       // Handle re-authentication if needed
       if (error.code === 'auth/requires-recent-login') {
           toast({
             variant: "destructive",
@@ -268,11 +271,7 @@ export default function ProfilePage() {
                 operation: 'delete',
             });
           errorEmitter.emit('permission-error', permissionError);
-          toast({
-            variant: "destructive",
-            title: "Deletion Failed",
-            description: "You do not have permission to delete this account.",
-        });
+          // Don't show a generic toast here, the dev overlay is better.
       }
       else {
         toast({
