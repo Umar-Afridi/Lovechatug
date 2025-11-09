@@ -191,8 +191,8 @@ export default function CallsPage() {
     const callsRef = collection(firestore, 'calls');
     
     // This query MUST exactly match the composite index defined in firestore.indexes.json
-    // 1. Where clause on 'participants'
-    // 2. OrderBy clause on 'timestamp'
+    // 1. Where clause on 'participants' using 'array-contains'
+    // 2. OrderBy clause on 'timestamp' in descending order
     const q = query(
         callsRef, 
         where('participants', 'array-contains', user.uid),
