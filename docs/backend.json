@@ -79,7 +79,7 @@
                 },
                 "badgeColor": {
                     "type": "string",
-                    "enum": ["blue", "gold", "green", "red"],
+                    "enum": ["blue", "gold", "green", "red", "pink"],
                     "description": "The color of the verified badge."
                 }
             }

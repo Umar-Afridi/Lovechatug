@@ -16,7 +16,7 @@ export type UserProfile = {
   }
   verifiedBadge?: {
     showBadge: boolean;
-    badgeColor: 'blue' | 'gold' | 'green' | 'red';
+    badgeColor: 'blue' | 'gold' | 'green' | 'red' | 'pink';
   }
 }
 
