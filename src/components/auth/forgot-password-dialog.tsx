@@ -36,28 +36,23 @@ export function ForgotPasswordDialog() {
 
     try {
       await sendPasswordResetEmail(auth, email);
+      // For security reasons, always show a generic success message
+      // to prevent email enumeration attacks.
       toast({
-        title: 'Password Reset Email Sent',
-        description: `An email has been sent to ${email} with instructions to reset your password.`,
+        title: 'Check your email',
+        description: `If an account exists for ${email}, a password reset link has been sent.`,
       });
-      setIsOpen(false); // Close dialog on success
     } catch (error: any) {
       console.error('Error sending password reset email:', error);
-      let description = 'Could not send password reset email. Please try again.';
-      // A generic message is better for security to avoid email enumeration.
-      if (process.env.NODE_ENV === 'development') {
-         if (error.code === 'auth/user-not-found') {
-          description = 'No user found with this email address.';
-        }
-      } else {
-        description = "If an account exists for this email, a reset link has been sent."
-      }
-     
+      // Still show a generic message on the client, but log the error.
+      // This prevents attackers from knowing if an email is registered or not.
       toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: description,
+        title: 'Check your email',
+        description: `If an account exists for ${email}, a password reset link has been sent.`,
       });
+    } finally {
+      // Always close the dialog after the attempt.
+      setIsOpen(false);
     }
   };
 
