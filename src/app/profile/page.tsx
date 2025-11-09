@@ -162,7 +162,6 @@ export default function ProfilePage() {
     }
 
     // 2. Prepare data for updates
-    const authProfileChanged = user.displayName !== displayName || pictureUpdated;
     const updatedAuthProfile: { displayName?: string; photoURL?: string | null } = {};
      if (user.displayName !== displayName) {
         updatedAuthProfile.displayName = displayName;
@@ -177,7 +176,7 @@ export default function ProfilePage() {
         username: username.toLowerCase(),
         bio: bio,
         email: email,
-        photoURL: finalPhotoURL,
+        photoURL: finalPhotoURL, // Ensure this is always included
         verifiedBadge: {
           showBadge: showBadge,
           badgeColor: badgeColor
