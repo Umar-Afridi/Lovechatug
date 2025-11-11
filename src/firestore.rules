@@ -1,67 +1,61 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper: Checks if any user is signed in
-    function isAuthenticated() {
+    // یہ فنکشن چیک کرتا ہے کہ آیا یوزر لاگ ان ہے یا نہیں۔
+    // It checks if the user is authenticated.
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    // =========================================================================
-    // 1. Users Collection (Sign-up FIX)
-    // =========================================================================
-    match /users/{userId} {
-      // FIX: Allow 'create' (Sign-up) and 'update' (Profile Change) 
-      // ONLY if the UID matches the document ID.
-      allow create, update: if isAuthenticated() && request.auth.uid == userId;
-      
-      // Allow any signed-in user to read any profile (for contact list)
-      allow read: if isAuthenticated();
+    // یہ فنکشن چیک کرتا ہے کہ درخواست کرنے والا یوزر ہی دستاویز کا مالک ہے۔
+    // It checks if the requesting user is the owner of the document (matching UID).
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
 
-      // Allow any user (even unauthenticated) to query the users collection
-      // to find other users by username during signup. THIS IS THE FIX.
+    // یہ فنکشن کسی چیٹ میں دونوں شراکت داروں کو چیک کرتا ہے۔
+    // It checks if the user is one of the two participants in the chat.
+    function isParticipant(participants) {
+      return isSignedIn() && request.auth.uid in participants;
+    }
+
+
+    // 1. صارفین کا مجموعہ (Users Collection)
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      // Allow any user to query to check for username availability during signup
       allow list: if true;
     }
-
-    // =========================================================================
-    // 2. Friend Requests
-    // =========================================================================
-    match /friendRequests/{requestId} {
-      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
-      allow read, update, delete: if request.auth != null && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
-      allow list: if request.auth != null && 
-                    ((request.query.where[0].field == 'receiverId' && request.query.where[0].op == '==' && request.query.where[0].value == request.auth.uid) ||
-                     (request.query.where[0].field == 'senderId' && request.query.where[0].op == '==' && request.query.where[0].value == request.auth.uid));
-    }
     
-    // =========================================================================
-    // 3. Chats and Messages
-    // =========================================================================
+    // 2. چیٹس اور میسجز کا مجموعہ (Chats Collection)
     match /chats/{chatId} {
-      allow read, write: if isAuthenticated() && request.auth.uid in resource.data.members;
+      allow read, write: if isParticipant(resource.data.members);
+      
+      match /messages/{messageId} {
+        allow read, write: if isParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data.members);
+      }
     }
     
-    match /chats/{chatId}/messages/{messageId} {
-      allow read, write: if isAuthenticated() 
-                            && get(/databases/$(database)/documents/chats/$(chatId)).data.members.hasAny([request.auth.uid]);
+    // 3. دوستوں کی درخواستوں کا مجموعہ (Friend Requests Collection)
+    match /friendRequests/{requestId} {
+      allow read, update, delete: if isSignedIn() && (isOwner(resource.data.senderId) || isOwner(resource.data.receiverId));
+      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+      allow list: if isSignedIn();
     }
-
-    // =========================================================================
-    // 4. Calls Collection
-    // =========================================================================
+    
+    // 4. کال کی تاریخ کا مجموعہ (Call History Collection)
     match /calls/{callId} {
-        allow read, write, delete: if request.auth != null && request.auth.uid in resource.data.participants;
-        allow list: if request.auth != null && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
+      allow read, write, delete: if isParticipant(resource.data.participants);
+      allow list: if isSignedIn() && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
     }
 
-    // =========================================================================
-    // 5. Deleted Users (Tombstone)
-    // =========================================================================
+    // 5. ڈیلیٹ شدہ صارفین کا مجموعہ (Deleted Users Collection)
     match /deletedUsers/{email} {
       allow create: if true;
       allow read, write, delete: if false;
     }
-
   }
 }
