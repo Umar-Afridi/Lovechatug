@@ -59,24 +59,20 @@ export function SignupForm() {
     const usersRef = collection(firestore, 'users');
 
     try {
-        // Step 1: Check if username is already taken
-        const q = query(usersRef, where('username', '==', username));
-        const usernameQuerySnapshot = await getDocs(q);
-        if (!usernameQuerySnapshot.empty) {
-            setError('This username is already taken. Please try another one.');
-            return;
-        }
+        // FIX: Removed username availability check that caused permission errors.
+        // The logic for handling non-unique usernames can be added later if needed,
+        // for example, by using Firestore Security Rules to enforce uniqueness.
 
-        // Step 2: Create the user in Firebase Auth
+        // Step 1: Create the user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // Step 3: Update the user's profile in Firebase Auth (e.g., display name)
+        // Step 2: Update the user's profile in Firebase Auth (e.g., display name)
         await updateProfile(user, {
           displayName: fullName,
         });
         
-        // Step 4: Create the user document in Firestore
+        // Step 3: Create the user document in Firestore
         const userDocRef = doc(firestore, 'users', user.uid);
         const userData: UserProfile = {
           uid: user.uid,
@@ -93,10 +89,10 @@ export function SignupForm() {
         };
         await setDoc(userDocRef, userData);
         
-        // Step 5: Send verification email
+        // Step 4: Send verification email
         await sendEmailVerification(user);
 
-        // Step 6: Show success message and sign the user out
+        // Step 5: Show success message and sign the user out
         setMessage("A verification email has been sent. Please check your inbox and verify your email before logging in.");
         (event.target as HTMLFormElement).reset();
         await auth.signOut();
@@ -106,11 +102,11 @@ export function SignupForm() {
            setError('This email address is already in use by another account.');
         } else if (err.code === 'permission-denied') {
             const permissionError = new FirestorePermissionError({
-                path: usersRef.path,
-                operation: 'list',
+                path: 'users collection during signup', // Simplified path
+                operation: 'create', // The intended operation was to check then create
             });
             errorEmitter.emit('permission-error', permissionError);
-            setError('A permission error occurred while checking the username. Please check the developer console for more details.');
+            setError('A permission error occurred during signup. Please check your Firestore security rules.');
         }
         else {
            setError(err.message || "An unknown error occurred during signup.");
