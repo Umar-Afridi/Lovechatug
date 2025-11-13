@@ -106,7 +106,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
       <Link href={`/chat/${participantId}`} key={chat.id}>
         <div className='flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/50'>
           <div className="relative">
-            <Avatar>
+            <Avatar className="h-12 w-12">
                 <AvatarImage src={participant.photoURL || undefined} />
                 <AvatarFallback>{getInitials(participant.displayName)}</AvatarFallback>
             </Avatar>
@@ -396,7 +396,12 @@ export default function ChatPage() {
 
       if (firestore && user && profile) {
         const usersRef = collection(firestore, 'users');
-        const q = query(usersRef, where('username', '==', searchQuery.toLowerCase()));
+        // Add a condition to not fetch disabled users in public search
+        const q = query(
+          usersRef, 
+          where('username', '==', searchQuery.toLowerCase()),
+          where('isDisabled', '!=', true)
+        );
         
         try {
           const querySnapshot = await getDocs(q);
@@ -490,7 +495,7 @@ export default function ChatPage() {
                 <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
                     <div className="flex items-center gap-4">
                      <div className="relative">
-                        <Avatar>
+                        <Avatar className="h-12 w-12">
                             <AvatarImage src={foundUser.photoURL || undefined} />
                             <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
                         </Avatar>

@@ -50,7 +50,7 @@ export function LoginForm() {
         const docSnap = await getDoc(userDocRef);
 
         if (!docSnap.exists()) {
-            const newUserProfile: UserProfile = {
+             const newUserProfile: Omit<UserProfile, 'officialBadge' | 'lastColorfulNameRequestAt' | 'lastVerificationRequestAt' | 'verificationApplicationStatus' | 'colorfulName'> = {
                 uid: user.uid,
                 displayName: user.displayName || 'Anonymous User',
                 email: user.email || '',
@@ -62,15 +62,16 @@ export function LoginForm() {
                 lastSeen: serverTimestamp(),
                 blockedUsers: [],
                 blockedBy: [],
+                verifiedBadge: { showBadge: false, badgeColor: 'blue' },
+                isDisabled: false,
             };
-            await setDoc(userDocRef, newUserProfile).catch((serverError) => {
+            await setDoc(userDocRef, newUserProfile, { merge: true }).catch((serverError) => {
               const permissionError = new FirestorePermissionError({
                 path: userDocRef.path,
                 operation: 'create',
                 requestResourceData: newUserProfile,
               });
               errorEmitter.emit('permission-error', permissionError);
-              // Don't re-throw, let the user proceed. The error will show in dev overlay.
             });
         }
         router.push('/chat');
@@ -121,12 +122,8 @@ export function LoginForm() {
           // Check if the user is disabled
           if (userData.isDisabled) {
               await auth.signOut(); // Sign the user out
-              setError("Your account has been disabled.");
-              toast({
-                  variant: "destructive",
-                  title: "Account Disabled",
-                  description: "Your account has been disabled by an administrator.",
-              });
+              setError("Your account has been disabled by an administrator.");
+              // No need for a toast, the error is displayed inline
               return;
           }
       }
@@ -144,11 +141,11 @@ export function LoginForm() {
       }
       router.push('/chat');
     } catch (err: any) {
-      setError(err.message);
       let friendlyMessage = "An unknown error occurred.";
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         friendlyMessage = "Invalid email or password. Please try again.";
       }
+      setError(friendlyMessage);
       toast({
         variant: "destructive",
         title: "Login Failed",
@@ -175,7 +172,7 @@ export function LoginForm() {
            </div>
           <Input id="password" name="password" type="password" required />
         </div>
-         {error && <p className="text-sm text-destructive">{error}</p>}
+         {error && <p className="text-sm font-medium text-destructive">{error}</p>}
         <Button type="submit" className="w-full">
           Login
         </Button>

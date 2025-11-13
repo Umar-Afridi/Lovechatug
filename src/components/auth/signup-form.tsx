@@ -74,7 +74,7 @@ export function SignupForm() {
         
         // Step 3: Create the user document in Firestore
         const userDocRef = doc(firestore, 'users', user.uid);
-        const userData: UserProfile = {
+        const userData: Omit<UserProfile, 'officialBadge' | 'lastColorfulNameRequestAt' | 'lastVerificationRequestAt' | 'verificationApplicationStatus' | 'colorfulName'> = {
           uid: user.uid,
           displayName: fullName,
           email: email,
@@ -90,17 +90,9 @@ export function SignupForm() {
             showBadge: false,
             badgeColor: 'blue'
           },
-          officialBadge: {
-            isOfficial: false,
-            badgeColor: 'gold'
-          },
-          colorfulName: false,
-          verificationApplicationStatus: 'none',
-          lastVerificationRequestAt: null,
-          lastColorfulNameRequestAt: null,
           isDisabled: false,
         };
-        await setDoc(userDocRef, userData);
+        await setDoc(userDocRef, userData, { merge: true });
         
         // Step 4: Send verification email
         await sendEmailVerification(user);
