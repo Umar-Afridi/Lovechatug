@@ -404,13 +404,7 @@ export default function ProfilePage() {
             <main className="flex-1 p-4 md:p-8">
                 <div className="mx-auto max-w-xl space-y-8">
                     <div className="flex flex-col items-center">
-                        {userProfile?.officialBadge?.isOfficial && (
-                            <div className="mb-2 flex items-center gap-2">
-                                <OfficialBadge color={userProfile.officialBadge.badgeColor} className="h-5 w-5" />
-                                <span className="font-bold text-sm text-yellow-500">V-Official</span>
-                            </div>
-                        )}
-                        <div className="relative">
+                        <div className="relative mb-4">
                             <Avatar className="h-32 w-32 cursor-pointer" onClick={handleAvatarClick}>
                                 <AvatarImage src={displayPhoto ?? undefined} alt={displayName} />
                                 <AvatarFallback className="text-4xl">
@@ -433,6 +427,12 @@ export default function ProfilePage() {
                                 onChange={handleFileChange}
                             />
                         </div>
+                         {userProfile?.officialBadge?.isOfficial && (
+                            <div className="flex items-center gap-2">
+                                <OfficialBadge color={userProfile.officialBadge.badgeColor} className="h-5 w-5" />
+                                <span className="font-bold text-sm" style={{ color: `hsl(var(--${userProfile.officialBadge.badgeColor === 'gold' ? 'yellow-500' : 'primary'}))` }}>V-Official</span>
+                            </div>
+                        )}
                     </div>
                     
                     <div className="space-y-6">
