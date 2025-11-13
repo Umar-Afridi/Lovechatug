@@ -271,7 +271,10 @@ export default function ChatAppLayout({
                       </AvatarFallback>
                       </Avatar>
                       <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
-                      <span className="truncate text-sm font-medium">
+                      <span className={cn(
+                        "truncate text-sm font-medium",
+                        profile?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+                      )}>
                           {profile?.displayName ?? 'User'}
                       </span>
                       <span className="truncate text-xs text-muted-foreground">

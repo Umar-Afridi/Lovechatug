@@ -18,6 +18,7 @@ export type UserProfile = {
     showBadge: boolean;
     badgeColor: 'blue' | 'gold' | 'green' | 'red' | 'pink';
   }
+  colorfulName?: boolean;
 }
 
 export type Message = {

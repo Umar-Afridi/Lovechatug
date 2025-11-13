@@ -10,6 +10,8 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import type { UserProfile } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import { VerifiedBadge } from '../ui/verified-badge';
 
 interface ContactProfileSheetProps {
   isOpen: boolean;
@@ -39,15 +41,25 @@ export function ContactProfileSheet({
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md">
         <SheetHeader className="text-center mb-6">
-          <div className="flex justify-center mb-4">
+          <div className="flex justify-center mb-4 relative">
             <Avatar className="h-24 w-24 border-2 border-primary">
               <AvatarImage src={userProfile.photoURL} alt={userProfile.displayName} />
               <AvatarFallback className="text-3xl">
                 {getInitials(userProfile.displayName)}
               </AvatarFallback>
             </Avatar>
+             {userProfile.verifiedBadge?.showBadge && (
+                <div className="absolute bottom-0 right-1/3 translate-x-1/4">
+                    <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-7 w-7"/>
+                </div>
+            )}
           </div>
-          <SheetTitle className="text-2xl font-bold">{userProfile.displayName}</SheetTitle>
+          <SheetTitle className={cn(
+            "text-2xl font-bold",
+            userProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+            )}>
+            {userProfile.displayName}
+            </SheetTitle>
           <SheetDescription className="text-muted-foreground">@{userProfile.username}</SheetDescription>
         </SheetHeader>
         

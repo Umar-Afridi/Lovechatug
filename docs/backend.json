@@ -83,6 +83,10 @@
                     "description": "The color of the verified badge."
                 }
             }
+        },
+        "colorfulName": {
+            "type": "boolean",
+            "description": "Whether to display the user's name with a colorful gradient animation."
         }
       },
       "required": ["uid", "displayName", "email", "username"]

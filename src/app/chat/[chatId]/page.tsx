@@ -832,7 +832,12 @@ export default function ChatIdPage({
                   </Avatar>
                   <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="font-semibold">{otherUser.displayName.split(' ')[0]}</p>
+                    <p className={cn(
+                      "font-semibold",
+                      otherUser.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+                    )}>
+                      {otherUser.displayName.split(' ')[0]}
+                    </p>
                     {otherUser.verifiedBadge?.showBadge && (
                          <VerifiedBadge color={otherUser.verifiedBadge.badgeColor} />
                     )}

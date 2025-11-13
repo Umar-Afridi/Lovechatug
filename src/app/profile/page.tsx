@@ -22,6 +22,8 @@ import { DeleteAccountDialog } from '@/components/profile/delete-account-dialog'
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Separator } from '@/components/ui/separator';
 import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
+import type { UserProfile } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 
 export default function ProfilePage() {
@@ -41,7 +43,7 @@ export default function ProfilePage() {
   const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
   const [photoURL, setPhotoURL] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   
   // State for the new image preview
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export default function ProfilePage() {
       const userDocRef = doc(firestore, 'users', user.uid);
       getDoc(userDocRef).then(docSnap => {
           if (docSnap.exists()) {
-              const data = docSnap.data();
+              const data = docSnap.data() as UserProfile;
               setUserProfile(data);
               setDisplayName(data.displayName ?? user.displayName ?? '');
               setUsername(data.username ?? '');
@@ -361,11 +363,14 @@ export default function ProfilePage() {
                     <div className="space-y-6">
                         <div className="space-y-2">
                             <Label htmlFor="displayName">Full Name</Label>
-                            <Input 
-                                id="displayName" 
-                                value={displayName} 
-                                onChange={(e) => setDisplayName(e.target.value)} 
-                            />
+                             <div className="relative">
+                                <Input 
+                                    id="displayName" 
+                                    value={displayName} 
+                                    onChange={(e) => setDisplayName(e.target.value)} 
+                                    className={cn(userProfile?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}
+                                />
+                            </div>
                         </div>
 
                         <div className="space-y-2">
