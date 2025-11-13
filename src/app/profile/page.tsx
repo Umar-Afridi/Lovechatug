@@ -25,8 +25,6 @@ import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'f
 import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { differenceInHours } from 'date-fns';
-import { VerificationDialog } from '@/components/profile/verification-dialog';
-import { sendVerificationEmail, type VerificationInput } from '@/ai/flows/send-verification-email';
 
 
 export default function ProfilePage() {
@@ -39,7 +37,6 @@ export default function ProfilePage() {
   
   const [isPictureDialogOpen, setPictureDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [isVerificationDialogOpen, setVerificationDialogOpen] = useState(false);
   
   // States for current data from Firestore
   const [displayName, setDisplayName] = useState('');
@@ -71,6 +68,13 @@ export default function ProfilePage() {
               setBio(data.bio ?? '');
               setPhotoURL(data.photoURL ?? user.photoURL ?? null);
           }
+      }, (error) => {
+          console.error("Error fetching user profile:", error);
+          const permissionError = new FirestorePermissionError({
+              path: `users/${user.uid}`,
+              operation: 'get'
+          });
+          errorEmitter.emit('permission-error', permissionError);
       });
 
       return () => unsubscribe();
@@ -99,49 +103,31 @@ export default function ProfilePage() {
 
   }, [userProfile]);
 
- const handleVerificationSubmit = async (data: VerificationInput) => {
+  const handleApplyForVerification = async () => {
     if (!userProfile || !firestore) {
-      toast({
-        title: 'Error',
-        description: 'Could not submit application. User profile not loaded.',
-        variant: 'destructive',
-      });
-      return;
+        toast({ title: 'Error', description: 'User profile not loaded.', variant: 'destructive' });
+        return;
     }
+    
+    // Update status in Firestore to 'pending'
+    const userDocRef = doc(firestore, 'users', userProfile.uid);
+    await updateDoc(userDocRef, {
+        verificationApplicationStatus: 'pending',
+        lastVerificationRequestAt: serverTimestamp(),
+    });
+    
+    toast({ title: 'Application Sent', description: 'Your verification request is under review.' });
 
-    setVerificationDialogOpen(false);
-    toast({ title: 'Submitting...', description: 'Please wait while we process your application.' });
-
-    try {
-        // Call the server action
-        const result = await sendVerificationEmail(data);
-
-        if (result.success) {
-          // Update the user's status in Firestore
-          const userDocRef = doc(firestore, 'users', userProfile.uid);
-          await updateDoc(userDocRef, {
-            verificationApplicationStatus: 'pending',
-            lastVerificationRequestAt: serverTimestamp(),
-          });
-          toast({
-            title: 'Application Submitted',
-            description: 'Your verification request has been sent for review.',
-          });
-        } else {
-          throw new Error(result.message);
-        }
-    } catch (error: any) {
-      console.error('Failed to submit verification request:', error);
-      toast({
-        title: 'Submission Failed',
-        description: error.message || 'Could not submit your application. Please try again.',
-        variant: 'destructive',
-      });
-    }
+    // Open mail client
+    const subject = encodeURIComponent("Verification Badge Application");
+    const body = encodeURIComponent(
+        `Hello Love Chat Team,\n\nPlease review my application for a verified badge.\n\nMy Details:\nFull Name: ${displayName}\nUsername: @${username}\n\nI have attached my government-issued ID for verification.\n\nThank you!`
+    );
+    window.location.href = `mailto:Lovechat0300@gmail.com?subject=${subject}&body=${body}`;
   };
 
 
-  const getVerificationStatusNode = () => {
+ const getVerificationStatusNode = () => {
     if (!userProfile) return null;
 
     if (userProfile.verifiedBadge?.showBadge) {
@@ -186,7 +172,7 @@ export default function ProfilePage() {
             <Button 
                 variant="outline" 
                 className="w-full" 
-                onClick={() => setVerificationDialogOpen(true)}
+                onClick={handleApplyForVerification}
                 disabled={!canApplyForVerification}
             >
                Apply for Verified Badge
@@ -427,14 +413,6 @@ export default function ProfilePage() {
             onOpenChange={setDeleteDialogOpen}
             onConfirm={handleDeleteAccount}
         />
-        {userProfile && (
-            <VerificationDialog
-                isOpen={isVerificationDialogOpen}
-                onOpenChange={setVerificationDialogOpen}
-                onSubmit={handleVerificationSubmit}
-                userProfile={userProfile}
-            />
-        )}
         <div className="flex min-h-screen flex-col bg-background">
             <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
                 <Button variant="ghost" size="icon" onClick={() => router.back()}>
@@ -497,7 +475,7 @@ export default function ProfilePage() {
                             <Label htmlFor="email">Email Address</Label>
                             <Input 
                                 id="email" 
-                                type="email" 
+                                type="email" _
                                 value={email} 
                                 readOnly
                                 className="focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 cursor-not-allowed opacity-70"
