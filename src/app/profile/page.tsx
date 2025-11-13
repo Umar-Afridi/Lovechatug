@@ -25,6 +25,7 @@ import { Separator } from '@/components/ui/separator';
 import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { sendVerificationEmail } from '@/ai/flows/send-verification-email';
 
 
 export default function ProfilePage() {
@@ -37,6 +38,9 @@ export default function ProfilePage() {
   
   const [isPictureDialogOpen, setPictureDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isVerificationDialogOpen, setVerificationDialogOpen] = useState(false);
+  const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
+
 
   // States for current data from Firestore
   const [displayName, setDisplayName] = useState('');
@@ -298,12 +302,49 @@ export default function ProfilePage() {
     }
   };
   
-  const handleApplyForVerification = () => {
-    const subject = encodeURIComponent("Verification Badge Application");
-    const body = encodeURIComponent(
-        `Hello Love Chat Team,\n\nI would like to apply for a verification badge.\n\nMy Details:\nFull Name: ${displayName}\nUsername: @${username}\n\nPlease review my account. Don't forget to attach your government-issued ID (Passport, National ID, etc.).\n\nThank you!`
-    );
-    window.location.href = `mailto:Lovechat0300@gmail.com?subject=${subject}&body=${body}`;
+  const handleVerificationSubmit = async (values: { document: FileList }) => {
+    if (!userProfile) return;
+
+    setIsSubmittingVerification(true);
+    const file = values.document[0];
+    
+    // Convert file to data URI
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = async () => {
+        const documentDataUri = reader.result as string;
+        try {
+            await sendVerificationEmail({
+                displayName: userProfile.displayName,
+                username: userProfile.username,
+                email: userProfile.email,
+                documentDataUri: documentDataUri,
+            });
+            toast({
+                title: 'Application Submitted',
+                description: 'Your verification request has been sent. Please wait up to 24 hours for a review.',
+            });
+            setVerificationDialogOpen(false);
+        } catch (error) {
+            console.error('Failed to send verification email:', error);
+            toast({
+                title: 'Submission Failed',
+                description: 'There was an error submitting your application. Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSubmittingVerification(false);
+        }
+    };
+    reader.onerror = (error) => {
+        console.error('Error converting file to data URI:', error);
+        toast({
+            title: 'File Error',
+            description: 'Could not process the uploaded file.',
+            variant: 'destructive',
+        });
+        setIsSubmittingVerification(false);
+    };
   };
 
   const handleApplyForColorfulName = () => {
@@ -329,6 +370,13 @@ export default function ProfilePage() {
             isOpen={isDeleteDialogOpen}
             onOpenChange={setDeleteDialogOpen}
             onConfirm={handleDeleteAccount}
+        />
+        <VerificationDialog 
+            isOpen={isVerificationDialogOpen}
+            onOpenChange={setVerificationDialogOpen}
+            onSubmit={handleVerificationSubmit}
+            userProfile={userProfile}
+            isSubmitting={isSubmittingVerification}
         />
         <div className="flex min-h-screen flex-col bg-background">
             <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
@@ -432,7 +480,7 @@ export default function ProfilePage() {
                             <p className="text-sm text-muted-foreground">
                                 Apply to get a verified badge on your profile. This helps people know that you're a person of interest.
                             </p>
-                            <Button variant="outline" className="w-full" onClick={handleApplyForVerification}>
+                            <Button variant="outline" className="w-full" onClick={() => setVerificationDialogOpen(true)}>
                                Apply for Verified Badge
                             </Button>
                         </div>
