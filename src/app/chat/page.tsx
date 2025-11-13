@@ -110,15 +110,20 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
                 <AvatarImage src={participant.photoURL || undefined} />
                 <AvatarFallback>{getInitials(participant.displayName)}</AvatarFallback>
             </Avatar>
+            {participant.officialBadge?.isOfficial && (
+              <div className="absolute bottom-0 right-0">
+                  <OfficialBadge color={participant.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
+              </div>
+            )}
             {participant.isOnline && (
-                <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background"></div>
+                <div className={cn(
+                    "absolute bottom-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background",
+                    participant.officialBadge?.isOfficial ? "left-0" : "right-0"
+                )}></div>
             )}
           </div>
           <div className="flex-1 overflow-hidden">
             <div className="flex items-center gap-2">
-                {participant.officialBadge?.isOfficial && (
-                  <OfficialBadge color={participant.officialBadge.badgeColor} size="icon" />
-                )}
                 <p className={cn(
                   "font-semibold truncate",
                   participant.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
@@ -484,15 +489,19 @@ export default function ChatPage() {
               return (
                 <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
                     <div className="flex items-center gap-4">
-                    <Avatar>
-                        <AvatarImage src={foundUser.photoURL || undefined} />
-                        <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
-                    </Avatar>
+                     <div className="relative">
+                        <Avatar>
+                            <AvatarImage src={foundUser.photoURL || undefined} />
+                            <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
+                        </Avatar>
+                        {foundUser.officialBadge?.isOfficial && (
+                            <div className="absolute bottom-0 right-0">
+                                <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
+                            </div>
+                        )}
+                    </div>
                     <div>
                         <div className="flex items-center gap-2">
-                           {foundUser.officialBadge?.isOfficial && (
-                              <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" />
-                           )}
                            <p className={cn(
                               "font-semibold",
                               foundUser.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"

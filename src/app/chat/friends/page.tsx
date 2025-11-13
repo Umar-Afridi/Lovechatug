@@ -204,15 +204,19 @@ export default function FriendsPage() {
             {requests.map(request => (
                 <div key={request.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
                     <div className="flex items-center gap-4">
-                        <Avatar>
-                            <AvatarImage src={request.fromUser?.photoURL} />
-                            <AvatarFallback>{getInitials(request.fromUser?.displayName)}</AvatarFallback>
-                        </Avatar>
+                        <div className="relative">
+                            <Avatar>
+                                <AvatarImage src={request.fromUser?.photoURL} />
+                                <AvatarFallback>{getInitials(request.fromUser?.displayName)}</AvatarFallback>
+                            </Avatar>
+                            {request.fromUser?.officialBadge?.isOfficial && (
+                                <div className="absolute bottom-0 right-0">
+                                    <OfficialBadge color={request.fromUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
+                                </div>
+                            )}
+                        </div>
                         <div>
                             <div className="flex items-center gap-2">
-                                {request.fromUser?.officialBadge?.isOfficial && (
-                                    <OfficialBadge color={request.fromUser.officialBadge.badgeColor} size="icon" />
-                                )}
                                 <p className={cn(
                                   "font-semibold",
                                   request.fromUser?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"

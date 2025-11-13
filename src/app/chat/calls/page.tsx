@@ -72,15 +72,19 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
   return (
      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-            <Avatar className="h-10 w-10">
-                <AvatarImage src={call.otherUser?.photoURL} />
-                <AvatarFallback>{getInitials(call.otherUser?.displayName)}</AvatarFallback>
-            </Avatar>
+            <div className="relative">
+                <Avatar className="h-10 w-10">
+                    <AvatarImage src={call.otherUser?.photoURL} />
+                    <AvatarFallback>{getInitials(call.otherUser?.displayName)}</AvatarFallback>
+                </Avatar>
+                 {call.otherUser?.officialBadge?.isOfficial && (
+                  <div className="absolute bottom-0 right-0">
+                    <OfficialBadge color={call.otherUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
+                  </div>
+                )}
+            </div>
             <div>
                 <div className="flex items-center gap-2">
-                    {call.otherUser?.officialBadge?.isOfficial && (
-                        <OfficialBadge color={call.otherUser.officialBadge.badgeColor} size="icon" />
-                    )}
                     <p className={cn(
                         "font-semibold",
                         call.status === 'missed' || call.status === 'declined' ? 'text-destructive' : '',
