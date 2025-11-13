@@ -117,7 +117,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
           <div className="flex-1 overflow-hidden">
             <div className="flex items-center gap-2">
                 {participant.officialBadge?.isOfficial && (
-                  <OfficialBadge color={participant.officialBadge.badgeColor} />
+                  <OfficialBadge color={participant.officialBadge.badgeColor} size="icon" />
                 )}
                 <p className={cn(
                   "font-semibold truncate",
@@ -491,7 +491,7 @@ export default function ChatPage() {
                     <div>
                         <div className="flex items-center gap-2">
                            {foundUser.officialBadge?.isOfficial && (
-                              <OfficialBadge color={foundUser.officialBadge.badgeColor} />
+                              <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" />
                            )}
                            <p className={cn(
                               "font-semibold",

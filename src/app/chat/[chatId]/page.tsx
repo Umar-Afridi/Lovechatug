@@ -834,7 +834,7 @@ export default function ChatIdPage({
                   <div className="flex-1">
                   <div className="flex items-center gap-2">
                     {otherUser.officialBadge?.isOfficial && (
-                      <OfficialBadge color={otherUser.officialBadge.badgeColor} />
+                      <OfficialBadge color={otherUser.officialBadge.badgeColor} size="icon" />
                     )}
                     <p className={cn(
                       "font-semibold",

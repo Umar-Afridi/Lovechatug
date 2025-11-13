@@ -79,7 +79,7 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
             <div>
                 <div className="flex items-center gap-2">
                     {call.otherUser?.officialBadge?.isOfficial && (
-                        <OfficialBadge color={call.otherUser.officialBadge.badgeColor} />
+                        <OfficialBadge color={call.otherUser.officialBadge.badgeColor} size="icon" />
                     )}
                     <p className={cn(
                         "font-semibold",
@@ -168,6 +168,7 @@ export default function CallsPage() {
 
         if (otherUserIds.length > 0 && firestore) {
              try {
+                const usersRef = collection(firestore, 'users');
                 // Firestore 'in' query can handle up to 30 items. Chunk if necessary.
                 const chunks = [];
                 for (let i = 0; i < otherUserIds.length; i += 30) {
@@ -183,7 +184,7 @@ export default function CallsPage() {
                 }
             } catch (e) {
                 console.error("Error pre-fetching user details for calls:", e);
-                const permissionError = new FirestorePermissionError({ path: usersRef.path, operation: 'list' });
+                const permissionError = new FirestorePermissionError({ path: 'users', operation: 'list' });
                 errorEmitter.emit('permission-error', permissionError);
             }
         }

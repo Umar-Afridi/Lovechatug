@@ -211,7 +211,7 @@ export default function FriendsPage() {
                         <div>
                             <div className="flex items-center gap-2">
                                 {request.fromUser?.officialBadge?.isOfficial && (
-                                    <OfficialBadge color={request.fromUser.officialBadge.badgeColor} />
+                                    <OfficialBadge color={request.fromUser.officialBadge.badgeColor} size="icon" />
                                 )}
                                 <p className={cn(
                                   "font-semibold",
