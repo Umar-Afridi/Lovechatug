@@ -98,7 +98,7 @@ export default function ManageUsersPage() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const usersList = snapshot.docs
         .map((d) => d.data() as UserProfile)
-        .filter(u => u.uid !== authUser?.uid); // Exclude self
+        .filter(u => u.uid !== authUser?.uid && !u.officialBadge?.isOfficial); // Exclude self and other official users
       setAllUsers(usersList);
       setLoading(false);
     }, (error) => {
