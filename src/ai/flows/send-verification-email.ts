@@ -10,7 +10,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-export const VerificationInputSchema = z.object({
+const VerificationInputSchema = z.object({
   fullName: z.string().describe('The full name of the applicant.'),
   username: z.string().describe('The username of the applicant.'),
   email: z.string().email().describe('The email address of the applicant.'),
@@ -19,9 +19,6 @@ export const VerificationInputSchema = z.object({
 
 export type VerificationInput = z.infer<typeof VerificationInputSchema>;
 
-export async function sendVerificationEmail(input: VerificationInput): Promise<{ success: boolean; message: string }> {
-  return sendVerificationEmailFlow(input);
-}
 
 const sendVerificationEmailFlow = ai.defineFlow(
   {
@@ -86,3 +83,7 @@ const sendVerificationEmailFlow = ai.defineFlow(
     };
   }
 );
+
+export async function sendVerificationEmail(input: VerificationInput): Promise<{ success: boolean; message: string }> {
+  return sendVerificationEmailFlow(input);
+}
