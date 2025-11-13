@@ -43,23 +43,23 @@ export function ContactProfileSheet({
       <SheetContent className="w-full sm:max-w-md">
         <SheetHeader className="text-center mb-6">
           <div className="flex justify-center mb-4 relative">
-             {userProfile.officialBadge?.isOfficial && (
-                <div className="absolute -top-2 z-10">
-                    <OfficialBadge color={userProfile.officialBadge.badgeColor} className="h-7 w-7"/>
-                </div>
-            )}
             <Avatar className="h-24 w-24 border-2 border-primary">
               <AvatarImage src={userProfile.photoURL} alt={userProfile.displayName} />
               <AvatarFallback className="text-3xl">
                 {getInitials(userProfile.displayName)}
               </AvatarFallback>
             </Avatar>
-             {userProfile.verifiedBadge?.showBadge && (
-                <div className="absolute bottom-0 right-1/3 translate-x-1/4">
-                    <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-7 w-7"/>
-                </div>
+          </div>
+          
+           <div className="flex items-center justify-center gap-2 mb-2">
+            {userProfile.officialBadge?.isOfficial && (
+                <OfficialBadge color={userProfile.officialBadge.badgeColor} className="h-7 w-7"/>
+            )}
+            {userProfile.verifiedBadge?.showBadge && (
+                <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-7 w-7"/>
             )}
           </div>
+          
           <SheetTitle className={cn(
             "text-2xl font-bold",
             userProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
