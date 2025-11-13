@@ -402,18 +402,31 @@ export default function ProfilePage() {
 
                     <Separator />
                     
-                     <div className="space-y-4">
-                        <h3 className="text-lg font-semibold flex items-center gap-2">
-                            <CheckCheck className="h-5 w-5 text-primary" />
-                            Verification
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                            Apply to get a verified badge on your profile. This helps people know that you're a person of interest.
-                        </p>
-                        <Button variant="outline" className="w-full" onClick={handleApplyForBadge}>
-                           Apply for Verified Badge
-                        </Button>
-                    </div>
+                    {userProfile?.verifiedBadge?.showBadge ? (
+                        <div className="space-y-2 text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                            <h3 className="text-lg font-semibold flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
+                                <CheckCheck className="h-5 w-5" />
+                                Verified User
+                            </h3>
+                             <p className="text-sm text-green-600 dark:text-green-500">
+                                This profile is verified by Love Chat.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                                <CheckCheck className="h-5 w-5 text-primary" />
+                                Verification
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                                Apply to get a verified badge on your profile. This helps people know that you're a person of interest.
+                            </p>
+                            <Button variant="outline" className="w-full" onClick={handleApplyForBadge}>
+                               Apply for Verified Badge
+                            </Button>
+                        </div>
+                    )}
+
 
                     <div className="space-y-2 pt-4">
                         <Button className="w-full" onClick={handleSaveChanges}>Save Changes</Button>
