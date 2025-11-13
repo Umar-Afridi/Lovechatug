@@ -35,6 +35,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useEffect, useState, useRef } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -48,7 +56,7 @@ import { useSound } from '@/hooks/use-sound';
 
 
 // Custom hook to get user profile data in real-time
-function useUserProfile() {
+function useUserProfile(onAccountDisabled: () => void) {
   const { user, loading: authLoading } = useUser();
   const firestore = useFirestore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -67,7 +75,13 @@ function useUserProfile() {
     const unsubscribe = onSnapshot(userDocRef, 
       (docSnap) => {
         if (docSnap.exists()) {
-          setProfile(docSnap.data() as UserProfile);
+          const data = docSnap.data() as UserProfile;
+          setProfile(data);
+
+          // Check if the account has just been disabled
+          if (data.isDisabled) {
+            onAccountDisabled();
+          }
         } else {
           // Fallback to auth data if firestore doc doesn't exist
           setProfile({
@@ -92,7 +106,7 @@ function useUserProfile() {
     );
 
     return () => unsubscribe();
-  }, [user, firestore, authLoading]);
+  }, [user, firestore, authLoading, onAccountDisabled]);
 
   return { profile, loading };
 }
@@ -163,14 +177,20 @@ export default function ChatAppLayout({
   const auth = useAuth();
   const firestore = useFirestore();
   const { user, loading: authLoading } = useUser();
-  const { profile, loading: profileLoading } = useUserProfile();
-  usePresence(); // Initialize presence management
   const router = useRouter();
   const isMobile = useIsMobile();
   const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2;
   const [requestCount, setRequestCount] = useState(0);
+  const [isAccountDisabled, setAccountDisabled] = useState(false);
   const { toast } = useToast();
   
+  const handleAccountDisabled = () => {
+    setAccountDisabled(true);
+  };
+  
+  const { profile, loading: profileLoading } = useUserProfile(handleAccountDisabled);
+  usePresence(); // Initialize presence management
+
   const playRequestSound = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a');
   const isFirstRequestLoad = useRef(true);
   
@@ -236,7 +256,7 @@ export default function ChatAppLayout({
     );
   }
   
-  if (!user) {
+  if (!user && !isAccountDisabled) {
     return (
        <div className="flex h-screen w-full items-center justify-center">
         <p>Redirecting...</p>
@@ -255,6 +275,21 @@ export default function ChatAppLayout({
   const showSidebar = !isMobile || !isChatDetailPage;
 
   return (
+    <>
+    <AlertDialog open={isAccountDisabled}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Account Disabled</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your account has been disabled by an administrator. You will be logged out.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={handleSignOut}>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     <div className="flex h-screen bg-background">
       <SidebarProvider>
         {showSidebar && (
@@ -328,6 +363,7 @@ export default function ChatAppLayout({
         </SidebarInset>
       </SidebarProvider>
     </div>
+    </>
   );
 }
 
