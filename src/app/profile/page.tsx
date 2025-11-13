@@ -9,11 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette, Loader2, Clock } from 'lucide-react';
+import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, serverTimestamp, updateDoc, onSnapshot } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -98,16 +98,14 @@ export default function ProfilePage() {
 
   const handleApplyForVerification = async () => {
     if (!userProfile || !firestore) return;
-  
-    // Update firestore to mark application as pending and set timestamp
+
     const userDocRef = doc(firestore, 'users', userProfile.uid);
     try {
         await updateDoc(userDocRef, {
-            verificationApplicationStatus: 'pending',
+            // No status update needed here as we are just opening the mail client
             lastVerificationRequestAt: serverTimestamp()
         });
 
-        // Open email client
         const subject = encodeURIComponent(`Verification Request from @${userProfile.username}`);
         const body = encodeURIComponent(
             `Hello Love Chat Team,\n\nPlease find my verification request details below:\n\nFull Name: ${userProfile.displayName}\nUsername: @${userProfile.username}\n\nPlease find my government-issued ID attached to this email.\n\nThank you!`
@@ -115,7 +113,7 @@ export default function ProfilePage() {
         window.location.href = `mailto:Lovechat0300@gmail.com?subject=${subject}&body=${body}`;
 
     } catch (error) {
-         console.error('Failed to update verification status:', error);
+         console.error('Failed to update verification timestamp:', error);
          toast({
             title: 'Application Failed',
             description: 'Could not start your application process. Please try again.',
