@@ -98,6 +98,8 @@ export function SignupForm() {
           verificationApplicationStatus: 'none',
           lastVerificationRequestAt: null,
           lastColorfulNameRequestAt: null,
+          isSuperAdmin: false,
+          isDisabled: false,
         };
         await setDoc(userDocRef, userData);
         

@@ -95,7 +95,7 @@ export function LoginForm() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
-    if (!auth) {
+    if (!auth || !firestore) {
        setError('Firebase Auth not available.');
        toast({
         variant: "destructive",
@@ -111,6 +111,26 @@ export function LoginForm() {
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Check if user document exists
+      const userDocRef = doc(firestore, 'users', userCredential.user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (userDocSnap.exists()) {
+          const userData = userDocSnap.data() as UserProfile;
+          // Check if the user is disabled
+          if (userData.isDisabled) {
+              await auth.signOut(); // Sign the user out
+              setError("Your account has been disabled.");
+              toast({
+                  variant: "destructive",
+                  title: "Account Disabled",
+                  description: "Your account has been disabled by an administrator.",
+              });
+              return;
+          }
+      }
+
       if (!userCredential.user.emailVerified) {
         setError("Please verify your email before logging in.");
         toast({
