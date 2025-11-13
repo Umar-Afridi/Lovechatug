@@ -21,6 +21,8 @@ import {
   Trash2,
   Ban,
   UserCog,
+  CheckCheck,
+  Sparkles,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -49,6 +51,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
+import Link from 'next/link';
 
 export default function SuperAdminPage() {
   const router = useRouter();
@@ -208,29 +211,31 @@ export default function SuperAdminPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex min-h-screen flex-col bg-background">
-        <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <UserCog className="h-5 w-5" />
-            Super Admin Panel
-          </h1>
-        </header>
-
-        <main className="flex-1 flex flex-col">
-            <div className="p-4 border-b">
-                <div className="relative">
-                    <Input 
-                        placeholder="Search by username or display name..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10"
-                    />
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                </div>
+        <div className="p-4 border-b space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Button asChild variant="outline">
+                    <Link href="/admin/super/verification">
+                        <CheckCheck className="mr-2 h-4 w-4" />
+                        Manage Verification
+                    </Link>
+                </Button>
+                <Button asChild variant="outline">
+                    <Link href="/admin/super/colorful-name">
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Manage Colorful Names
+                    </Link>
+                </Button>
             </div>
+             <div className="relative">
+                <Input 
+                    placeholder="Search by username or display name..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            </div>
+        </div>
           <ScrollArea className="flex-1">
             {filteredUsers.length > 0 ? (
                 <div className="space-y-2 p-2">
@@ -278,8 +283,6 @@ export default function SuperAdminPage() {
             )}
             
           </ScrollArea>
-        </main>
-      </div>
     </>
   );
 }
