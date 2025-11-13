@@ -88,7 +88,7 @@ export default function ManageUsersPage() {
     return () => unsubscribe();
   }, [authUser, firestore, router, toast]);
 
-  // 2. Fetch all users
+  // 2. Fetch all users, excluding other official users
   useEffect(() => {
     if (!currentUserProfile?.officialBadge?.isOfficial || !firestore) return;
 
@@ -98,7 +98,8 @@ export default function ManageUsersPage() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const usersList = snapshot.docs
         .map((d) => d.data() as UserProfile)
-        .filter(u => u.uid !== authUser?.uid && !u.officialBadge?.isOfficial); // Exclude self and other official users
+        // Exclude self and all other official users from the management list
+        .filter(u => !u.officialBadge?.isOfficial); 
       setAllUsers(usersList);
       setLoading(false);
     }, (error) => {
