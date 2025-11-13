@@ -111,7 +111,7 @@ export default function ManageUsersPage() {
   }, [currentUserProfile?.officialBadge?.isOfficial, firestore, authUser?.uid]);
 
   const filteredUsers = useMemo(() => {
-    if (!searchQuery) return allUsers;
+    if (!searchQuery) return []; // Don't show any users if search is empty
     return allUsers.filter(u => 
         u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         u.username.toLowerCase().includes(searchQuery.toLowerCase())
@@ -212,7 +212,7 @@ export default function ManageUsersPage() {
             </div>
         </div>
           <ScrollArea className="flex-1">
-            {filteredUsers.length > 0 ? (
+            {searchQuery && filteredUsers.length > 0 ? (
                 <div className="space-y-2 p-2">
                     {filteredUsers.map((user) => (
                         <div key={user.uid} className={cn("flex items-center justify-between p-2 rounded-lg", user.isDisabled && "bg-destructive/10")}>
@@ -253,7 +253,7 @@ export default function ManageUsersPage() {
                 </div>
             ) : (
                 <div className="flex flex-1 items-center justify-center text-muted-foreground p-8 h-full">
-                    <p>{searchQuery ? 'No users found.' : 'No other users in the system.'}</p>
+                    <p>{searchQuery ? 'No users found.' : 'Search for a user to manage their account.'}</p>
                 </div>
             )}
             
