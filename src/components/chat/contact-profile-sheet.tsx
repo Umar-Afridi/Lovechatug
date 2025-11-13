@@ -51,20 +51,17 @@ export function ContactProfileSheet({
             </Avatar>
           </div>
           
-           <div className="flex items-center justify-center gap-2 mb-2">
-            {userProfile.officialBadge?.isOfficial && (
-                <OfficialBadge color={userProfile.officialBadge.badgeColor} className="h-7 w-7"/>
-            )}
-            {userProfile.verifiedBadge?.showBadge && (
-                <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-7 w-7"/>
-            )}
-          </div>
-          
           <SheetTitle className={cn(
-            "text-2xl font-bold",
+            "text-2xl font-bold flex items-center justify-center gap-2",
             userProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
             )}>
             {userProfile.displayName}
+            {userProfile.officialBadge?.isOfficial && (
+                <OfficialBadge color={userProfile.officialBadge.badgeColor} className="h-6 w-6"/>
+            )}
+            {userProfile.verifiedBadge?.showBadge && (
+                <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-6 w-6"/>
+            )}
             </SheetTitle>
           <SheetDescription className="text-muted-foreground">@{userProfile.username}</SheetDescription>
         </SheetHeader>

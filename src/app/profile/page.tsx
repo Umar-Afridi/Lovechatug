@@ -427,10 +427,11 @@ export default function ProfilePage() {
                                 onChange={handleFileChange}
                             />
                         </div>
-                         {userProfile?.officialBadge?.isOfficial && (
-                            <div className="flex items-center gap-2">
-                                <OfficialBadge color={userProfile.officialBadge.badgeColor} className="h-5 w-5" />
-                                <span className="font-bold text-sm" style={{ color: `hsl(var(--${userProfile.officialBadge.badgeColor === 'gold' ? 'yellow-500' : 'primary'}))` }}>V-Official</span>
+                        {userProfile?.officialBadge?.isOfficial && (
+                            <div className="flex flex-col items-center mt-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-bold text-sm" style={{ color: `hsl(var(--${userProfile.officialBadge.badgeColor === 'gold' ? 'yellow-500' : 'primary'}))` }}>V-Official</span>
+                                </div>
                             </div>
                         )}
                     </div>
