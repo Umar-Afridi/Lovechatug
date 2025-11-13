@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck } from 'lucide-react';
+import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
@@ -308,6 +308,14 @@ export default function ProfilePage() {
     window.location.href = `mailto:Lovechat0300@gmail.com?subject=${subject}&body=${body}`;
   };
 
+  const handleApplyForColorfulName = () => {
+    const subject = encodeURIComponent("Colorful Name Application");
+    const body = encodeURIComponent(
+        `Hello Love Chat Team,\n\nI would like to apply for a colorful name.\n\nMy Details:\nFull Name: ${displayName}\nUsername: @${username}\n\nPlease review my account. Thank you!`
+    );
+    window.location.href = `mailto:Lovechat0300@gmail.com?subject=${subject}&body=${body}`;
+  };
+
   const displayPhoto = newPhotoPreview ?? (isRemovingPhoto ? null : photoURL);
 
   return (
@@ -428,6 +436,33 @@ export default function ProfilePage() {
                             </p>
                             <Button variant="outline" className="w-full" onClick={handleApplyForBadge}>
                                Apply for Verified Badge
+                            </Button>
+                        </div>
+                    )}
+                    
+                    <Separator />
+
+                    {userProfile?.colorfulName ? (
+                        <div className="space-y-2 text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                            <h3 className="text-lg font-semibold flex items-center justify-center gap-2 text-purple-700 dark:text-purple-400">
+                                <Palette className="h-5 w-5" />
+                                Colorful Name Activated
+                            </h3>
+                             <p className="text-sm text-purple-600 dark:text-purple-500">
+                                Your name is already colorful.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                                <Palette className="h-5 w-5 text-primary" />
+                                Colorful Name
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                                Apply to get a colorful, animated gradient on your name to stand out.
+                            </p>
+                            <Button variant="outline" className="w-full" onClick={handleApplyForColorfulName}>
+                               Apply for Colorful Name
                             </Button>
                         </div>
                     )}
