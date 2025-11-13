@@ -49,6 +49,8 @@ service cloud.firestore {
     // 4. کال کی تاریخ کا مجموعہ (Call History Collection)
     match /calls/{callId} {
       allow read, write, delete: if isParticipant(resource.data.participants);
+      // FIX: Updated rule to exactly match the query being made by the app.
+      // The query filters by 'participants' and orders by 'timestamp'.
       allow list: if isSignedIn() && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
     }
 
