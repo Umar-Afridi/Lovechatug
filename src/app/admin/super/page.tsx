@@ -8,8 +8,8 @@ import { cn } from '@/lib/utils';
 export default function SuperAdminHubPage() {
   const baseButtonClassName = "w-full text-base py-8 justify-center rounded-lg border-b-4 active:translate-y-1 active:border-b-0 transition-all duration-150 ease-in-out";
   return (
-    <div className="p-4 md:p-8 flex-1 flex items-center justify-center">
-      <div className="w-full max-w-md space-y-6">
+    <div className="p-4 md:p-8 flex-1 flex flex-col">
+      <div className="w-full max-w-md space-y-6 mx-auto">
         <Button asChild variant="outline" className={cn(baseButtonClassName, "border-blue-600 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20")}>
           <Link href="/admin/super/user-management">
             <UserCog className="mr-4 h-6 w-6 text-blue-500" />
