@@ -19,8 +19,6 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ProfilePictureDialog } from '@/components/profile/profile-picture-dialog';
 import { DeleteAccountDialog } from '@/components/profile/delete-account-dialog';
-import { Switch } from '@/components/ui/switch';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Separator } from '@/components/ui/separator';
 import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
@@ -43,10 +41,7 @@ export default function ProfilePage() {
   const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
   const [photoURL, setPhotoURL] = useState<string | null>(null);
-
-  // Verified Badge State
-  const [showBadge, setShowBadge] = useState(false);
-  const [badgeColor, setBadgeColor] = useState<'blue' | 'gold' | 'green' | 'red' | 'pink'>('blue');
+  const [userProfile, setUserProfile] = useState<any>(null);
   
   // State for the new image preview
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
@@ -65,12 +60,11 @@ export default function ProfilePage() {
       getDoc(userDocRef).then(docSnap => {
           if (docSnap.exists()) {
               const data = docSnap.data();
+              setUserProfile(data);
               setDisplayName(data.displayName ?? user.displayName ?? '');
               setUsername(data.username ?? '');
               setBio(data.bio ?? '');
               setPhotoURL(data.photoURL ?? user.photoURL ?? null);
-              setShowBadge(data.verifiedBadge?.showBadge ?? false);
-              setBadgeColor(data.verifiedBadge?.badgeColor ?? 'blue');
           }
       });
     }
@@ -172,17 +166,13 @@ export default function ProfilePage() {
         updatedAuthProfile.photoURL = finalPhotoURL;
     }
     
+    // We only update the fields that can be changed by the user.
+    // 'verifiedBadge' is now only updatable from the backend.
     const updatedFirestoreData: any = {
-        uid: user.uid,
         displayName: displayName,
         username: username.toLowerCase(),
         bio: bio,
-        email: email,
         photoURL: finalPhotoURL,
-        verifiedBadge: {
-          showBadge: showBadge,
-          badgeColor: badgeColor
-        }
     };
 
     // 3. Perform updates
@@ -192,9 +182,8 @@ export default function ProfilePage() {
             await updateProfile(user, updatedAuthProfile);
         }
 
-        // Always update Firestore document using set with merge
         const userDocRef = doc(firestore, 'users', user.uid);
-        await setDoc(userDocRef, updatedFirestoreData, { merge: true });
+        await updateDoc(userDocRef, updatedFirestoreData);
 
         toast({
             title: "Profile Updated",
@@ -309,6 +298,14 @@ export default function ProfilePage() {
     }
   };
 
+  const handleApplyForBadge = () => {
+    const subject = encodeURIComponent("Verified Badge Application");
+    const body = encodeURIComponent(
+        `Hello Love Chat Team,\n\nI would like to apply for a verified badge.\n\nMy Details:\nFull Name: ${displayName}\nUsername: @${username}\n\nPlease review my account. Thank you!`
+    );
+    window.location.href = `mailto:Lovechat0300@gmail.com?subject=${subject}&body=${body}`;
+  };
+
   const displayPhoto = newPhotoPreview ?? (isRemovingPhoto ? null : photoURL);
 
   return (
@@ -343,7 +340,12 @@ export default function ProfilePage() {
                                     {getInitials(displayName)}
                                 </AvatarFallback>
                             </Avatar>
-                            <button className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground" onClick={handleChangePicture}>
+                             {userProfile?.verifiedBadge?.showBadge && (
+                                <div className="absolute bottom-1 -right-1">
+                                    <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-8 w-8"/>
+                                </div>
+                            )}
+                            <button className="absolute -bottom-1 right-8 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground" onClick={handleChangePicture}>
                                 <Camera className="h-5 w-5" />
                             </button>
                             <input 
@@ -399,75 +401,21 @@ export default function ProfilePage() {
                     </div>
 
                     <Separator />
-
-                    {/* Verified Badge Settings */}
-                    <div className="space-y-6">
-                        <div className="space-y-2">
-                            <h3 className="text-lg font-semibold flex items-center gap-2">
-                                <CheckCheck className="h-5 w-5 text-primary" />
-                                Verified Badge Settings
-                            </h3>
-                            <div className="flex items-center justify-between rounded-lg border p-4">
-                                <Label htmlFor="show-badge" className="flex-grow">
-                                    Show Verified Badge
-                                </Label>
-                                <Switch
-                                    id="show-badge"
-                                    checked={showBadge}
-                                    onCheckedChange={setShowBadge}
-                                />
-                            </div>
-                        </div>
-
-                        {showBadge && (
-                             <div className="space-y-4 rounded-lg border p-4">
-                                <Label>Badge Color</Label>
-                                <RadioGroup
-                                    value={badgeColor}
-                                    onValueChange={(value) => setBadgeColor(value as 'blue' | 'gold' | 'green' | 'red' | 'pink')}
-                                    className="flex flex-col space-y-2"
-                                >
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="blue" id="color-blue" />
-                                        <Label htmlFor="color-blue" className="flex items-center gap-2">
-                                            <VerifiedBadge color="blue" />
-                                            <span>Blue</span>
-                                        </Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="gold" id="color-gold" />
-                                        <Label htmlFor="color-gold" className="flex items-center gap-2">
-                                            <VerifiedBadge color="gold" />
-                                            <span>Gold</span>
-                                        </Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="green" id="color-green" />
-                                        <Label htmlFor="color-green" className="flex items-center gap-2">
-                                            <VerifiedBadge color="green" />
-                                            <span>Green</span>
-                                        </Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="red" id="color-red" />
-                                        <Label htmlFor="color-red" className="flex items-center gap-2">
-                                            <VerifiedBadge color="red" />
-                                            <span>Red</span>
-                                        </Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="pink" id="color-pink" />
-                                        <Label htmlFor="color-pink" className="flex items-center gap-2">
-                                            <VerifiedBadge color="pink" />
-                                            <span>Pink</span>
-                                        </Label>
-                                    </div>
-                                </RadioGroup>
-                            </div>
-                        )}
-                    </div>
                     
-                    <div className="space-y-2">
+                     <div className="space-y-4">
+                        <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <CheckCheck className="h-5 w-5 text-primary" />
+                            Verification
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                            Apply to get a verified badge on your profile. This helps people know that you're a person of interest.
+                        </p>
+                        <Button variant="outline" className="w-full" onClick={handleApplyForBadge}>
+                           Apply for Verified Badge
+                        </Button>
+                    </div>
+
+                    <div className="space-y-2 pt-4">
                         <Button className="w-full" onClick={handleSaveChanges}>Save Changes</Button>
                         <Button className="w-full" variant="outline" asChild>
                             <Link href="/settings">
