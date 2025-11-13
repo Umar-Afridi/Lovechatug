@@ -409,7 +409,7 @@ export default function ProfilePage() {
                                 Verified User
                             </h3>
                              <p className="text-sm text-green-600 dark:text-green-500">
-                                This profile is verified by Love Chat.
+                                Your profile is verified by Love Chat.
                             </p>
                         </div>
                     ) : (
