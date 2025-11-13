@@ -7,10 +7,10 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 
-// Input schema for the verification flow
-export const VerificationInputSchema = z.object({
+// Input schema for the verification flow. NOT exported.
+const VerificationInputSchema = z.object({
   fullName: z.string().describe('The full name of the user.'),
   username: z.string().describe('The username of the user.'),
   email: z.string().email().describe('The email address of the user.'),
@@ -20,7 +20,7 @@ export const VerificationInputSchema = z.object({
       "A government-issued ID, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
     ),
 });
-export type VerificationInput = z.infer<typeof VerificationInputSchema>;
+type VerificationInput = z.infer<typeof VerificationInputSchema>;
 
 /**
  * A server action that takes verification details and logs them.
@@ -31,6 +31,9 @@ export type VerificationInput = z.infer<typeof VerificationInputSchema>;
  */
 export async function sendVerificationEmail(input: VerificationInput): Promise<{ success: boolean; message: string; }> {
   try {
+    // Validate input with Zod on the server-side.
+    const validatedInput = VerificationInputSchema.parse(input);
+    
     // In a real application, you would integrate an email service here.
     // For now, we will log the intended email content to the server console.
     // This log can be viewed in the Firebase Functions logs.
@@ -39,12 +42,12 @@ export async function sendVerificationEmail(input: VerificationInput): Promise<{
       =================================
       Verification Request Received
       =================================
-      Full Name: ${input.fullName}
-      Username: @${input.username}
-      Email: ${input.email}
+      Full Name: ${validatedInput.fullName}
+      Username: @${validatedInput.username}
+      Email: ${validatedInput.email}
       
       Document: (Base64 data below)
-      ${input.document.substring(0, 100)}... 
+      ${validatedInput.document.substring(0, 100)}... 
       =================================
     `;
 
@@ -54,6 +57,10 @@ export async function sendVerificationEmail(input: VerificationInput): Promise<{
 
   } catch (error) {
     console.error("Error in sendVerificationEmail flow:", error);
+    // If it's a Zod validation error, return a more specific message
+    if (error instanceof z.ZodError) {
+        return { success: false, message: `Invalid input: ${error.errors.map(e => e.message).join(', ')}` };
+    }
     return { success: false, message: 'Failed to process verification application.' };
   }
 }
