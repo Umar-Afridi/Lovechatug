@@ -19,13 +19,11 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ProfilePictureDialog } from '@/components/profile/profile-picture-dialog';
 import { DeleteAccountDialog } from '@/components/profile/delete-account-dialog';
-import { VerificationDialog } from '@/components/profile/verification-dialog';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Separator } from '@/components/ui/separator';
 import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { sendVerificationEmail } from '@/ai/flows/send-verification-email';
 import { differenceInHours } from 'date-fns';
 
 
@@ -39,10 +37,7 @@ export default function ProfilePage() {
   
   const [isPictureDialogOpen, setPictureDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [isVerificationDialogOpen, setVerificationDialogOpen] = useState(false);
-  const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
-
-
+  
   // States for current data from Firestore
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
@@ -64,7 +59,7 @@ export default function ProfilePage() {
       
       // Fetch and set values from Firestore document
       const userDocRef = doc(firestore, 'users', user.uid);
-      getDoc(userDocRef).then(docSnap => {
+      const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
               const data = docSnap.data() as UserProfile;
               setUserProfile(data);
@@ -74,6 +69,8 @@ export default function ProfilePage() {
               setPhotoURL(data.photoURL ?? user.photoURL ?? null);
           }
       });
+
+      return () => unsubscribe();
     }
   }, [user, firestore]);
   
@@ -92,11 +89,41 @@ export default function ProfilePage() {
     // If there's no last request, can apply.
     if (!userProfile.lastVerificationRequestAt) return true;
     
-    // Check if 24 hours have passed.
+    // Check if 24 hours have passed since last request.
     const lastRequestDate = userProfile.lastVerificationRequestAt.toDate();
     return differenceInHours(new Date(), lastRequestDate) >= 24;
 
   }, [userProfile]);
+
+
+  const handleApplyForVerification = async () => {
+    if (!userProfile || !firestore) return;
+  
+    // Update firestore to mark application as pending and set timestamp
+    const userDocRef = doc(firestore, 'users', userProfile.uid);
+    try {
+        await updateDoc(userDocRef, {
+            verificationApplicationStatus: 'pending',
+            lastVerificationRequestAt: serverTimestamp()
+        });
+
+        // Open email client
+        const subject = encodeURIComponent(`Verification Request from @${userProfile.username}`);
+        const body = encodeURIComponent(
+            `Hello Love Chat Team,\n\nPlease find my verification request details below:\n\nFull Name: ${userProfile.displayName}\nUsername: @${userProfile.username}\n\nPlease find my government-issued ID attached to this email.\n\nThank you!`
+        );
+        window.location.href = `mailto:Lovechat0300@gmail.com?subject=${subject}&body=${body}`;
+
+    } catch (error) {
+         console.error('Failed to update verification status:', error);
+         toast({
+            title: 'Application Failed',
+            description: 'Could not start your application process. Please try again.',
+            variant: 'destructive',
+        });
+    }
+  };
+
 
   const getVerificationStatusNode = () => {
     if (!userProfile) return null;
@@ -136,14 +163,14 @@ export default function ProfilePage() {
                 Verification
             </h3>
             <p className="text-sm text-muted-foreground">
-                {userProfile.verificationApplicationStatus === 'rejected' && differenceInHours(new Date(), userProfile.lastVerificationRequestAt?.toDate()) < 24
+                {userProfile.verificationApplicationStatus === 'rejected' && userProfile.lastVerificationRequestAt && differenceInHours(new Date(), userProfile.lastVerificationRequestAt?.toDate()) < 24
                     ? "Your last application was not approved. You can apply again after 24 hours have passed."
                     : "Apply to get a verified badge on your profile. This helps people know that you're a person of interest."}
             </p>
             <Button 
                 variant="outline" 
                 className="w-full" 
-                onClick={() => setVerificationDialogOpen(true)}
+                onClick={handleApplyForVerification}
                 disabled={!canApplyForVerification}
             >
                Apply for Verified Badge
@@ -372,62 +399,6 @@ export default function ProfilePage() {
     }
   };
   
-  const handleVerificationSubmit = async (values: { document: FileList }) => {
-    if (!userProfile || !firestore) return;
-
-    setIsSubmittingVerification(true);
-    const file = values.document[0];
-    
-    // Convert file to data URI
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = async () => {
-        const documentDataUri = reader.result as string;
-        try {
-            await sendVerificationEmail({
-                displayName: userProfile.displayName,
-                username: userProfile.username,
-                email: userProfile.email,
-                documentDataUri: documentDataUri,
-            });
-            
-            // After successful submission, update user's status
-            const userDocRef = doc(firestore, 'users', userProfile.uid);
-            await updateDoc(userDocRef, {
-                verificationApplicationStatus: 'pending',
-                lastVerificationRequestAt: serverTimestamp()
-            });
-            
-            // Manually update local state to reflect the change immediately
-            setUserProfile(prev => prev ? { ...prev, verificationApplicationStatus: 'pending', lastVerificationRequestAt: new Date() } : null);
-
-            toast({
-                title: 'Application Submitted',
-                description: 'Your verification request has been sent. Please wait up to 24 hours for a review.',
-            });
-            setVerificationDialogOpen(false);
-        } catch (error) {
-            console.error('Failed to send verification email:', error);
-            toast({
-                title: 'Submission Failed',
-                description: 'There was an error submitting your application. Please try again.',
-                variant: 'destructive',
-            });
-        } finally {
-            setIsSubmittingVerification(false);
-        }
-    };
-    reader.onerror = (error) => {
-        console.error('Error converting file to data URI:', error);
-        toast({
-            title: 'File Error',
-            description: 'Could not process the uploaded file.',
-            variant: 'destructive',
-        });
-        setIsSubmittingVerification(false);
-    };
-  };
-
   const handleApplyForColorfulName = () => {
     const subject = encodeURIComponent("Colorful Name Application");
     const body = encodeURIComponent(
@@ -451,13 +422,6 @@ export default function ProfilePage() {
             isOpen={isDeleteDialogOpen}
             onOpenChange={setDeleteDialogOpen}
             onConfirm={handleDeleteAccount}
-        />
-        <VerificationDialog 
-            isOpen={isVerificationDialogOpen}
-            onOpenChange={setVerificationDialogOpen}
-            onSubmit={handleVerificationSubmit}
-            userProfile={userProfile}
-            isSubmitting={isSubmittingVerification}
         />
         <div className="flex min-h-screen flex-col bg-background">
             <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
