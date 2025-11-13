@@ -48,8 +48,9 @@ service cloud.firestore {
     
     // 4. کال کی تاریخ کا مجموعہ (Call History Collection)
     match /calls/{callId} {
+      // Read is now sufficient for queries thanks to the composite index.
+      // The 'list' rule is no longer needed for this query.
       allow read, write, delete: if isParticipant(resource.data.participants);
-      allow list: if isSignedIn() && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
     }
 
     // 5. ڈیلیٹ شدہ صارفین کا مجموعہ (Deleted Users Collection)
