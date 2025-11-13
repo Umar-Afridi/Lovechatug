@@ -13,7 +13,7 @@ import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette, Clock }
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
-import { doc, getDoc, deleteDoc, serverTimestamp, updateDoc, onSnapshot, collection, query, where, getDocs, writeBatch, setDoc } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc, serverTimestamp, updateDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -96,17 +96,27 @@ export default function ProfilePage() {
     return differenceInHours(new Date(), lastRequestDate) >= 24;
   }, [userProfile]);
 
+  const canApplyForColorfulName = useMemo(() => {
+    if (!userProfile) return false;
+    if (userProfile.colorfulName) return false;
+    if (!userProfile.lastColorfulNameRequestAt) return true;
+    const lastRequestDate = new Date(userProfile.lastColorfulNameRequestAt.seconds * 1000);
+    return differenceInHours(new Date(), lastRequestDate) >= 24;
+  }, [userProfile]);
+
+  if (loading || !user) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  }
+  
   const handleApplyForVerification = async () => {
     if (!userProfile || !firestore) return;
     
-    // Update status in Firestore
     const userDocRef = doc(firestore, 'users', userProfile.uid);
     await updateDoc(userDocRef, {
         verificationApplicationStatus: 'pending',
         lastVerificationRequestAt: serverTimestamp(),
     });
 
-    // Open mail client
     const subject = encodeURIComponent("Verification Badge Application");
     const body = encodeURIComponent(
         `Hello Love Chat Team,\n\nPlease review my application for a verified badge.\n\nMy Details:\nFull Name: ${displayName}\nUsername: @${username}\n\nI will attach my government-issued ID for verification.\n\nThank you!`
@@ -174,11 +184,6 @@ export default function ProfilePage() {
         </div>
     );
   };
-
-
-  if (loading || !user) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>;
-  }
   
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
@@ -355,14 +360,6 @@ export default function ProfilePage() {
       router.push('/');
     }
   };
-  
-    const canApplyForColorfulName = useMemo(() => {
-        if (!userProfile) return false;
-        if (userProfile.colorfulName) return false;
-        if (!userProfile.lastColorfulNameRequestAt) return true;
-        const lastRequestDate = new Date(userProfile.lastColorfulNameRequestAt.seconds * 1000);
-        return differenceInHours(new Date(), lastRequestDate) >= 24;
-    }, [userProfile]);
 
   const handleApplyForColorfulName = async () => {
     if (!userProfile || !firestore) return;
