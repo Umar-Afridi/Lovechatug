@@ -31,16 +31,24 @@ interface OfficialBadgeProps extends VariantProps<typeof badgeVariants> {
 }
 
 export function OfficialBadge({ color, size, className }: OfficialBadgeProps) {
+    
+  const colorClass = {
+    blue: 'text-blue-500',
+    gold: 'text-yellow-500',
+    green: 'text-green-500',
+    red: 'text-red-500',
+    pink: 'text-pink-500',
+  }[color || 'gold'];
 
   return (
     <div className={cn(badgeVariants({ color, size }), className)}>
       <div
         className={cn(
-          'flex items-center justify-center rounded-full font-bold',
+          'flex h-5 w-5 items-center justify-center rounded-full bg-white font-bold',
            size === 'icon' ? 'h-full w-full' : 'h-5 w-5'
         )}
       >
-        <span className={cn(size === 'icon' ? 'text-xs' : 'text-sm' )}>V</span>
+        <span className={cn('text-sm font-bold', colorClass)}>V</span>
       </div>
       {size !== 'icon' && <span>Official</span>}
     </div>
