@@ -25,7 +25,6 @@ import { Separator } from '@/components/ui/separator';
 import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { sendVerificationEmail } from '@/ai/flows/send-verification-email';
 
 
 export default function ProfilePage() {
@@ -38,7 +37,6 @@ export default function ProfilePage() {
   
   const [isPictureDialogOpen, setPictureDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [isVerificationDialogOpen, setVerificationDialogOpen] = useState(false);
 
   // States for current data from Firestore
   const [displayName, setDisplayName] = useState('');
@@ -51,9 +49,7 @@ export default function ProfilePage() {
   // State for the new image preview
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
   const [isRemovingPhoto, setIsRemovingPhoto] = useState(false);
-  const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
   
-
   useEffect(() => {
     if (user && firestore) {
       // Set initial values from auth object
@@ -172,8 +168,6 @@ export default function ProfilePage() {
         updatedAuthProfile.photoURL = finalPhotoURL;
     }
     
-    // We only update the fields that can be changed by the user.
-    // 'verifiedBadge' is now only updatable from the backend.
     const updatedFirestoreData: any = {
         displayName: displayName,
         username: username.toLowerCase(),
@@ -303,46 +297,14 @@ export default function ProfilePage() {
       router.push('/');
     }
   };
-
-  const handleVerificationSubmit = async (values: { document: FileList }) => {
-    if (!userProfile) return;
-    setIsSubmittingVerification(true);
-
-    try {
-      const file = values.document[0];
-      const reader = new FileReader();
-      
-      reader.onload = async (event) => {
-        const documentAsDataUrl = event.target?.result as string;
-        
-        await sendVerificationEmail({
-          fullName: userProfile.displayName,
-          username: userProfile.username,
-          email: userProfile.email,
-          documentDataUrl: documentAsDataUrl,
-        });
-
-        setVerificationDialogOpen(false);
-        toast({
-            title: "Application Submitted",
-            description: "Your verification application has been sent for review.",
-        });
-      };
-      
-      reader.readAsDataURL(file);
-
-    } catch (error) {
-      console.error("Error submitting verification:", error);
-      toast({
-        variant: "destructive",
-        title: "Submission Failed",
-        description: "Could not submit your application. Please try again.",
-      });
-    } finally {
-      setIsSubmittingVerification(false);
-    }
+  
+  const handleApplyForVerification = () => {
+    const subject = encodeURIComponent("Verification Badge Application");
+    const body = encodeURIComponent(
+        `Hello Love Chat Team,\n\nI would like to apply for a verification badge.\n\nMy Details:\nFull Name: ${displayName}\nUsername: @${username}\n\nPlease review my account. Don't forget to attach your government-issued ID (Passport, National ID, etc.).\n\nThank you!`
+    );
+    window.location.href = `mailto:Lovechat0300@gmail.com?subject=${subject}&body=${body}`;
   };
-
 
   const handleApplyForColorfulName = () => {
     const subject = encodeURIComponent("Colorful Name Application");
@@ -367,13 +329,6 @@ export default function ProfilePage() {
             isOpen={isDeleteDialogOpen}
             onOpenChange={setDeleteDialogOpen}
             onConfirm={handleDeleteAccount}
-        />
-         <VerificationDialog
-            isOpen={isVerificationDialogOpen}
-            onOpenChange={setVerificationDialogOpen}
-            onSubmit={handleVerificationSubmit}
-            userProfile={userProfile}
-            isSubmitting={isSubmittingVerification}
         />
         <div className="flex min-h-screen flex-col bg-background">
             <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
@@ -462,7 +417,7 @@ export default function ProfilePage() {
                         <div className="space-y-2 text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
                             <h3 className="text-lg font-semibold flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
                                 <CheckCheck className="h-5 w-5" />
-                                Verified User
+                                You are a Verified User
                             </h3>
                              <p className="text-sm text-green-600 dark:text-green-500">
                                 Your profile is verified by Love Chat.
@@ -477,7 +432,7 @@ export default function ProfilePage() {
                             <p className="text-sm text-muted-foreground">
                                 Apply to get a verified badge on your profile. This helps people know that you're a person of interest.
                             </p>
-                            <Button variant="outline" className="w-full" onClick={() => setVerificationDialogOpen(true)}>
+                            <Button variant="outline" className="w-full" onClick={handleApplyForVerification}>
                                Apply for Verified Badge
                             </Button>
                         </div>

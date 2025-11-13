@@ -37,7 +37,7 @@ type VerificationFormValues = z.infer<typeof verificationSchema>;
 interface VerificationDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: { document: FileList }) => void;
+  onSubmit: (values: { document: FileList }) => Promise<void>;
   userProfile: UserProfile | null;
   isSubmitting: boolean;
 }
