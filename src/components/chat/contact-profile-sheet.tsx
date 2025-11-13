@@ -42,6 +42,11 @@ export function ContactProfileSheet({
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md">
         <SheetHeader className="text-center mb-6">
+           {userProfile.officialBadge?.isOfficial && (
+                <div className="flex justify-center mb-2">
+                    <span className="font-bold text-sm text-primary">V-Official</span>
+                </div>
+            )}
           <div className="flex justify-center mb-4 relative">
             <Avatar className="h-24 w-24 border-2 border-primary">
               <AvatarImage src={userProfile.photoURL} alt={userProfile.displayName} />
@@ -56,9 +61,6 @@ export function ContactProfileSheet({
             userProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
             )}>
             {userProfile.displayName}
-            {userProfile.officialBadge?.isOfficial && (
-                <OfficialBadge color={userProfile.officialBadge.badgeColor} className="h-6 w-6"/>
-            )}
             {userProfile.verifiedBadge?.showBadge && (
                 <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-6 w-6"/>
             )}
