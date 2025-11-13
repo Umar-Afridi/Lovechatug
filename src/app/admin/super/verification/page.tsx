@@ -103,7 +103,7 @@ export default function ManageVerificationPage() {
     );
   }, [searchQuery, allUsers]);
 
-  const handleUpdateVerification = async (targetUser: UserProfile, status: 'approved' | 'rejected' | 'none', color?: UserProfile['verifiedBadge']['badgeColor']) => {
+  const handleUpdateVerification = async (targetUser: UserProfile, status: 'approved' | 'rejected' | 'none' | 'pending', color?: UserProfile['verifiedBadge']['badgeColor']) => {
     if (!firestore) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
     
@@ -257,7 +257,7 @@ export default function ManageVerificationPage() {
       </ScrollArea>
       <div className="p-4 border-t">
           <Button variant="outline" asChild>
-            <Link href="/admin/super">Back to User Management</Link>
+            <Link href="/admin/super">Back to Admin Hub</Link>
           </Button>
         </div>
     </>

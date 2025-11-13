@@ -165,7 +165,7 @@ export default function ManageColorfulNamePage() {
       </ScrollArea>
        <div className="p-4 border-t">
           <Button variant="outline" asChild>
-            <Link href="/admin/super">Back to User Management</Link>
+            <Link href="/admin/super">Back to Admin Hub</Link>
           </Button>
         </div>
     </>
