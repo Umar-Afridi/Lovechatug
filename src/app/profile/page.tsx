@@ -13,7 +13,7 @@ import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette, Clock }
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
-import { doc, deleteDoc, serverTimestamp, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, deleteDoc, serverTimestamp, updateDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -26,7 +26,7 @@ import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { differenceInHours } from 'date-fns';
 import { VerificationDialog } from '@/components/profile/verification-dialog';
-import { sendVerificationEmail } from '@/ai/flows/send-verification-email';
+import { sendVerificationEmail, type VerificationInput } from '@/ai/flows/send-verification-email';
 
 
 export default function ProfilePage() {
@@ -89,16 +89,17 @@ export default function ProfilePage() {
     if (userProfile.verifiedBadge?.showBadge) return false;
     // If status is pending, cannot apply.
     if (userProfile.verificationApplicationStatus === 'pending') return false;
+    
     // If there's no last request, can apply.
     if (!userProfile.lastVerificationRequestAt) return true;
     
     // Check if 24 hours have passed since last request.
-    const lastRequestDate = userProfile.lastVerificationRequestAt.toDate();
+    const lastRequestDate = new Date(userProfile.lastVerificationRequestAt.seconds * 1000);
     return differenceInHours(new Date(), lastRequestDate) >= 24;
 
   }, [userProfile]);
 
- const handleVerificationSubmit = async (file: File) => {
+ const handleVerificationSubmit = async (data: VerificationInput) => {
     if (!userProfile || !firestore) {
       toast({
         title: 'Error',
@@ -112,18 +113,8 @@ export default function ProfilePage() {
     toast({ title: 'Submitting...', description: 'Please wait while we process your application.' });
 
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onloadend = async () => {
-        const base64Document = reader.result as string;
-
         // Call the server action
-        const result = await sendVerificationEmail({
-          fullName: userProfile.displayName,
-          username: userProfile.username,
-          email: userProfile.email,
-          document: base64Document,
-        });
+        const result = await sendVerificationEmail(data);
 
         if (result.success) {
           // Update the user's status in Firestore
@@ -139,7 +130,6 @@ export default function ProfilePage() {
         } else {
           throw new Error(result.message);
         }
-      };
     } catch (error: any) {
       console.error('Failed to submit verification request:', error);
       toast({
@@ -189,7 +179,7 @@ export default function ProfilePage() {
                 Verification
             </h3>
             <p className="text-sm text-muted-foreground">
-                {userProfile.verificationApplicationStatus === 'rejected' && userProfile.lastVerificationRequestAt && differenceInHours(new Date(), userProfile.lastVerificationRequestAt?.toDate()) < 24
+                {userProfile.verificationApplicationStatus === 'rejected' && userProfile.lastVerificationRequestAt && differenceInHours(new Date(), new Date(userProfile.lastVerificationRequestAt.seconds * 1000)) < 24
                     ? "Your last application was not approved. You can apply again after 24 hours have passed."
                     : "Apply to get a verified badge on your profile. This helps people know that you're a person of interest."}
             </p>
@@ -349,9 +339,7 @@ export default function ProfilePage() {
     
     const userDocRef = doc(firestore, 'users', user.uid);
     const deletedUserDocRef = doc(firestore, 'deletedUsers', user.email);
-    const storage = getStorage();
-    const photoRef = storageRef(storage, `profile-pictures/${user.uid}`);
-
+    
     try {
       // 1. Tombstone the user's email to prevent re-registration
       await setDoc(deletedUserDocRef, {
@@ -359,21 +347,11 @@ export default function ProfilePage() {
         deletedAt: serverTimestamp(),
       });
       
-      // 2. Delete profile picture from Storage, if it exists
-      if (photoURL) {
-        try {
-          await deleteObject(photoRef);
-        } catch (storageError: any) {
-          if (storageError.code !== 'storage/object-not-found') {
-            console.warn('Could not delete profile picture, but proceeding with account deletion.', storageError);
-          }
-        }
-      }
-
-      // 3. Delete user document from Firestore
+      // 2. Delete user document from Firestore
       await deleteDoc(userDocRef);
 
-      // 4. Delete user from Firebase Authentication
+      // 3. Delete user from Firebase Authentication
+      // This might fail if the user needs to re-authenticate for security reasons.
       await deleteUser(auth.currentUser!);
 
       toast({

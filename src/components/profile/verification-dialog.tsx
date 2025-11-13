@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -16,11 +16,12 @@ import { Input } from '@/components/ui/input';
 import { FileUp } from 'lucide-react';
 import type { UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import type { VerificationInput } from '@/ai/flows/send-verification-email';
 
 interface VerificationDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (file: File) => Promise<void>;
+  onSubmit: (data: VerificationInput) => Promise<void>;
   userProfile: UserProfile;
 }
 
@@ -33,8 +34,16 @@ export function VerificationDialog({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeEmail, setActiveEmail] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (userProfile?.email) {
+      setActiveEmail(userProfile.email);
+    }
+  }, [userProfile]);
+
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -61,10 +70,31 @@ export function VerificationDialog({
       toast({ title: 'No File Selected', description: 'Please select a document to upload.', variant: 'destructive' });
       return;
     }
+    if (!activeEmail) {
+      toast({ title: 'Email Required', description: 'Please enter your active email address.', variant: 'destructive' });
+      return;
+    }
+
     setIsSubmitting(true);
-    await onSubmit(selectedFile);
-    setIsSubmitting(false);
-    onOpenChange(false); // Close dialog on submit
+
+    const reader = new FileReader();
+    reader.readAsDataURL(selectedFile);
+    reader.onloadend = async () => {
+        const base64Document = reader.result as string;
+        const submissionData: VerificationInput = {
+            fullName: userProfile.displayName,
+            username: userProfile.username,
+            email: activeEmail,
+            document: base64Document,
+        };
+        await onSubmit(submissionData);
+        setIsSubmitting(false);
+        onOpenChange(false); // Close dialog on submit
+    };
+     reader.onerror = () => {
+        setIsSubmitting(false);
+        toast({ title: 'File Read Error', description: 'Could not read the selected file.', variant: 'destructive' });
+    };
   };
 
   // Reset state when dialog is closed
@@ -83,11 +113,10 @@ export function VerificationDialog({
         <DialogHeader>
           <DialogTitle>Verification Application</DialogTitle>
           <DialogDescription>
-            Please provide a government-issued ID to verify your identity. Your
-            information will be handled securely.
+            Provide your details and a government-issued ID to verify your identity.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-6 py-4">
+        <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="fullName">Full Name</Label>
             <Input id="fullName" value={userProfile.displayName} readOnly disabled />
@@ -95,6 +124,17 @@ export function VerificationDialog({
           <div className="space-y-2">
             <Label htmlFor="username">Username</Label>
             <Input id="username" value={`@${userProfile.username}`} readOnly disabled />
+          </div>
+           <div className="space-y-2">
+            <Label htmlFor="activeEmail">Your Active Email</Label>
+            <Input 
+              id="activeEmail" 
+              type="email"
+              placeholder="Your best contact email"
+              value={activeEmail} 
+              onChange={(e) => setActiveEmail(e.target.value)} 
+              required
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="document">Government-issued ID</Label>
@@ -112,6 +152,7 @@ export function VerificationDialog({
               accept="image/png, image/jpeg, application/pdf"
               onChange={handleFileChange}
             />
+             <p className="text-xs text-muted-foreground pt-1">Max file size: 5MB. Accepts PNG, JPG, PDF.</p>
           </div>
         </div>
         <DialogFooter>

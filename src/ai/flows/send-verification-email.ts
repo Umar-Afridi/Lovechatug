@@ -9,18 +9,20 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-// Input schema for the verification flow. NOT exported.
+// Input schema for the verification flow.
 const VerificationInputSchema = z.object({
   fullName: z.string().describe('The full name of the user.'),
   username: z.string().describe('The username of the user.'),
-  email: z.string().email().describe('The email address of the user.'),
+  email: z.string().email().describe("The user's active email address for contact."),
   document: z
     .string()
     .describe(
       "A government-issued ID, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
     ),
 });
-type VerificationInput = z.infer<typeof VerificationInputSchema>;
+
+// Exporting the type for client-side usage
+export type VerificationInput = z.infer<typeof VerificationInputSchema>;
 
 /**
  * A server action that takes verification details and logs them.
@@ -44,7 +46,7 @@ export async function sendVerificationEmail(input: VerificationInput): Promise<{
       =================================
       Full Name: ${validatedInput.fullName}
       Username: @${validatedInput.username}
-      Email: ${validatedInput.email}
+      Active Email: ${validatedInput.email}
       
       Document: (Base64 data below)
       ${validatedInput.document.substring(0, 100)}... 
