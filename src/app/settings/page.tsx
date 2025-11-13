@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { cn } from '@/lib/utils';
 
 
 function BlockedUsersList() {
@@ -139,6 +140,8 @@ export default function SettingsPage() {
             description: "App Lock functionality will be available in a future update."
         });
     };
+    
+    const baseButtonClassName = "w-full text-base py-8 justify-center rounded-lg border-b-4 active:translate-y-1 active:border-b-0 transition-all duration-150 ease-in-out";
 
     return (
         <div className="flex min-h-screen flex-col bg-background">
@@ -155,10 +158,10 @@ export default function SettingsPage() {
             <main className="flex-1 p-4 md:p-6">
                 <div className="mx-auto max-w-2xl space-y-4">
                      {currentUserProfile?.officialBadge?.isOfficial && (
-                         <Button variant="outline" className="w-full justify-start text-base py-6" asChild>
+                         <Button variant="outline" className={cn(baseButtonClassName, "border-primary/50 dark:border-primary/40 hover:bg-primary/5 dark:hover:bg-primary/10")} asChild>
                             <Link href="/admin/super">
-                                <UserCog className="mr-4 h-5 w-5" />
-                                Super Admin
+                                <UserCog className="mr-4 h-6 w-6 text-primary" />
+                                <span className="text-primary dark:text-primary-foreground">Super Admin Panel</span>
                             </Link>
                         </Button>
                      )}
