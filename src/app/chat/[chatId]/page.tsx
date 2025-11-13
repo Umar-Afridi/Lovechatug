@@ -827,15 +827,19 @@ export default function ChatIdPage({
                   className="flex items-center gap-4 cursor-pointer"
                   onClick={() => setContactSheetOpen(true)}
               >
-                  <Avatar>
-                      <AvatarImage src={otherUser.photoURL} />
-                      <AvatarFallback>{getInitials(otherUser.displayName)}</AvatarFallback>
-                  </Avatar>
+                  <div className="relative">
+                      <Avatar>
+                          <AvatarImage src={otherUser.photoURL} />
+                          <AvatarFallback>{getInitials(otherUser.displayName)}</AvatarFallback>
+                      </Avatar>
+                      {otherUser?.officialBadge?.isOfficial && (
+                          <div className="absolute bottom-0 right-0">
+                            <OfficialBadge color={otherUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
+                          </div>
+                        )}
+                  </div>
                   <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    {otherUser.officialBadge?.isOfficial && (
-                      <OfficialBadge color={otherUser.officialBadge.badgeColor} size="icon" />
-                    )}
                     <p className={cn(
                       "font-semibold",
                       otherUser.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
