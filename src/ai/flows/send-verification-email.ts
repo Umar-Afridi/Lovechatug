@@ -11,7 +11,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
 // Define the schema for the input of the verification flow
-export const VerificationInputSchema = z.object({
+const VerificationInputSchema = z.object({
   displayName: z.string().describe('The full name of the user.'),
   username: z.string().describe('The username of the user.'),
   email: z.string().email().describe('The email address of the user.'),
@@ -24,21 +24,7 @@ export const VerificationInputSchema = z.object({
 export type VerificationInput = z.infer<typeof VerificationInputSchema>;
 
 
-/**
- * Sends a verification application to the admin.
- *
- * This function takes the user's verification details, formats them,
- * and logs them to the console. It simulates sending an email.
- *
- * @param {VerificationInput} input - The user's application details.
- * @returns {Promise<{ success: boolean, message: string }>} A promise that resolves with the operation's result.
- */
-export async function sendVerificationEmail(input: VerificationInput): Promise<{ success: boolean, message: string }> {
-  return verificationFlow(input);
-}
-
-
-// Define the Genkit flow
+// Define the Genkit flow internally
 const verificationFlow = ai.defineFlow(
   {
     name: 'verificationFlow',
@@ -78,3 +64,17 @@ const verificationFlow = ai.defineFlow(
     };
   }
 );
+
+
+/**
+ * Sends a verification application to the admin.
+ *
+ * This function takes the user's verification details, formats them,
+ * and logs them to the console. It simulates sending an email.
+ *
+ * @param {VerificationInput} input - The user's application details.
+ * @returns {Promise<{ success: boolean, message: string }>} A promise that resolves with the operation's result.
+ */
+export async function sendVerificationEmail(input: VerificationInput): Promise<{ success: boolean, message: string }> {
+  return verificationFlow(input);
+}
