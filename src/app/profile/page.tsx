@@ -13,7 +13,7 @@ import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette, Clock }
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
-import { doc, deleteDoc, serverTimestamp, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc, serverTimestamp, updateDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -115,8 +115,6 @@ export default function ProfilePage() {
         verificationApplicationStatus: 'pending',
         lastVerificationRequestAt: serverTimestamp(),
     });
-    
-    toast({ title: 'Application Sent', description: 'Your verification request is under review.' });
 
     // Open mail client
     const subject = encodeURIComponent("Verification Badge Application");
@@ -158,6 +156,12 @@ export default function ProfilePage() {
         );
     }
 
+    const lastRequestDate = userProfile.lastVerificationRequestAt ? new Date(userProfile.lastVerificationRequestAt.seconds * 1000) : null;
+    const canApplyAgain = !lastRequestDate || differenceInHours(new Date(), lastRequestDate) >= 24;
+
+    const isRejectedAndWaiting = userProfile.verificationApplicationStatus === 'rejected' && !canApplyAgain;
+
+
     return (
         <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -165,7 +169,7 @@ export default function ProfilePage() {
                 Verification
             </h3>
             <p className="text-sm text-muted-foreground">
-                {userProfile.verificationApplicationStatus === 'rejected' && userProfile.lastVerificationRequestAt && differenceInHours(new Date(), new Date(userProfile.lastVerificationRequestAt.seconds * 1000)) < 24
+                 {isRejectedAndWaiting
                     ? "Your last application was not approved. You can apply again after 24 hours have passed."
                     : "Apply to get a verified badge on your profile. This helps people know that you're a person of interest."}
             </p>
@@ -271,6 +275,7 @@ export default function ProfilePage() {
         updatedAuthProfile.photoURL = finalPhotoURL;
     }
     
+    const userDocRef = doc(firestore, 'users', user.uid);
     const updatedFirestoreData: any = {
         displayName: displayName,
         username: username.toLowerCase(),
@@ -280,13 +285,27 @@ export default function ProfilePage() {
 
     // 3. Perform updates
     try {
+        const batch = writeBatch(firestore);
+
+        // Update the user's main profile document
+        batch.update(userDocRef, updatedFirestoreData);
+
+        // If the profile picture was updated, also update it in all chats the user is a part of
+        if (pictureUpdated && userProfile?.chatIds) {
+            for (const chatId of userProfile.chatIds) {
+                const chatRef = doc(firestore, 'chats', chatId);
+                const fieldToUpdate = `participantDetails.${user.uid}.photoURL`;
+                batch.update(chatRef, { [fieldToUpdate]: finalPhotoURL });
+            }
+        }
+        
         // Update Firebase Auth profile only if there are changes
         if (Object.keys(updatedAuthProfile).length > 0) {
             await updateProfile(user, updatedAuthProfile);
         }
-
-        const userDocRef = doc(firestore, 'users', user.uid);
-        await updateDoc(userDocRef, updatedFirestoreData);
+        
+        // Commit all batched writes
+        await batch.commit();
 
         toast({
             title: "Profile Updated",
@@ -302,7 +321,7 @@ export default function ProfilePage() {
         console.error("Error updating profile: ", error);
         if (error.code === 'permission-denied') {
             const permissionError = new FirestorePermissionError({
-                path: `users/${user.uid}`,
+                path: `users/${user.uid} or related chats`,
                 operation: 'update',
                 requestResourceData: updatedFirestoreData,
             });

@@ -6,6 +6,11 @@ service firebase.storage {
     function isAuthenticated() {
       return request.auth != null;
     }
+    
+    // Function to check if the requesting user is the owner of the resource
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
 
     // Rules for chat media
     match /chats/{chatId}/{fileName} {
@@ -20,6 +25,14 @@ service firebase.storage {
       // Allow authenticated users to read files. In a real app, you'd restrict
       // this to members of the chat.
       allow read: if isAuthenticated();
+    }
+    
+    // Rules for user profile pictures
+    match /profile-pictures/{userId} {
+      // Allow read access to anyone (profile pictures are public)
+      allow read: if true;
+      // Allow write (create, update, delete) only by the owner of the profile
+      allow write: if isOwner(userId);
     }
   }
 }
