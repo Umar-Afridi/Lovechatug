@@ -8,18 +8,21 @@ export function AuthHeader({ activeTab }: { activeTab: 'login' | 'signup' }) {
   return (
     <div className="flex flex-col items-center text-center mb-8">
       <div className="relative mb-4 h-24 w-24">
-        <svg
+         <svg
           className="w-full h-full text-red-500"
           viewBox="0 0 100 100"
           xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="4"
         >
-          <path d="M50 90 C 10 50, 40 20, 50 40 C 60 20, 90 50, 50 90 Z" fill="#dc2626" stroke="#dc2626" strokeLinejoin="round" />
+          <path 
+            d="M50 95 C 10 60, 40 30, 50 50 C 60 30, 90 60, 50 95 Z" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="5" 
+            strokeLinejoin="round" 
+          />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-white font-bold text-4xl" style={{ fontFamily: "'Comic Sans MS', cursive, sans-serif" }}>
+            <span className="text-red-500 font-bold text-3xl" style={{ fontFamily: "'Comic Sans MS', cursive, sans-serif" }}>
                 UG
             </span>
         </div>
