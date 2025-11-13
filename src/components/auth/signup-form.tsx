@@ -91,6 +91,8 @@ export function SignupForm() {
             badgeColor: 'blue'
           },
           colorfulName: false,
+          verificationApplicationStatus: 'none',
+          lastVerificationRequestAt: null,
         };
         await setDoc(userDocRef, userData);
         

@@ -19,6 +19,8 @@ export type UserProfile = {
     badgeColor: 'blue' | 'gold' | 'green' | 'red' | 'pink';
   }
   colorfulName?: boolean;
+  verificationApplicationStatus?: 'none' | 'pending' | 'approved' | 'rejected';
+  lastVerificationRequestAt?: any; // Firestore ServerTimestamp
 }
 
 export type Message = {

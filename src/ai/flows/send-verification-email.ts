@@ -3,8 +3,7 @@
  * @fileOverview Flow for sending a verification application email.
  *
  * This file defines a Genkit flow that takes user details and a document
- * image, and logs them to the console. In a production environment,
-d * this could be replaced with a proper email-sending service.
+ * image, logs them to the console, and updates the user's application status.
  */
 
 import { ai } from '@/ai/genkit';

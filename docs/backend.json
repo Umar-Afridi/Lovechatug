@@ -87,9 +87,19 @@
         "colorfulName": {
             "type": "boolean",
             "description": "Whether to display the user's name with a colorful gradient animation."
+        },
+        "verificationApplicationStatus": {
+          "type": "string",
+          "enum": ["none", "pending", "approved", "rejected"],
+          "description": "The status of the user's verification application."
+        },
+        "lastVerificationRequestAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp of the user's last verification request."
         }
       },
-      "required": ["uid", "displayName", "email", "username", "verifiedBadge", "colorfulName"]
+      "required": ["uid", "displayName", "email", "username", "verifiedBadge", "colorfulName", "verificationApplicationStatus"]
     },
     "FriendRequest": {
       "title": "Friend Request",

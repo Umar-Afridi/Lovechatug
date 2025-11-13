@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, ChangeEvent, useEffect } from 'react';
+import { useState, useRef, ChangeEvent, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useUser } from '@/firebase/auth/use-user';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette, Loader2 } from 'lucide-react';
+import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette, Loader2, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
@@ -26,6 +26,7 @@ import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'f
 import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { sendVerificationEmail } from '@/ai/flows/send-verification-email';
+import { differenceInHours } from 'date-fns';
 
 
 export default function ProfilePage() {
@@ -81,6 +82,75 @@ export default function ProfilePage() {
       router.push('/');
     }
   }, [loading, user, router]);
+
+  const canApplyForVerification = useMemo(() => {
+    if (!userProfile) return false;
+    // If already verified, cannot apply.
+    if (userProfile.verifiedBadge?.showBadge) return false;
+    // If status is pending, cannot apply.
+    if (userProfile.verificationApplicationStatus === 'pending') return false;
+    // If there's no last request, can apply.
+    if (!userProfile.lastVerificationRequestAt) return true;
+    
+    // Check if 24 hours have passed.
+    const lastRequestDate = userProfile.lastVerificationRequestAt.toDate();
+    return differenceInHours(new Date(), lastRequestDate) >= 24;
+
+  }, [userProfile]);
+
+  const getVerificationStatusNode = () => {
+    if (!userProfile) return null;
+
+    if (userProfile.verifiedBadge?.showBadge) {
+        return (
+            <div className="space-y-2 text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                <h3 className="text-lg font-semibold flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
+                    <CheckCheck className="h-5 w-5" />
+                    You are a Verified User
+                </h3>
+                 <p className="text-sm text-green-600 dark:text-green-500">
+                    Your profile is verified by Love Chat.
+                </p>
+            </div>
+        );
+    }
+    
+    if (userProfile.verificationApplicationStatus === 'pending') {
+         return (
+            <div className="space-y-2 text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <h3 className="text-lg font-semibold flex items-center justify-center gap-2 text-yellow-700 dark:text-yellow-400">
+                    <Clock className="h-5 w-5" />
+                    Application Under Review
+                </h3>
+                 <p className="text-sm text-yellow-600 dark:text-yellow-500">
+                    Your application is being reviewed. Please wait up to 24 hours.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+                <CheckCheck className="h-5 w-5 text-primary" />
+                Verification
+            </h3>
+            <p className="text-sm text-muted-foreground">
+                {userProfile.verificationApplicationStatus === 'rejected' && differenceInHours(new Date(), userProfile.lastVerificationRequestAt?.toDate()) < 24
+                    ? "Your last application was not approved. You can apply again after 24 hours have passed."
+                    : "Apply to get a verified badge on your profile. This helps people know that you're a person of interest."}
+            </p>
+            <Button 
+                variant="outline" 
+                className="w-full" 
+                onClick={() => setVerificationDialogOpen(true)}
+                disabled={!canApplyForVerification}
+            >
+               Apply for Verified Badge
+            </Button>
+        </div>
+    );
+  };
 
 
   if (loading || !user) {
@@ -303,7 +373,7 @@ export default function ProfilePage() {
   };
   
   const handleVerificationSubmit = async (values: { document: FileList }) => {
-    if (!userProfile) return;
+    if (!userProfile || !firestore) return;
 
     setIsSubmittingVerification(true);
     const file = values.document[0];
@@ -320,6 +390,17 @@ export default function ProfilePage() {
                 email: userProfile.email,
                 documentDataUri: documentDataUri,
             });
+            
+            // After successful submission, update user's status
+            const userDocRef = doc(firestore, 'users', userProfile.uid);
+            await updateDoc(userDocRef, {
+                verificationApplicationStatus: 'pending',
+                lastVerificationRequestAt: serverTimestamp()
+            });
+            
+            // Manually update local state to reflect the change immediately
+            setUserProfile(prev => prev ? { ...prev, verificationApplicationStatus: 'pending', lastVerificationRequestAt: new Date() } : null);
+
             toast({
                 title: 'Application Submitted',
                 description: 'Your verification request has been sent. Please wait up to 24 hours for a review.',
@@ -461,30 +542,7 @@ export default function ProfilePage() {
 
                     <Separator />
                     
-                    {userProfile?.verifiedBadge?.showBadge ? (
-                        <div className="space-y-2 text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                            <h3 className="text-lg font-semibold flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
-                                <CheckCheck className="h-5 w-5" />
-                                You are a Verified User
-                            </h3>
-                             <p className="text-sm text-green-600 dark:text-green-500">
-                                Your profile is verified by Love Chat.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            <h3 className="text-lg font-semibold flex items-center gap-2">
-                                <CheckCheck className="h-5 w-5 text-primary" />
-                                Verification
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                                Apply to get a verified badge on your profile. This helps people know that you're a person of interest.
-                            </p>
-                            <Button variant="outline" className="w-full" onClick={() => setVerificationDialogOpen(true)}>
-                               Apply for Verified Badge
-                            </Button>
-                        </div>
-                    )}
+                    {getVerificationStatusNode()}
                     
                     <Separator />
 
