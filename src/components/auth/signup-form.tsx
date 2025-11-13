@@ -132,15 +132,15 @@ export function SignupForm() {
         <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
             <Label htmlFor="fullName">Full Name</Label>
-            <Input id="fullName" name="fullName" placeholder="John Doe" required />
+            <Input id="fullName" name="fullName" placeholder="Love Chat" required />
             </div>
             <div className="space-y-2">
             <Label htmlFor="username">Username (lowercase only)</Label>
-            <Input id="username" name="username" placeholder="johndoe" required />
+            <Input id="username" name="username" placeholder="lovechat" required />
             </div>
             <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" placeholder="m@example.com" required />
+            <Input id="email" name="email" type="email" placeholder="love@example.com" required />
             </div>
             <div className="space-y-2">
             <Label htmlFor="password">Password</Label>

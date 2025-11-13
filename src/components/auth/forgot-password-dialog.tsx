@@ -77,7 +77,7 @@ export function ForgotPasswordDialog() {
             <Input
               id="reset-email"
               type="email"
-              placeholder="you@example.com"
+              placeholder="love@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
