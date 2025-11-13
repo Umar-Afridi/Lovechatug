@@ -17,11 +17,11 @@ export function AuthHeader({ activeTab }: { activeTab: 'login' | 'signup' }) {
             d="M50 95 C 10 60, 40 30, 50 50 C 60 30, 90 60, 50 95 Z" 
             fill="none" 
             stroke="currentColor" 
-            strokeWidth="5" 
+            strokeWidth="8" 
             strokeLinejoin="round" 
           />
         </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center pb-2">
             <span className="text-red-500 font-bold text-3xl" style={{ fontFamily: "'Comic Sans MS', cursive, sans-serif" }}>
                 UG
             </span>
