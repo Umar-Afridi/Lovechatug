@@ -42,6 +42,7 @@ import {
   AlertDialogDescription,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogFooter,
 } from '@/components/ui/alert-dialog';
 import { useEffect, useState, useRef } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -90,7 +91,7 @@ function useUserProfile(onAccountDisabled: () => void) {
             email: user.email || '',
             photoURL: user.photoURL || '',
             username: user.email?.split('@')[0] || `user-${Date.now()}`
-          });
+          } as UserProfile);
         }
         setLoading(false);
       }, 
