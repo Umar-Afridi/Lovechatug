@@ -13,7 +13,7 @@ import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette, Clock }
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
-import { doc, setDoc, deleteDoc, serverTimestamp, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, deleteDoc, serverTimestamp, updateDoc, onSnapshot } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -25,6 +25,8 @@ import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'f
 import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { differenceInHours } from 'date-fns';
+import { VerificationDialog } from '@/components/profile/verification-dialog';
+import { sendVerificationEmail } from '@/ai/flows/send-verification-email';
 
 
 export default function ProfilePage() {
@@ -37,6 +39,7 @@ export default function ProfilePage() {
   
   const [isPictureDialogOpen, setPictureDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isVerificationDialogOpen, setVerificationDialogOpen] = useState(false);
   
   // States for current data from Firestore
   const [displayName, setDisplayName] = useState('');
@@ -95,30 +98,55 @@ export default function ProfilePage() {
 
   }, [userProfile]);
 
+ const handleVerificationSubmit = async (file: File) => {
+    if (!userProfile || !firestore) {
+      toast({
+        title: 'Error',
+        description: 'Could not submit application. User profile not loaded.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-  const handleApplyForVerification = async () => {
-    if (!userProfile || !firestore) return;
+    setVerificationDialogOpen(false);
+    toast({ title: 'Submitting...', description: 'Please wait while we process your application.' });
 
-    const userDocRef = doc(firestore, 'users', userProfile.uid);
     try {
-        await updateDoc(userDocRef, {
-            // No status update needed here as we are just opening the mail client
-            lastVerificationRequestAt: serverTimestamp()
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onloadend = async () => {
+        const base64Document = reader.result as string;
+
+        // Call the server action
+        const result = await sendVerificationEmail({
+          fullName: userProfile.displayName,
+          username: userProfile.username,
+          email: userProfile.email,
+          document: base64Document,
         });
 
-        const subject = encodeURIComponent(`Verification Request from @${userProfile.username}`);
-        const body = encodeURIComponent(
-            `Hello Love Chat Team,\n\nPlease find my verification request details below:\n\nFull Name: ${userProfile.displayName}\nUsername: @${userProfile.username}\n\nPlease find my government-issued ID attached to this email.\n\nThank you!`
-        );
-        window.location.href = `mailto:Lovechat0300@gmail.com?subject=${subject}&body=${body}`;
-
-    } catch (error) {
-         console.error('Failed to update verification timestamp:', error);
-         toast({
-            title: 'Application Failed',
-            description: 'Could not start your application process. Please try again.',
-            variant: 'destructive',
-        });
+        if (result.success) {
+          // Update the user's status in Firestore
+          const userDocRef = doc(firestore, 'users', userProfile.uid);
+          await updateDoc(userDocRef, {
+            verificationApplicationStatus: 'pending',
+            lastVerificationRequestAt: serverTimestamp(),
+          });
+          toast({
+            title: 'Application Submitted',
+            description: 'Your verification request has been sent for review.',
+          });
+        } else {
+          throw new Error(result.message);
+        }
+      };
+    } catch (error: any) {
+      console.error('Failed to submit verification request:', error);
+      toast({
+        title: 'Submission Failed',
+        description: error.message || 'Could not submit your application. Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -168,7 +196,7 @@ export default function ProfilePage() {
             <Button 
                 variant="outline" 
                 className="w-full" 
-                onClick={handleApplyForVerification}
+                onClick={() => setVerificationDialogOpen(true)}
                 disabled={!canApplyForVerification}
             >
                Apply for Verified Badge
@@ -421,6 +449,14 @@ export default function ProfilePage() {
             onOpenChange={setDeleteDialogOpen}
             onConfirm={handleDeleteAccount}
         />
+        {userProfile && (
+            <VerificationDialog
+                isOpen={isVerificationDialogOpen}
+                onOpenChange={setVerificationDialogOpen}
+                onSubmit={handleVerificationSubmit}
+                userProfile={userProfile}
+            />
+        )}
         <div className="flex min-h-screen flex-col bg-background">
             <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
                 <Button variant="ghost" size="icon" onClick={() => router.back()}>
