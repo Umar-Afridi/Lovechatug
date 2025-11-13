@@ -396,11 +396,9 @@ export default function ChatPage() {
 
       if (firestore && user && profile) {
         const usersRef = collection(firestore, 'users');
-        // Add a condition to not fetch disabled users in public search
         const q = query(
           usersRef, 
-          where('username', '==', searchQuery.toLowerCase()),
-          where('isDisabled', '!=', true)
+          where('username', '==', searchQuery.toLowerCase())
         );
         
         try {
@@ -412,6 +410,7 @@ export default function ChatPage() {
                 .map(doc => doc.data() as UserProfile)
                 .filter(u => 
                     u.uid !== user.uid && // Not me
+                    !u.isDisabled && // Not disabled
                     !myBlockedList.includes(u.uid) && // I haven't blocked them
                     !whoBlockedMe.includes(u.uid) // They haven't blocked me
                 );
