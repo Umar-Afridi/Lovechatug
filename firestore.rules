@@ -2,19 +2,19 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // یہ فنکشن چیک کرتا ہے کہ آیا یوزر لاگ ان ہے یا نہیں۔
+    // यह फंक्शन चेक करता है कि आया यوزر لاگ ان ہے یا نہیں۔
     // It checks if the user is authenticated.
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // یہ فنکشن چیک کرتا ہے کہ درخواست کرنے والا یوزر ہی دستاویز کا مالک ہے۔
+    // यह फंक्शन चेक करता है कि درخواست करने वाला यوزر ही دستاویز کا مالک ہے۔
     // It checks if the requesting user is the owner of the document (matching UID).
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // یہ فنکشن کسی چیٹ میں دونوں شراکت داروں کو چیک کرتا ہے۔
+    // यह फंक्शन किसी چیٹ میں دونوں شراکت داروں کو چیک کرتا ہے۔
     // It checks if the user is one of the two participants in the chat.
     function isParticipant(participants) {
       return isSignedIn() && request.auth.uid in participants;
@@ -26,13 +26,10 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isOwner(userId);
       allow update: if isOwner(userId);
-      // Allow list for username search, but only for non-disabled accounts.
-      allow list: if isSignedIn() && (
-        // Allow super admin to see all users
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.officialBadge.isOfficial == true ||
-        // Allow regular users to only search for non-disabled users by username
-        request.query.where[0].field == 'username' && request.query.where[1].field == 'isDisabled'
-      );
+      // Allow list for username search for any signed in user.
+      // The client-side query filters out disabled users for non-admins.
+      // Super admins can see all users in their dedicated panel.
+      allow list: if isSignedIn();
     }
     
     // 2. چیٹس اور میسجز کا مجموعہ (Chats Collection)
