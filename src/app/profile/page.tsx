@@ -13,7 +13,7 @@ import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette, Clock }
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
-import { doc, getDoc, deleteDoc, serverTimestamp, updateDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc, serverTimestamp, updateDoc, onSnapshot, collection, query, where, getDocs, writeBatch, setDoc } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -89,27 +89,17 @@ export default function ProfilePage() {
 
   const canApplyForVerification = useMemo(() => {
     if (!userProfile) return false;
-    // If already verified, cannot apply.
     if (userProfile.verifiedBadge?.showBadge) return false;
-    // If status is pending, cannot apply.
     if (userProfile.verificationApplicationStatus === 'pending') return false;
-    
-    // If there's no last request, can apply.
     if (!userProfile.lastVerificationRequestAt) return true;
-    
-    // Check if 24 hours have passed since last request.
     const lastRequestDate = new Date(userProfile.lastVerificationRequestAt.seconds * 1000);
     return differenceInHours(new Date(), lastRequestDate) >= 24;
-
   }, [userProfile]);
 
   const handleApplyForVerification = async () => {
-    if (!userProfile || !firestore) {
-        toast({ title: 'Error', description: 'User profile not loaded.', variant: 'destructive' });
-        return;
-    }
+    if (!userProfile || !firestore) return;
     
-    // Update status in Firestore to 'pending'
+    // Update status in Firestore
     const userDocRef = doc(firestore, 'users', userProfile.uid);
     await updateDoc(userDocRef, {
         verificationApplicationStatus: 'pending',
@@ -119,7 +109,7 @@ export default function ProfilePage() {
     // Open mail client
     const subject = encodeURIComponent("Verification Badge Application");
     const body = encodeURIComponent(
-        `Hello Love Chat Team,\n\nPlease review my application for a verified badge.\n\nMy Details:\nFull Name: ${displayName}\nUsername: @${username}\n\nI have attached my government-issued ID for verification.\n\nThank you!`
+        `Hello Love Chat Team,\n\nPlease review my application for a verified badge.\n\nMy Details:\nFull Name: ${displayName}\nUsername: @${username}\n\nI will attach my government-issued ID for verification.\n\nThank you!`
     );
     window.location.href = `mailto:Lovechat0300@gmail.com?subject=${subject}&body=${body}`;
   };
@@ -213,10 +203,9 @@ export default function ProfilePage() {
       const reader = new FileReader();
       reader.onload = (event) => {
         const newPhotoDataUrl = event.target?.result as string;
-        // Set the preview, don't save yet
         setNewPhotoPreview(newPhotoDataUrl);
-        setIsRemovingPhoto(false); // If we're changing, we're not removing
-        setPictureDialogOpen(false); // Close dialog after selecting
+        setIsRemovingPhoto(false);
+        setPictureDialogOpen(false);
       };
       reader.readAsDataURL(file);
     }
@@ -224,7 +213,6 @@ export default function ProfilePage() {
   
   const handleRemovePicture = async () => {
     setPictureDialogOpen(false);
-    // Set preview to null and flag for removal on save
     setIsRemovingPhoto(true);
     setNewPhotoPreview(null);
   };
@@ -235,7 +223,6 @@ export default function ProfilePage() {
     let finalPhotoURL: string | null = photoURL;
     let pictureUpdated = false;
 
-    // 1. Handle picture update if there's a new preview or a removal flag
     if (newPhotoPreview) {
       pictureUpdated = true;
       const storage = getStorage();
@@ -245,11 +232,7 @@ export default function ProfilePage() {
         finalPhotoURL = await getDownloadURL(photoRef);
       } catch (error) {
         console.error('Error uploading profile picture:', error);
-        toast({
-          title: 'Upload Failed',
-          description: 'Could not upload your new profile picture.',
-          variant: 'destructive',
-        });
+        toast({ title: 'Upload Failed', description: 'Could not upload your new profile picture.', variant: 'destructive' });
         return;
       }
     } else if (isRemovingPhoto) {
@@ -266,7 +249,6 @@ export default function ProfilePage() {
       }
     }
 
-    // 2. Prepare data for updates
     const updatedAuthProfile: { displayName?: string; photoURL?: string | null } = {};
      if (user.displayName !== displayName) {
         updatedAuthProfile.displayName = displayName;
@@ -283,36 +265,25 @@ export default function ProfilePage() {
         photoURL: finalPhotoURL,
     };
 
-    // 3. Perform updates
     try {
         const batch = writeBatch(firestore);
-
-        // Update the user's main profile document
         batch.update(userDocRef, updatedFirestoreData);
 
-        // If the profile picture was updated, also update it in all chats the user is a part of
         if (pictureUpdated && userProfile?.chatIds) {
-            for (const chatId of userProfile.chatIds) {
-                const chatRef = doc(firestore, 'chats', chatId);
+            const chatRefs = userProfile.chatIds.map(chatId => doc(firestore, 'chats', chatId));
+            for (const chatRef of chatRefs) {
                 const fieldToUpdate = `participantDetails.${user.uid}.photoURL`;
                 batch.update(chatRef, { [fieldToUpdate]: finalPhotoURL });
             }
         }
         
-        // Update Firebase Auth profile only if there are changes
         if (Object.keys(updatedAuthProfile).length > 0) {
             await updateProfile(user, updatedAuthProfile);
         }
         
-        // Commit all batched writes
         await batch.commit();
 
-        toast({
-            title: "Profile Updated",
-            description: "Your profile has been saved successfully.",
-        });
-
-        // Reset temporary states and update local state after successful save
+        toast({ title: "Profile Updated", description: "Your profile has been saved successfully." });
         setNewPhotoPreview(null);
         setIsRemovingPhoto(false);
         setPhotoURL(finalPhotoURL);
@@ -327,11 +298,7 @@ export default function ProfilePage() {
             });
             errorEmitter.emit('permission-error', permissionError);
         } else {
-            toast({
-                variant: "destructive",
-                title: "Update Failed",
-                description: error.message || "Could not update your profile.",
-            });
+            toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update your profile." });
         }
     }
 };
@@ -346,46 +313,28 @@ export default function ProfilePage() {
     const deletedUserDocRef = doc(firestore, 'deletedUsers', user.email);
     
     try {
-      // 1. Tombstone the user's email to prevent re-registration
       await setDoc(deletedUserDocRef, {
         email: user.email,
         deletedAt: serverTimestamp(),
       });
       
-      // 2. Delete user document from Firestore
       await deleteDoc(userDocRef);
 
-      // 3. Delete user from Firebase Authentication
-      // This might fail if the user needs to re-authenticate for security reasons.
       await deleteUser(auth.currentUser!);
 
-      toast({
-        title: "Account Deleted",
-        description: "Your account has been permanently deleted.",
-      });
+      toast({ title: "Account Deleted", description: "Your account has been permanently deleted." });
 
       router.push('/');
     } catch (error: any) {
       console.error("Error deleting account:", error);
       if (error.code === 'auth/requires-recent-login') {
-          toast({
-            variant: "destructive",
-            title: "Action Required",
-            description: "This is a sensitive action. Please log out and log back in before deleting your account.",
-        });
+          toast({ variant: "destructive", title: "Action Required", description: "This is a sensitive action. Please log out and log back in before deleting your account." });
       } else if (error.code === 'permission-denied') {
-          const permissionError = new FirestorePermissionError({
-                path: userDocRef.path, // or deletedUserDocRef.path
-                operation: 'delete', // or 'create'
-            });
+          const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'delete' });
           errorEmitter.emit('permission-error', permissionError);
       }
       else {
-        toast({
-          variant: "destructive",
-          title: "Deletion Failed",
-          description: error.message || "Could not delete your account. Please try again.",
-        });
+        toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Could not delete your account. Please try again." });
       }
     } finally {
         setDeleteDialogOpen(false);
@@ -399,7 +348,6 @@ export default function ProfilePage() {
       const db = getDatabase();
       const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
 
-      // Set offline in both databases before signing out
       await updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() });
       await set(userStatusDatabaseRef, { isOnline: false, lastSeen: rtdbServerTimestamp() });
 
@@ -408,7 +356,22 @@ export default function ProfilePage() {
     }
   };
   
-  const handleApplyForColorfulName = () => {
+    const canApplyForColorfulName = useMemo(() => {
+        if (!userProfile) return false;
+        if (userProfile.colorfulName) return false;
+        if (!userProfile.lastColorfulNameRequestAt) return true;
+        const lastRequestDate = new Date(userProfile.lastColorfulNameRequestAt.seconds * 1000);
+        return differenceInHours(new Date(), lastRequestDate) >= 24;
+    }, [userProfile]);
+
+  const handleApplyForColorfulName = async () => {
+    if (!userProfile || !firestore) return;
+
+    const userDocRef = doc(firestore, 'users', userProfile.uid);
+    await updateDoc(userDocRef, {
+        lastColorfulNameRequestAt: serverTimestamp(),
+    });
+
     const subject = encodeURIComponent("Colorful Name Application");
     const body = encodeURIComponent(
         `Hello Love Chat Team,\n\nI would like to apply for a colorful name.\n\nMy Details:\nFull Name: ${displayName}\nUsername: @${username}\n\nPlease review my account. Thank you!`
@@ -529,6 +492,16 @@ export default function ProfilePage() {
                                 Your name is already colorful.
                             </p>
                         </div>
+                    ) : !canApplyForColorfulName ? (
+                        <div className="space-y-2 text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                            <h3 className="text-lg font-semibold flex items-center justify-center gap-2 text-yellow-700 dark:text-yellow-400">
+                                <Clock className="h-5 w-5" />
+                                Application Sent
+                            </h3>
+                            <p className="text-sm text-yellow-600 dark:text-yellow-500">
+                                Please wait 24 hours before applying again.
+                            </p>
+                        </div>
                     ) : (
                         <div className="space-y-4">
                             <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -538,7 +511,7 @@ export default function ProfilePage() {
                             <p className="text-sm text-muted-foreground">
                                 Apply to get a colorful, animated gradient on your name to stand out.
                             </p>
-                            <Button variant="outline" className="w-full" onClick={handleApplyForColorfulName}>
+                            <Button variant="outline" className="w-full" onClick={handleApplyForColorfulName} disabled={!canApplyForColorfulName}>
                                Apply for Colorful Name
                             </Button>
                         </div>

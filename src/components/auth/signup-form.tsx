@@ -93,6 +93,7 @@ export function SignupForm() {
           colorfulName: false,
           verificationApplicationStatus: 'none',
           lastVerificationRequestAt: null,
+          lastColorfulNameRequestAt: null,
         };
         await setDoc(userDocRef, userData);
         

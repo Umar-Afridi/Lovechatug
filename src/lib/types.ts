@@ -21,6 +21,7 @@ export type UserProfile = {
   colorfulName?: boolean;
   verificationApplicationStatus?: 'none' | 'pending' | 'approved' | 'rejected';
   lastVerificationRequestAt?: any; // Firestore ServerTimestamp
+  lastColorfulNameRequestAt?: any; // Firestore ServerTimestamp
 }
 
 export type Message = {

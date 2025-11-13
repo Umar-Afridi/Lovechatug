@@ -97,6 +97,11 @@
           "type": "string",
           "format": "date-time",
           "description": "The timestamp of the user's last verification request."
+        },
+        "lastColorfulNameRequestAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp of the user's last request for a colorful name."
         }
       },
       "required": ["uid", "displayName", "email", "username", "verifiedBadge", "colorfulName", "verificationApplicationStatus"]
