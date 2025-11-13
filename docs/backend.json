@@ -89,7 +89,7 @@
             "description": "Whether to display the user's name with a colorful gradient animation."
         }
       },
-      "required": ["uid", "displayName", "email", "username"]
+      "required": ["uid", "displayName", "email", "username", "verifiedBadge", "colorfulName"]
     },
     "FriendRequest": {
       "title": "Friend Request",

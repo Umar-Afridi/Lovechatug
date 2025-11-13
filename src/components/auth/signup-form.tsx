@@ -86,6 +86,11 @@ export function SignupForm() {
           lastSeen: serverTimestamp(),
           blockedUsers: [],
           blockedBy: [],
+          verifiedBadge: {
+            showBadge: false,
+            badgeColor: 'blue'
+          },
+          colorfulName: false,
         };
         await setDoc(userDocRef, userData);
         
