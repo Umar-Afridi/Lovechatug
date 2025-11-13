@@ -128,11 +128,12 @@ export default function SuperAdminPage() {
   const handleDisableUser = async (targetUser: UserProfile) => {
     if (!firestore || !targetUser) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
+    const newDisabledState = !targetUser.isDisabled;
     try {
-      await updateDoc(userRef, { isDisabled: !targetUser.isDisabled });
+      await updateDoc(userRef, { isDisabled: newDisabledState });
       toast({
-        title: `User ${targetUser.isDisabled ? 'Enabled' : 'Disabled'}`,
-        description: `${targetUser.displayName}'s account has been ${targetUser.isDisabled ? 're-enabled' : 'disabled'}.`,
+        title: `User ${newDisabledState ? 'Disabled' : 'Enabled'}`,
+        description: `${targetUser.displayName}'s account has been ${newDisabledState ? 'disabled' : 're-enabled'}.`,
       });
     } catch (error) {
       toast({ title: 'Error', description: 'Could not update user status.', variant: 'destructive'});
@@ -195,7 +196,7 @@ export default function SuperAdminPage() {
             <AlertDialogDescription>
                 {dialogState.action === 'delete'
                 ? `This will permanently delete ${dialogState.targetUser?.displayName}'s account data from Firestore. This action cannot be undone.`
-                : `This will ${dialogState.targetUser?.isDisabled ? 're-enable' : 'disable'} ${dialogState.targetUser?.displayName}'s account, preventing them from logging in.`}
+                : `This will ${dialogState.targetUser?.isDisabled ? 're-enable' : 'disable'} ${dialogState.targetUser?.displayName}'s account, ${dialogState.targetUser?.isDisabled ? 'allowing them to log in again.' : 'preventing them from logging in.'}`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
