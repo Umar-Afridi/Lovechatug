@@ -13,7 +13,7 @@ import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette, Clock }
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
-import { doc, deleteDoc, serverTimestamp, updateDoc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, deleteDoc, serverTimestamp, updateDoc, onSnapshot } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -475,7 +475,7 @@ export default function ProfilePage() {
                             <Label htmlFor="email">Email Address</Label>
                             <Input 
                                 id="email" 
-                                type="email" _
+                                type="email"
                                 value={email} 
                                 readOnly
                                 className="focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 cursor-not-allowed opacity-70"
