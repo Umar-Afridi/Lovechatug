@@ -26,8 +26,13 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isOwner(userId);
       allow update: if isOwner(userId);
-      // Allow any user to query to check for username availability during signup
-      allow list: if true;
+      // Allow list for username search, but only for non-disabled accounts.
+      allow list: if isSignedIn() && (
+        // Allow super admin to see all users
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.officialBadge.isOfficial == true ||
+        // Allow regular users to only search for non-disabled users by username
+        request.query.where[0].field == 'username' && request.query.where[1].field == 'isDisabled'
+      );
     }
     
     // 2. چیٹس اور میسجز کا مجموعہ (Chats Collection)
