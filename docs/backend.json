@@ -118,10 +118,6 @@
           "format": "date-time",
           "description": "The timestamp of the user's last request for a colorful name."
         },
-        "isSuperAdmin": {
-          "type": "boolean",
-          "description": "Whether the user is a super administrator with special privileges."
-        },
         "isDisabled": {
           "type": "boolean",
           "description": "Whether the user's account is disabled by an administrator."

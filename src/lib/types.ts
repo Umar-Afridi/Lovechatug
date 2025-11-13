@@ -26,7 +26,6 @@ export type UserProfile = {
   verificationApplicationStatus?: 'none' | 'pending' | 'approved' | 'rejected';
   lastVerificationRequestAt?: any; // Firestore ServerTimestamp
   lastColorfulNameRequestAt?: any; // Firestore ServerTimestamp
-  isSuperAdmin?: boolean; // New field for admin status
   isDisabled?: boolean; // New field for disabled status
 }
 

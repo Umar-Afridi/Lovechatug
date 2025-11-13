@@ -75,7 +75,7 @@ export default function SuperAdminPage() {
       if (docSnap.exists()) {
         const profile = docSnap.data() as UserProfile;
         setCurrentUserProfile(profile);
-        if (!profile.isSuperAdmin) {
+        if (!profile.officialBadge?.isOfficial) {
           toast({
             title: 'Access Denied',
             description: 'You do not have permission to access this page.',
@@ -93,7 +93,7 @@ export default function SuperAdminPage() {
 
   // 2. Fetch all users
   useEffect(() => {
-    if (!currentUserProfile?.isSuperAdmin || !firestore) return;
+    if (!currentUserProfile?.officialBadge?.isOfficial || !firestore) return;
 
     const usersRef = collection(firestore, 'users');
     const q = query(usersRef);
@@ -111,7 +111,7 @@ export default function SuperAdminPage() {
     });
 
     return () => unsubscribe();
-  }, [currentUserProfile?.isSuperAdmin, firestore, authUser?.uid]);
+  }, [currentUserProfile?.officialBadge?.isOfficial, firestore, authUser?.uid]);
 
   const filteredUsers = useMemo(() => {
     if (!searchQuery) return allUsers;
@@ -178,7 +178,7 @@ export default function SuperAdminPage() {
 
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
 
-  if (loading || !currentUserProfile?.isSuperAdmin) {
+  if (loading || !currentUserProfile?.officialBadge?.isOfficial) {
     return (
       <div className="flex h-screen items-center justify-center">
         <p>Loading Admin Panel...</p>

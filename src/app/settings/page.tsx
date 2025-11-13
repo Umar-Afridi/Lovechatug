@@ -154,7 +154,7 @@ export default function SettingsPage() {
 
             <main className="flex-1 p-4 md:p-6">
                 <div className="mx-auto max-w-2xl space-y-4">
-                     {currentUserProfile?.isSuperAdmin && (
+                     {currentUserProfile?.officialBadge?.isOfficial && (
                          <Button variant="outline" className="w-full justify-start text-base py-6" asChild>
                             <Link href="/admin/super">
                                 <UserCog className="mr-4 h-5 w-5" />
