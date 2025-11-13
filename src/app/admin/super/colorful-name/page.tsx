@@ -27,6 +27,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
 
 export default function ManageColorfulNamePage() {
   const router = useRouter();
