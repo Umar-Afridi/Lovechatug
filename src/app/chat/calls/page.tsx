@@ -39,6 +39,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile, Call, Chat } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { OfficialBadge } from '@/components/ui/official-badge';
 
 
 interface CallWithUser extends Call {
@@ -76,13 +77,18 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
                 <AvatarFallback>{getInitials(call.otherUser?.displayName)}</AvatarFallback>
             </Avatar>
             <div>
-                <p className={cn(
-                    "font-semibold",
-                    call.status === 'missed' || call.status === 'declined' ? 'text-destructive' : '',
-                    call.otherUser.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
-                )}>
-                    {call.otherUser?.displayName}
-                </p>
+                <div className="flex items-center gap-2">
+                    {call.otherUser?.officialBadge?.isOfficial && (
+                        <OfficialBadge color={call.otherUser.officialBadge.badgeColor} />
+                    )}
+                    <p className={cn(
+                        "font-semibold",
+                        call.status === 'missed' || call.status === 'declined' ? 'text-destructive' : '',
+                        call.otherUser.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+                    )}>
+                        {call.otherUser?.displayName}
+                    </p>
+                </div>
                 <p className="text-sm text-muted-foreground flex items-center gap-1">
                     <CallStatusIcon direction={call.direction} status={call.status} />
                     {formatTimestamp(call.timestamp)}
@@ -161,7 +167,6 @@ export default function CallsPage() {
         ].filter(id => !usersCache.current.has(id));
 
         if (otherUserIds.length > 0 && firestore) {
-            const usersRef = collection(firestore, 'users');
              try {
                 // Firestore 'in' query can handle up to 30 items. Chunk if necessary.
                 const chunks = [];

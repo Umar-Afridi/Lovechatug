@@ -18,6 +18,10 @@ export type UserProfile = {
     showBadge: boolean;
     badgeColor: 'blue' | 'gold' | 'green' | 'red' | 'pink';
   }
+  officialBadge?: {
+    isOfficial: boolean;
+    badgeColor: 'blue' | 'gold' | 'green' | 'red' | 'pink';
+  }
   colorfulName?: boolean;
   verificationApplicationStatus?: 'none' | 'pending' | 'approved' | 'rejected';
   lastVerificationRequestAt?: any; // Firestore ServerTimestamp

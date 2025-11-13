@@ -84,6 +84,21 @@
                 }
             }
         },
+        "officialBadge": {
+          "type": "object",
+          "description": "Settings for the user's official badge.",
+          "properties": {
+            "isOfficial": {
+              "type": "boolean",
+              "description": "Whether the user has an official badge."
+            },
+            "badgeColor": {
+              "type": "string",
+              "enum": ["blue", "gold", "green", "red", "pink"],
+              "description": "The color of the official badge."
+            }
+          }
+        },
         "colorfulName": {
             "type": "boolean",
             "description": "Whether to display the user's name with a colorful gradient animation."

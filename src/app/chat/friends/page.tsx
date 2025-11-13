@@ -12,6 +12,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile, FriendRequest as FriendRequestType } from '@/lib/types';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { OfficialBadge } from '@/components/ui/official-badge';
 import { cn } from '@/lib/utils';
 
 interface FriendRequestWithUser extends FriendRequestType {
@@ -209,6 +210,9 @@ export default function FriendsPage() {
                         </Avatar>
                         <div>
                             <div className="flex items-center gap-2">
+                                {request.fromUser?.officialBadge?.isOfficial && (
+                                    <OfficialBadge color={request.fromUser.officialBadge.badgeColor} />
+                                )}
                                 <p className={cn(
                                   "font-semibold",
                                   request.fromUser?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"

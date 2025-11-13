@@ -60,6 +60,7 @@ import Link from 'next/link';
 import { useSound } from '@/hooks/use-sound';
 import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { OfficialBadge } from '@/components/ui/official-badge';
 
 
 export default function ChatIdPage({
@@ -832,6 +833,9 @@ export default function ChatIdPage({
                   </Avatar>
                   <div className="flex-1">
                   <div className="flex items-center gap-2">
+                    {otherUser.officialBadge?.isOfficial && (
+                      <OfficialBadge color={otherUser.officialBadge.badgeColor} />
+                    )}
                     <p className={cn(
                       "font-semibold",
                       otherUser.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"

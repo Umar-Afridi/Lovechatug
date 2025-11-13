@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '../ui/verified-badge';
+import { OfficialBadge } from '../ui/official-badge';
 
 interface ContactProfileSheetProps {
   isOpen: boolean;
@@ -42,6 +43,11 @@ export function ContactProfileSheet({
       <SheetContent className="w-full sm:max-w-md">
         <SheetHeader className="text-center mb-6">
           <div className="flex justify-center mb-4 relative">
+             {userProfile.officialBadge?.isOfficial && (
+                <div className="absolute -top-2 z-10">
+                    <OfficialBadge color={userProfile.officialBadge.badgeColor} className="h-7 w-7"/>
+                </div>
+            )}
             <Avatar className="h-24 w-24 border-2 border-primary">
               <AvatarImage src={userProfile.photoURL} alt={userProfile.displayName} />
               <AvatarFallback className="text-3xl">

@@ -20,6 +20,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { ProfilePictureDialog } from '@/components/profile/profile-picture-dialog';
 import { DeleteAccountDialog } from '@/components/profile/delete-account-dialog';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { OfficialBadge } from '@/components/ui/official-badge';
 import { Separator } from '@/components/ui/separator';
 import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 import type { UserProfile } from '@/lib/types';
@@ -81,12 +82,6 @@ export default function ProfilePage() {
     }
   }, [user, firestore]);
   
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/');
-    }
-  }, [loading, user, router]);
-
   const canApplyForVerification = useMemo(() => {
     if (!userProfile) return false;
     if (userProfile.verifiedBadge?.showBadge) return false;
@@ -104,12 +99,18 @@ export default function ProfilePage() {
     return differenceInHours(new Date(), lastRequestDate) >= 24;
   }, [userProfile]);
 
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/');
+    }
+  }, [loading, user, router]);
+
   if (loading || !user) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
   
   const handleApplyForVerification = async () => {
-    if (!userProfile || !firestore) return;
+    if (!userProfile || !firestore || !canApplyForVerification) return;
     
     const userDocRef = doc(firestore, 'users', userProfile.uid);
     await updateDoc(userDocRef, {
@@ -362,7 +363,7 @@ export default function ProfilePage() {
   };
 
   const handleApplyForColorfulName = async () => {
-    if (!userProfile || !firestore) return;
+    if (!userProfile || !firestore || !canApplyForColorfulName) return;
 
     const userDocRef = doc(firestore, 'users', userProfile.uid);
     await updateDoc(userDocRef, {
@@ -402,7 +403,13 @@ export default function ProfilePage() {
 
             <main className="flex-1 p-4 md:p-8">
                 <div className="mx-auto max-w-xl space-y-8">
-                    <div className="flex justify-center">
+                    <div className="flex flex-col items-center">
+                        {userProfile?.officialBadge?.isOfficial && (
+                            <div className="mb-2 flex items-center gap-2">
+                                <OfficialBadge color={userProfile.officialBadge.badgeColor} className="h-5 w-5" />
+                                <span className="font-bold text-sm text-yellow-500">V-Official</span>
+                            </div>
+                        )}
                         <div className="relative">
                             <Avatar className="h-32 w-32 cursor-pointer" onClick={handleAvatarClick}>
                                 <AvatarImage src={displayPhoto ?? undefined} alt={displayName} />

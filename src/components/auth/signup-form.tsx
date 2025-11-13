@@ -90,6 +90,10 @@ export function SignupForm() {
             showBadge: false,
             badgeColor: 'blue'
           },
+          officialBadge: {
+            isOfficial: false,
+            badgeColor: 'gold'
+          },
           colorfulName: false,
           verificationApplicationStatus: 'none',
           lastVerificationRequestAt: null,

@@ -23,6 +23,7 @@ import { format, formatDistanceToNow, isToday, isYesterday, differenceInMinutes 
 import { Badge } from '@/components/ui/badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { OfficialBadge } from '@/components/ui/official-badge';
 
 
 const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: string }) => {
@@ -115,6 +116,9 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
           </div>
           <div className="flex-1 overflow-hidden">
             <div className="flex items-center gap-2">
+                {participant.officialBadge?.isOfficial && (
+                  <OfficialBadge color={participant.officialBadge.badgeColor} />
+                )}
                 <p className={cn(
                   "font-semibold truncate",
                   participant.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
@@ -486,6 +490,9 @@ export default function ChatPage() {
                     </Avatar>
                     <div>
                         <div className="flex items-center gap-2">
+                           {foundUser.officialBadge?.isOfficial && (
+                              <OfficialBadge color={foundUser.officialBadge.badgeColor} />
+                           )}
                            <p className={cn(
                               "font-semibold",
                               foundUser.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
