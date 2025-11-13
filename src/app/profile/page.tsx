@@ -229,6 +229,11 @@ export default function ProfilePage() {
     let finalPhotoURL: string | null = photoURL;
     let pictureUpdated = false;
 
+    // Start a write batch
+    const batch = writeBatch(firestore);
+    const userDocRef = doc(firestore, 'users', user.uid);
+
+    // 1. Handle Photo Upload/Removal
     if (newPhotoPreview) {
       pictureUpdated = true;
       const storage = getStorage();
@@ -249,63 +254,62 @@ export default function ProfilePage() {
       try {
         await deleteObject(photoRef);
       } catch (error: any) {
+        // It's okay if the object doesn't exist, so we only log other errors.
         if (error.code !== 'storage/object-not-found') {
           console.warn('Could not delete old profile picture from storage:', error);
         }
       }
     }
 
-    const updatedAuthProfile: { displayName?: string; photoURL?: string | null } = {};
-     if (user.displayName !== displayName) {
-        updatedAuthProfile.displayName = displayName;
+    // 2. Update Auth Profile
+    try {
+        const updatedAuthProfile: { displayName?: string; photoURL?: string | null } = {};
+        if (displayName !== user.displayName) updatedAuthProfile.displayName = displayName;
+        if (pictureUpdated) updatedAuthProfile.photoURL = finalPhotoURL;
+
+        if (Object.keys(updatedAuthProfile).length > 0) {
+            await updateProfile(user, updatedAuthProfile);
+        }
+    } catch (error: any) {
+        console.error("Error updating auth profile:", error);
+        toast({ variant: "destructive", title: "Update Failed", description: "Could not update your authentication profile." });
+        return;
     }
-     if (pictureUpdated) {
-        updatedAuthProfile.photoURL = finalPhotoURL;
-    }
-    
-    const userDocRef = doc(firestore, 'users', user.uid);
+
+
+    // 3. Prepare Firestore Updates
     const updatedFirestoreData: any = {
         displayName: displayName,
         username: username.toLowerCase(),
         bio: bio,
         photoURL: finalPhotoURL,
     };
+    batch.update(userDocRef, updatedFirestoreData);
+    
+    // 4. Update photoURL in all relevant chats
+    if (pictureUpdated && userProfile?.chatIds && userProfile.chatIds.length > 0) {
+        for (const chatId of userProfile.chatIds) {
+            const chatRef = doc(firestore, 'chats', chatId);
+            const fieldToUpdate = `participantDetails.${user.uid}.photoURL`;
+            batch.update(chatRef, { [fieldToUpdate]: finalPhotoURL });
+        }
+    }
 
+    // 5. Commit all changes at once
     try {
-        const batch = writeBatch(firestore);
-        batch.update(userDocRef, updatedFirestoreData);
-
-        if (pictureUpdated && userProfile?.chatIds) {
-            const chatRefs = userProfile.chatIds.map(chatId => doc(firestore, 'chats', chatId));
-            for (const chatRef of chatRefs) {
-                const fieldToUpdate = `participantDetails.${user.uid}.photoURL`;
-                batch.update(chatRef, { [fieldToUpdate]: finalPhotoURL });
-            }
-        }
-        
-        if (Object.keys(updatedAuthProfile).length > 0) {
-            await updateProfile(user, updatedAuthProfile);
-        }
-        
         await batch.commit();
-
         toast({ title: "Profile Updated", description: "Your profile has been saved successfully." });
         setNewPhotoPreview(null);
         setIsRemovingPhoto(false);
-        setPhotoURL(finalPhotoURL);
-
+        setPhotoURL(finalPhotoURL); // Update local state to reflect change immediately
     } catch (error: any) {
-        console.error("Error updating profile: ", error);
-        if (error.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-                path: `users/${user.uid} or related chats`,
-                operation: 'update',
-                requestResourceData: updatedFirestoreData,
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        } else {
-            toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update your profile." });
-        }
+        console.error("Error saving changes to Firestore: ", error);
+        const permissionError = new FirestorePermissionError({
+            path: 'Batch write for profile update',
+            operation: 'update',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        toast({ variant: "destructive", title: "Update Failed", description: "Could not save all changes to the database." });
     }
 };
 
@@ -404,7 +408,7 @@ export default function ProfilePage() {
             <main className="flex-1 p-4 md:p-8">
                 <div className="mx-auto max-w-xl space-y-8">
                     <div className="flex flex-col items-center">
-                        <div className="relative mb-2">
+                         <div className="relative mb-4">
                             <Avatar className="h-32 w-32 cursor-pointer" onClick={handleAvatarClick}>
                                 <AvatarImage src={displayPhoto ?? undefined} alt={displayName} />
                                 <AvatarFallback className="text-4xl">
@@ -412,7 +416,7 @@ export default function ProfilePage() {
                                 </AvatarFallback>
                             </Avatar>
                              {userProfile?.verifiedBadge?.showBadge && (
-                                <div className="absolute bottom-1 -right-1">
+                                <div className="absolute bottom-1 right-1">
                                     <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-8 w-8"/>
                                 </div>
                             )}
@@ -428,12 +432,9 @@ export default function ProfilePage() {
                             />
                         </div>
                         {userProfile?.officialBadge?.isOfficial && (
-                            <div className="flex flex-col items-center mt-2">
-                                <div className="flex items-center gap-1 rounded-full bg-secondary px-3 py-1">
-                                    <OfficialBadge color={userProfile.officialBadge.badgeColor} className="h-5 w-5" />
-                                    <span className="font-bold text-sm text-secondary-foreground">V-Official</span>
-                                </div>
-                            </div>
+                           <div className="mt-2">
+                                <OfficialBadge color={userProfile.officialBadge.badgeColor} />
+                           </div>
                         )}
                     </div>
                     
