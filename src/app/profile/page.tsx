@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette } from 'lucide-react';
+import { ArrowLeft, Camera, LogOut, Shield, Trash2, CheckCheck, Palette, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { deleteUser, updateProfile } from 'firebase/auth';
@@ -19,11 +19,13 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ProfilePictureDialog } from '@/components/profile/profile-picture-dialog';
 import { DeleteAccountDialog } from '@/components/profile/delete-account-dialog';
+import { VerificationDialog } from '@/components/profile/verification-dialog';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Separator } from '@/components/ui/separator';
 import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { sendVerificationEmail } from '@/ai/flows/send-verification-email';
 
 
 export default function ProfilePage() {
@@ -36,6 +38,7 @@ export default function ProfilePage() {
   
   const [isPictureDialogOpen, setPictureDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isVerificationDialogOpen, setVerificationDialogOpen] = useState(false);
 
   // States for current data from Firestore
   const [displayName, setDisplayName] = useState('');
@@ -48,6 +51,7 @@ export default function ProfilePage() {
   // State for the new image preview
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
   const [isRemovingPhoto, setIsRemovingPhoto] = useState(false);
+  const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
   
 
   useEffect(() => {
@@ -300,13 +304,45 @@ export default function ProfilePage() {
     }
   };
 
-  const handleApplyForBadge = () => {
-    const subject = encodeURIComponent("Verified Badge Application");
-    const body = encodeURIComponent(
-        `Hello Love Chat Team,\n\nI would like to apply for a verified badge.\n\nMy Details:\nFull Name: ${displayName}\nUsername: @${username}\n\nPlease review my account. Thank you!`
-    );
-    window.location.href = `mailto:Lovechat0300@gmail.com?subject=${subject}&body=${body}`;
+  const handleVerificationSubmit = async (values: { document: FileList }) => {
+    if (!userProfile) return;
+    setIsSubmittingVerification(true);
+
+    try {
+      const file = values.document[0];
+      const reader = new FileReader();
+      
+      reader.onload = async (event) => {
+        const documentAsDataUrl = event.target?.result as string;
+        
+        await sendVerificationEmail({
+          fullName: userProfile.displayName,
+          username: userProfile.username,
+          email: userProfile.email,
+          documentDataUrl: documentAsDataUrl,
+        });
+
+        setVerificationDialogOpen(false);
+        toast({
+            title: "Application Submitted",
+            description: "Your verification application has been sent for review.",
+        });
+      };
+      
+      reader.readAsDataURL(file);
+
+    } catch (error) {
+      console.error("Error submitting verification:", error);
+      toast({
+        variant: "destructive",
+        title: "Submission Failed",
+        description: "Could not submit your application. Please try again.",
+      });
+    } finally {
+      setIsSubmittingVerification(false);
+    }
   };
+
 
   const handleApplyForColorfulName = () => {
     const subject = encodeURIComponent("Colorful Name Application");
@@ -331,6 +367,13 @@ export default function ProfilePage() {
             isOpen={isDeleteDialogOpen}
             onOpenChange={setDeleteDialogOpen}
             onConfirm={handleDeleteAccount}
+        />
+         <VerificationDialog
+            isOpen={isVerificationDialogOpen}
+            onOpenChange={setVerificationDialogOpen}
+            onSubmit={handleVerificationSubmit}
+            userProfile={userProfile}
+            isSubmitting={isSubmittingVerification}
         />
         <div className="flex min-h-screen flex-col bg-background">
             <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
@@ -434,7 +477,7 @@ export default function ProfilePage() {
                             <p className="text-sm text-muted-foreground">
                                 Apply to get a verified badge on your profile. This helps people know that you're a person of interest.
                             </p>
-                            <Button variant="outline" className="w-full" onClick={handleApplyForBadge}>
+                            <Button variant="outline" className="w-full" onClick={() => setVerificationDialogOpen(true)}>
                                Apply for Verified Badge
                             </Button>
                         </div>
