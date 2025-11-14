@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Users, Home } from 'lucide-react';
 import Link from 'next/link';
@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { Room } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 const RoomCard = ({ room }: { room: Room }) => {
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'R';
@@ -50,43 +50,33 @@ export default function RoomsPage() {
             return;
         }
 
-        // Listener for the user's own room
-        const myRoomQuery = query(collection(firestore, 'rooms'), where("ownerId", "==", user.uid));
-        const unsubMyRoom = onSnapshot(myRoomQuery, 
+        const roomsCollectionRef = collection(firestore, 'rooms');
+
+        // Listener for all rooms, which we will then filter on the client
+        const unsubAllRooms = onSnapshot(roomsCollectionRef, 
             (snapshot) => {
-                if (!snapshot.empty) {
-                    const roomData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Room;
-                    setMyRoom(roomData);
-                } else {
-                    setMyRoom(null);
-                }
+                const allRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+                
+                const userRoom = allRooms.find(room => room.ownerId === user.uid) || null;
+                setMyRoom(userRoom);
+
+                const otherPublicRooms = allRooms
+                    .filter(room => room.ownerId !== user.uid && room.members && room.members.length > 0)
+                    .sort((a, b) => (b.members?.length || 0) - (a.members?.length || 0)); // Sort by member count descending
+                setPublicRooms(otherPublicRooms);
+
                 setLoading(false);
             },
             (error) => {
-                console.error("Error fetching user's room: ", error);
-                const permissionError = new FirestorePermissionError({path: `rooms query for user ${user.uid}`, operation: 'list'});
+                console.error("Error fetching rooms: ", error);
+                const permissionError = new FirestorePermissionError({path: 'rooms', operation: 'list'});
                 errorEmitter.emit('permission-error', permissionError);
                 setLoading(false);
             }
         );
         
-        // Listener for all other public rooms
-        const publicRoomsQuery = query(collection(firestore, 'rooms'), where("ownerId", "!=", user.uid));
-        const unsubPublicRooms = onSnapshot(publicRoomsQuery,
-            (snapshot) => {
-                const rooms = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Room);
-                setPublicRooms(rooms);
-            },
-            (error) => {
-                 console.error("Error fetching public rooms: ", error);
-                 const permissionError = new FirestorePermissionError({path: 'rooms', operation: 'list'});
-                 errorEmitter.emit('permission-error', permissionError);
-            }
-        );
-        
         return () => {
-            unsubMyRoom();
-            unsubPublicRooms();
+            unsubAllRooms();
         };
     }, [firestore, user]);
 
@@ -99,43 +89,58 @@ export default function RoomsPage() {
   }
 
   return (
-    <ScrollArea className="h-full">
-        <div className="p-4 md:p-6 space-y-6">
-            <div className="bg-muted/30 rounded-lg p-6 text-center">
-                 <h2 className="text-2xl font-bold mb-2">Voice Rooms</h2>
-                 <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-                    {myRoom 
-                        ? "Jump back into your room or explore what others are talking about."
-                        : "Create a room to talk with friends, host events, or just hang out."
-                    }
-                </p>
-                 {myRoom ? (
-                      <Button size="lg" className="py-6 px-8 text-lg" asChild>
-                        <Link href={`/chat/rooms/${myRoom.id}`}>
-                            <Home className="mr-2 h-5 w-5" />
-                            My Room
-                        </Link>
-                    </Button>
-                 ) : (
-                    <Button size="lg" className="py-6 px-8 text-lg" asChild>
-                        <Link href="/chat/rooms/create">
-                            <PlusCircle className="mr-2 h-5 w-5" />
-                            Create New Room
-                        </Link>
-                    </Button>
-                 )}
-            </div>
-
-            {publicRooms.length > 0 && (
-                <div>
-                    <Separator className="my-6" />
-                    <h3 className="text-xl font-bold mb-4 px-2">All Rooms</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                        {publicRooms.map(room => <RoomCard key={room.id} room={room} />)}
+    <div className="flex flex-col h-full">
+        <Tabs defaultValue="my-room" className="flex flex-col h-full">
+            <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="my-room">My Room</TabsTrigger>
+                <TabsTrigger value="popular">Popular</TabsTrigger>
+            </TabsList>
+            <TabsContent value="my-room" className="flex-1 overflow-hidden">
+                 <ScrollArea className="h-full">
+                    <div className="p-4 md:p-6 text-center">
+                        <div className="bg-muted/30 rounded-lg p-6">
+                            <h2 className="text-2xl font-bold mb-2">
+                                {myRoom ? 'Your Personal Room' : 'Create a Room'}
+                            </h2>
+                            <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
+                                {myRoom 
+                                    ? "This is your personal space. Jump back in anytime!"
+                                    : "Create a room to talk with friends, host events, or just hang out."
+                                }
+                            </p>
+                            {myRoom ? (
+                                <Button size="lg" className="py-6 px-8 text-lg" asChild>
+                                    <Link href={`/chat/rooms/${myRoom.id}`}>
+                                        <Home className="mr-2 h-5 w-5" />
+                                        My Room
+                                    </Link>
+                                </Button>
+                            ) : (
+                                <Button size="lg" className="py-6 px-8 text-lg" asChild>
+                                    <Link href="/chat/rooms/create">
+                                        <PlusCircle className="mr-2 h-5 w-5" />
+                                        Create New Room
+                                    </Link>
+                                </Button>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
-    </ScrollArea>
+                </ScrollArea>
+            </TabsContent>
+            <TabsContent value="popular" className="flex-1 overflow-hidden">
+                 <ScrollArea className="h-full">
+                    {publicRooms.length > 0 ? (
+                         <div className="p-4 md:p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                            {publicRooms.map(room => <RoomCard key={room.id} room={room} />)}
+                        </div>
+                    ) : (
+                        <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+                            <p className="text-muted-foreground">No popular rooms are active right now.</p>
+                        </div>
+                    )}
+                </ScrollArea>
+            </TabsContent>
+        </Tabs>
+    </div>
   );
 }
