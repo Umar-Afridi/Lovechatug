@@ -6,7 +6,7 @@ import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Users, Home } from 'lucide-react';
+import { PlusCircle, Users, Home, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -40,6 +40,7 @@ const RoomCard = ({ room }: { room: Room }) => {
 export default function RoomsPage() {
     const { user } = useUser();
     const firestore = useFirestore();
+    const router = useRouter();
     const [myRoom, setMyRoom] = useState<Room | null>(null);
     const [publicRooms, setPublicRooms] = useState<Room[]>([]);
     const [loading, setLoading] = useState(true);
@@ -91,13 +92,20 @@ export default function RoomsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-        <Tabs defaultValue="my-room" className="flex flex-col h-full">
-            <TabsList className="grid w-full grid-cols-2">
+    <div className="flex flex-col h-full bg-background">
+        <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
+            <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-xl font-bold">Rooms</h1>
+        </header>
+
+        <Tabs defaultValue="my-room" className="flex flex-col flex-1">
+            <TabsList className="grid w-full grid-cols-2 m-4 mb-0">
                 <TabsTrigger value="my-room">My Room</TabsTrigger>
                 <TabsTrigger value="popular">Popular</TabsTrigger>
             </TabsList>
-            <TabsContent value="my-room" className="flex-1 overflow-hidden">
+            <TabsContent value="my-room" className="flex-1 overflow-hidden mt-0">
                  <ScrollArea className="h-full">
                     <div className="p-4 md:p-6 text-center">
                         <div className="bg-muted/30 rounded-lg p-6">
@@ -129,7 +137,7 @@ export default function RoomsPage() {
                     </div>
                 </ScrollArea>
             </TabsContent>
-            <TabsContent value="popular" className="flex-1 overflow-hidden">
+            <TabsContent value="popular" className="flex-1 overflow-hidden mt-0">
                  <ScrollArea className="h-full">
                     {publicRooms.length > 0 ? (
                          <div className="p-4 md:p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
