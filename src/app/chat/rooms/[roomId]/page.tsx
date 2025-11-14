@@ -12,6 +12,7 @@ import {
   Volume2,
   UserX,
   Send,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -34,37 +35,46 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { Textarea } from '@/components/ui/textarea';
 
 
-const MicPlaceholder = ({ onSit, slotNumber }: { onSit: (slot: number) => void; slotNumber: number; }) => (
+const MicPlaceholder = ({ onSit, slotNumber, disabled }: { onSit: (slot: number) => void; slotNumber: number; disabled?: boolean }) => (
     <div className="flex flex-col items-center gap-2 text-center">
         <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center">
             <Mic className="w-8 h-8 text-muted-foreground/50" />
         </div>
-        <Button size="sm" variant="outline" onClick={() => onSit(slotNumber)}>Sit</Button>
+        <Button size="sm" variant="outline" onClick={() => onSit(slotNumber)} disabled={disabled}>Sit</Button>
     </div>
 );
 
-const UserMic = ({ member, userProfile, role, isOwner, onKick, onMuteToggle }: { 
+const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, onMuteToggle, onStandUp }: { 
     member: RoomMember | null;
     userProfile: UserProfile | null;
     role?: 'owner' | 'super' | 'member'; 
     isOwner: boolean;
+    isCurrentUser: boolean;
     onKick: (userId: string) => void;
     onMuteToggle: (userId: string, isMuted: boolean) => void;
+    onStandUp: () => void;
 }) => {
     
     if (!userProfile || !member) return null;
     
     const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
 
+    const canManage = isOwner && !isCurrentUser;
+
     return (
         <DropdownMenu>
-            <DropdownMenuTrigger asChild disabled={!isOwner || member.userId === userProfile.uid}>
+            <DropdownMenuTrigger asChild disabled={!canManage}>
                  <div className="flex flex-col items-center gap-2 text-center cursor-pointer">
                     <div className="relative">
                         <Avatar className={cn("w-20 h-20 border-2", member.isMuted ? "border-muted" : "border-primary")}>
                             <AvatarImage src={userProfile.photoURL} />
                             <AvatarFallback className="text-2xl">{getInitials(userProfile.displayName)}</AvatarFallback>
                         </Avatar>
+                        {isCurrentUser && !member.isMuted && (
+                             <div className="absolute bottom-0 right-0 bg-primary text-primary-foreground rounded-full p-1">
+                                <Mic className="w-3 h-3" />
+                            </div>
+                        )}
                         {member.isMuted && (
                             <div className="absolute bottom-0 right-0 bg-destructive text-destructive-foreground rounded-full p-1">
                                 <MicOff className="w-3 h-3" />
@@ -85,15 +95,24 @@ const UserMic = ({ member, userProfile, role, isOwner, onKick, onMuteToggle }: {
                 </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => onMuteToggle(member.userId, !member.isMuted)}>
+                 {isCurrentUser && role !== 'owner' && (
+                     <DropdownMenuItem onClick={onStandUp}>
+                        <UserX className="mr-2 h-4 w-4" />
+                        <span>Leave Mic</span>
+                    </DropdownMenuItem>
+                 )}
+                 {isCurrentUser && role !== 'owner' && <DropdownMenuSeparator />}
+                <DropdownMenuItem onClick={() => onMuteToggle(member.userId, !member.isMuted)} disabled={!canManage && !isCurrentUser}>
                     {member.isMuted ? <Volume2 className="mr-2 h-4 w-4" /> : <MicOff className="mr-2 h-4 w-4" />}
-                    <span>{member.isMuted ? 'Unmute' : 'Mute'} User</span>
+                    <span>{member.isMuted ? 'Unmute' : 'Mute'} {isCurrentUser ? "" : "User"}</span>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-red-500 focus:text-red-500" onClick={() => onKick(member.userId)}>
-                    <UserX className="mr-2 h-4 w-4" />
-                    <span>Remove from Mic</span>
-                </DropdownMenuItem>
+                {canManage && <DropdownMenuSeparator />}
+                {canManage && (
+                    <DropdownMenuItem className="text-red-500 focus:text-red-500" onClick={() => onKick(member.userId)}>
+                        <UserX className="mr-2 h-4 w-4" />
+                        <span>Remove from Mic</span>
+                    </DropdownMenuItem>
+                )}
             </DropdownMenuContent>
         </DropdownMenu>
     );
@@ -132,7 +151,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
 
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
-  const currentUserMicSlot = useMemo(() => members.find(m => m.userId === authUser?.uid)?.micSlot, [members, authUser]);
+  const currentUserMemberInfo = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
 
   // Fetch Room and Member data
   useEffect(() => {
@@ -155,16 +174,20 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         const membersData = snapshot.docs.map(d => d.data() as RoomMember);
         setMembers(membersData);
 
-        membersData.forEach(member => {
-            if (!memberProfiles.has(member.userId)) {
-                const userDocRef = doc(firestore, 'users', member.userId);
+        const newMemberIds = membersData
+            .map(m => m.userId)
+            .filter(id => !memberProfiles.has(id));
+
+        if (newMemberIds.length > 0) {
+            newMemberIds.forEach(userId => {
+                const userDocRef = doc(firestore, 'users', userId);
                 getDoc(userDocRef).then(userSnap => {
                     if (userSnap.exists()) {
-                        setMemberProfiles(prev => new Map(prev).set(member.userId, userSnap.data() as UserProfile));
+                        setMemberProfiles(prev => new Map(prev).set(userId, userSnap.data() as UserProfile));
                     }
                 });
-            }
-        });
+            });
+        }
         setLoading(false);
     }, (error) => {
         const permissionError = new FirestorePermissionError({path: membersColRef.path, operation: 'list'});
@@ -208,22 +231,35 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   };
 
   const handleSit = async (slotNumber: number) => {
-      if (!firestore || !authUser || !roomId || currentUserMicSlot !== undefined) return;
+      if (!firestore || !authUser || !roomId) return;
       
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+      
       const newMemberData = {
           userId: authUser.uid,
           micSlot: slotNumber,
-          isMuted: false,
+          isMuted: currentUserMemberInfo?.isMuted ?? false,
       };
       
       try {
-        await setDoc(memberRef, newMemberData);
+        await setDoc(memberRef, newMemberData, { merge: true });
       } catch(error) {
          const permissionError = new FirestorePermissionError({path: memberRef.path, operation: 'create', requestResourceData: newMemberData});
          errorEmitter.emit('permission-error', permissionError);
       }
   };
+  
+   const handleStandUp = async () => {
+        if (!firestore || !authUser || !roomId) return;
+        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+        try {
+             // Instead of deleting, update micSlot to null or a value indicating they are an audience member
+             await updateDoc(memberRef, { micSlot: null });
+        } catch (error) {
+            const permissionError = new FirestorePermissionError({ path: memberRef.path, operation: 'update' });
+            errorEmitter.emit('permission-error', permissionError);
+        }
+    };
   
   const handleKickUser = async (userIdToKick: string) => {
       if (!isOwner || !firestore || !roomId) return;
@@ -237,7 +273,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   };
   
   const handleMuteToggle = async (userIdToMute: string, shouldMute: boolean) => {
-      if (!isOwner || !firestore || !roomId) return;
+      if ((!isOwner && userIdToMute !== authUser?.uid) || !firestore || !roomId) return;
       const memberRef = doc(firestore, 'rooms', roomId, 'members', userIdToMute);
        try {
         await updateDoc(memberRef, { isMuted: shouldMute });
@@ -281,9 +317,11 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     return <div className="flex h-screen items-center justify-center">Loading Room...</div>;
   }
   
-  const ownerMember = members.find(m => m.micSlot === 0);
+  const ownerMember = members.find(m => m.userId === room.ownerId);
   const ownerProfile = ownerMember ? memberProfiles.get(ownerMember.userId) : null;
-  const superAdminProfile = null; 
+  const superAdminProfile = null; // Placeholder for future super admin feature
+
+  const occupiedSlots = new Set(members.map(m => m.micSlot).filter(s => s !== null && s !== 0 && s !== -1));
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -300,20 +338,27 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                     <h1 className="text-xl font-bold truncate">{room.name}</h1>
                 </div>
             </div>
-             <Button variant="destructive" size="sm" onClick={handleLeaveRoom}>
-                <LogOut className="mr-2 h-4 w-4"/> Leave
-            </Button>
+            <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon">
+                    <Settings className="h-5 w-5" />
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleLeaveRoom}>
+                    <LogOut className="mr-2 h-4 w-4"/> Leave
+                </Button>
+             </div>
         </header>
         
         <div className="flex-1 flex flex-col overflow-hidden">
             <div className="p-4 md:p-6 space-y-8">
                 {/* Owner & Super Admin Mics */}
-                <div className="grid grid-cols-2 gap-4 md:gap-8">
-                    {ownerMember && ownerProfile ? (
-                        <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={isOwner} onKick={handleKickUser} onMuteToggle={handleMuteToggle}/>
+                <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
+                     {ownerMember && ownerProfile ? (
+                        <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={isOwner} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleSit(0)}/>
                     ) : <div/>}
-                    {superAdminProfile ? (
-                        <UserMic member={null} userProfile={superAdminProfile} role="super" isOwner={isOwner} onKick={handleKickUser} onMuteToggle={handleMuteToggle}/>
+
+                    {/* Placeholder for Super Admin */}
+                     {superAdminProfile ? (
+                        <UserMic member={null} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={false} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => {}}/>
                     ) : <div/>}
                 </div>
                 
@@ -337,10 +382,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                         const userProfileInSlot = memberInSlot ? memberProfiles.get(memberInSlot.userId) : null;
                         
                         if (memberInSlot && userProfileInSlot) {
-                            return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} onKick={handleKickUser} onMuteToggle={handleMuteToggle} />
+                            return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
                         }
                         
-                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber}/>
+                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={!!currentUserMemberInfo?.micSlot}/>
                     })}
                 </div>
             </div>
@@ -374,5 +419,3 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     </div>
   );
 }
-
-    
