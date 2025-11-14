@@ -56,8 +56,8 @@ export default function RoomsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!firestore) {
-             if(!userLoading) setLoading(false);
+        if (!firestore || userLoading) {
+            if(!userLoading) setLoading(false);
             return;
         }
     
@@ -65,7 +65,6 @@ export default function RoomsPage() {
         const roomsCollectionRef = collection(firestore, 'rooms');
         const popularRoomsQuery = query(
             roomsCollectionRef,
-            orderBy('ownerIsOfficial', 'desc'),
             orderBy('memberCount', 'desc')
         );
 

@@ -27,20 +27,6 @@
           "order": "ASCENDING"
         }
       ]
-    },
-    {
-      "collectionGroup": "rooms",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "ownerIsOfficial",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "memberCount",
-          "order": "DESCENDING"
-        }
-      ]
     }
   ],
   "fieldOverrides": []
