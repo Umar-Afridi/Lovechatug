@@ -200,26 +200,30 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
     const unsubRoom = onSnapshot(roomDocRef, (docSnap) => {
         if (docSnap.exists()) {
-            setRoom({ id: docSnap.id, ...docSnap.data() } as Room);
+            const roomData = { id: docSnap.id, ...docSnap.data() } as Room;
+            setRoom(roomData);
         } else {
             toast({ title: "Room not found", variant: "destructive" });
             router.push('/chat/rooms');
         }
     });
-
+    
+    // Separate effect for auto-seating the owner, depending on room data
+    let ownerSeated = false; // Flag to prevent multiple sets
     const unsubMembers = onSnapshot(membersColRef, (snapshot) => {
         const membersData = snapshot.docs.map(d => d.data() as RoomMember);
         setMembers(membersData);
         
         // Auto-seat owner if they enter the room and are not seated
-        const ownerIsSeated = membersData.some(m => m.userId === room?.ownerId);
-        if(isOwner && authUser && !ownerIsSeated) {
+        const ownerIsAlreadySeated = membersData.some(m => m.userId === room?.ownerId);
+        if(isOwner && authUser && !ownerIsAlreadySeated && !ownerSeated) {
              const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
              setDoc(memberRef, {
                 userId: authUser.uid,
                 micSlot: 0,
                 isMuted: false,
             }, { merge: true });
+            ownerSeated = true;
         }
 
         const newMemberIds = membersData
@@ -257,7 +261,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         unsubMessages();
     };
 
-  }, [firestore, roomId, router, toast, memberProfiles, isOwner, authUser, room?.ownerId]);
+  }, [firestore, roomId, router, toast, isOwner, authUser, memberProfiles]);
   
   // Auto-scroll chat
   useEffect(() => {
@@ -278,10 +282,16 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       }
   };
 
-  const handleSit = async (slotNumber: number) => {
+   const handleSit = async (slotNumber: number) => {
       if (!firestore || !authUser || !roomId) return;
       
-      const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
+      const canSit = isOwner || !currentUserMemberInfo || currentUserMemberInfo.micSlot === null;
+      if (!canSit) {
+        toast({ title: 'Already Seated', description: 'You must leave your current seat first.', variant: 'destructive'});
+        return;
+      }
+
+      const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       
       const newMemberData = {
           userId: authUser.uid,
@@ -371,7 +381,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const superAdminMember = members.find(m => m.micSlot === -1);
   const superAdminProfile = superAdminMember ? memberProfiles.get(superAdminMember.userId) : null;
 
-  const isUserAlreadySeated = currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined;
+  const isUserSeated = currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined;
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -405,13 +415,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                      {ownerMember && ownerProfile ? (
                         <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
                     ) : (
-                        <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={isUserAlreadySeated && !isOwner} />
+                        <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={isUserSeated && !isOwner} />
                     )}
 
                      {superAdminMember && superAdminProfile ? (
                         <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                     ) : (
-                         <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={isUserAlreadySeated} />
+                         <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={isUserSeated && !isOwner} />
                     )}
                 </div>
                 
@@ -438,7 +448,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                             return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
                         }
                         
-                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserAlreadySeated} />
+                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserSeated && !isOwner} />
                     })}
                 </div>
             </div>
