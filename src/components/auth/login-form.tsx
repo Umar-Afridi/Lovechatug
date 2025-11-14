@@ -73,6 +73,18 @@ export function LoginForm() {
               });
               errorEmitter.emit('permission-error', permissionError);
             });
+        } else {
+             const userData = docSnap.data() as UserProfile;
+              if (userData.isDisabled) {
+                  await auth.signOut();
+                  setError("Your account has been disabled. Please contact support.");
+                  toast({
+                      variant: "destructive",
+                      title: "Account Disabled",
+                      description: "Your account is currently disabled.",
+                  });
+                  return;
+              }
         }
         router.push('/chat');
 
@@ -122,8 +134,12 @@ export function LoginForm() {
           // Check if the user is disabled
           if (userData.isDisabled) {
               await auth.signOut(); // Sign the user out
-              setError("Your account has been disabled by an administrator.");
-              // No need for a toast, the error is displayed inline
+              setError("Your account has been disabled. Please contact support.");
+              toast({
+                  variant: "destructive",
+                  title: "Account Disabled",
+                  description: "Your account has been disabled. Please contact support.",
+              });
               return;
           }
       }

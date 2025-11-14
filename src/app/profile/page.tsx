@@ -314,37 +314,35 @@ export default function ProfilePage() {
 };
 
  const handleDeleteAccount = async () => {
-    if (!user || !firestore || !auth || !user.email) {
+    if (!user || !firestore || !auth) {
       toast({ title: "Error", description: "User session is not valid.", variant: "destructive" });
       return;
     }
     
     const userDocRef = doc(firestore, 'users', user.uid);
-    const deletedUserDocRef = doc(firestore, 'deletedUsers', user.email);
     
     try {
-      await setDoc(deletedUserDocRef, {
-        email: user.email,
-        deletedAt: serverTimestamp(),
+      // Soft delete: Mark the user as disabled
+      await updateDoc(userDocRef, {
+        isDisabled: true,
+        isOnline: false,
+        lastSeen: serverTimestamp(),
       });
       
-      await deleteDoc(userDocRef);
+      // Sign the user out
+      await auth.signOut();
 
-      await deleteUser(auth.currentUser!);
-
-      toast({ title: "Account Deleted", description: "Your account has been permanently deleted." });
-
+      toast({ title: "Account Deleted", description: "Your account has been deactivated." });
       router.push('/');
+
     } catch (error: any) {
-      console.error("Error deleting account:", error);
-      if (error.code === 'auth/requires-recent-login') {
-          toast({ variant: "destructive", title: "Action Required", description: "This is a sensitive action. Please log out and log back in before deleting your account." });
-      } else if (error.code === 'permission-denied') {
-          const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'delete' });
+      console.error("Error deactivating account:", error);
+      if (error.code === 'permission-denied') {
+          const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'update', requestResourceData: { isDisabled: true } });
           errorEmitter.emit('permission-error', permissionError);
       }
       else {
-        toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Could not delete your account. Please try again." });
+        toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Could not deactivate your account. Please try again." });
       }
     } finally {
         setDeleteDialogOpen(false);

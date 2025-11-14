@@ -61,7 +61,7 @@ export default function ManageUsersPage() {
   
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
-    action: 'disable' | 'delete' | null;
+    action: 'disable' | 'delete' | 'enable';
     targetUser: UserProfile | null;
   }>({ isOpen: false, action: null, targetUser: null });
 
@@ -119,11 +119,11 @@ export default function ManageUsersPage() {
     );
   }, [searchQuery, allUsers]);
 
-  const openConfirmationDialog = (action: 'disable' | 'delete', targetUser: UserProfile) => {
+  const openConfirmationDialog = (action: 'disable' | 'delete' | 'enable', targetUser: UserProfile) => {
     setDialogState({ isOpen: true, action, targetUser });
   };
 
-  const handleDisableUser = async (targetUser: UserProfile) => {
+  const handleToggleDisableUser = async (targetUser: UserProfile) => {
     if (!firestore || !targetUser) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
     const newDisabledState = !targetUser.isDisabled;
@@ -145,6 +145,9 @@ export default function ManageUsersPage() {
     
     const userRef = doc(firestore, 'users', targetUser.uid);
      try {
+      // This is a hard delete, which we are avoiding now.
+      // The logic is kept here in case it's needed in the future,
+      // but the button now triggers soft delete (disable).
       await deleteDoc(userRef);
       toast({
         title: 'User Deleted',
@@ -161,8 +164,8 @@ export default function ManageUsersPage() {
   const handleConfirmAction = () => {
     if (!dialogState.targetUser || !dialogState.action) return;
 
-    if (dialogState.action === 'disable') {
-        handleDisableUser(dialogState.targetUser);
+    if (dialogState.action === 'disable' || dialogState.action === 'enable') {
+        handleToggleDisableUser(dialogState.targetUser);
     } else if (dialogState.action === 'delete') {
         handleDeleteUser(dialogState.targetUser);
     }
@@ -239,13 +242,13 @@ export default function ManageUsersPage() {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => openConfirmationDialog('disable', user)}>
+                                    <DropdownMenuItem onClick={() => openConfirmationDialog(user.isDisabled ? 'enable' : 'disable', user)}>
                                         <Ban className="mr-2 h-4 w-4" />
                                         <span>{user.isDisabled ? 'Enable' : 'Disable'} Account</span>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => openConfirmationDialog('delete', user)} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
                                         <Trash2 className="mr-2 h-4 w-4" />
-                                        <span>Delete Account</span>
+                                        <span>Delete (Hard)</span>
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
