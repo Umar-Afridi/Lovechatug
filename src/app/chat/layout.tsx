@@ -181,7 +181,7 @@ export default function ChatAppLayout({
   const { user, loading: authLoading } = useUser();
   const router = useRouter();
   const isMobile = useIsMobile();
-  const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2;
+  const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2 && !pathname.startsWith('/chat/rooms') && !pathname.startsWith('/chat/friends') && !pathname.startsWith('/chat/calls') && !pathname.startsWith('/chat/stories');
   const [requestCount, setRequestCount] = useState(0);
   const [isAccountDisabled, setAccountDisabled] = useState(false);
   const { toast } = useToast();
@@ -326,7 +326,7 @@ export default function ChatAppLayout({
                   <SidebarMenuItem key={item.href}>
                       <Link href={item.href}>
                       <SidebarMenuButton
-                          isActive={pathname.startsWith(item.href) && (item.href === '/chat' ? pathname.split('/').length <= 2 : true)}
+                          isActive={pathname === item.href || (item.href === '/chat' && pathname.startsWith('/chat') && !menuItems.slice(1).some(i => pathname.startsWith(i.href)))}
                           tooltip={item.label}
                       >
                           <item.icon />

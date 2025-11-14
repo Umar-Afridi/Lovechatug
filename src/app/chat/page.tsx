@@ -67,7 +67,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
                 // Add other required fields with default values
                 email: '',
                 username: '',
-             });
+             } as UserProfile);
         }
 
         const userDocRef = doc(firestore, 'users', participantId);
@@ -327,7 +327,7 @@ export default function ChatPage() {
         }
     }, (error) => {
         const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'get' });
-        errorEmitter.emit('permission-error', permissionError);
+        errorEmitter.emit('permission-error', error);
         console.error("Error setting up combined profile and chat listener:", error);
     });
 
