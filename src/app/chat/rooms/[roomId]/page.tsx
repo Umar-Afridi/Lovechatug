@@ -75,7 +75,9 @@ const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLock
                     <Mic className="w-8 h-8 text-muted-foreground/30" />
                  )}
             </div>
-             <p className="font-semibold text-sm text-muted-foreground/50 capitalize">{slotType || (isLocked ? 'Locked' : 'Empty')}</p>
+             <p className="font-semibold text-sm text-muted-foreground/50 capitalize">
+                {slotType ? slotType : (isLocked ? 'Locked' : slotNumber)}
+             </p>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0">
