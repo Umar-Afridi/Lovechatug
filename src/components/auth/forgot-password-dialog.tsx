@@ -36,21 +36,16 @@ export function ForgotPasswordDialog() {
 
     try {
       await sendPasswordResetEmail(auth, email);
-      // For security reasons, always show a generic success message
-      // to prevent email enumeration attacks.
-      toast({
-        title: 'Check your email',
-        description: `If an account exists for ${email}, a password reset link has been sent.`,
-      });
     } catch (error: any) {
       console.error('Error sending password reset email:', error);
-      // Still show a generic message on the client, but log the error.
-      // This prevents attackers from knowing if an email is registered or not.
+      // For security, we don't tell the user if the email was not found.
+      // We just log it and show a generic message.
+    } finally {
+      // Always show a generic success message to prevent email enumeration attacks.
       toast({
         title: 'Check your email',
         description: `If an account exists for ${email}, a password reset link has been sent.`,
       });
-    } finally {
       // Always close the dialog after the attempt.
       setIsOpen(false);
     }
