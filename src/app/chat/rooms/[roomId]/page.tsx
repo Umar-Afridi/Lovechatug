@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   ArrowLeft,
   Mic,
@@ -202,7 +203,7 @@ const RoomChatMessage = ({ message }: { message: RoomMessage }) => (
 
 
 export default function RoomPage({ params }: { params: { roomId: string } }) {
-  const { roomId } = React.use(params);
+  const { roomId } = params;
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -227,8 +228,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     if (!firestore || !roomId) return;
     setLoading(true);
 
-    const roomDocRef = doc(firestore, 'rooms', roomId as string);
-    const membersColRef = collection(firestore, 'rooms', roomId as string, 'members');
+    const roomDocRef = doc(firestore, 'rooms', roomId);
+    const membersColRef = collection(firestore, 'rooms', roomId, 'members');
 
     const unsubRoom = onSnapshot(roomDocRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -247,7 +248,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         // Auto-seat owner if they enter the room and are not seated
         const ownerIsSeated = membersData.some(m => m.userId === room?.ownerId);
         if(isOwner && authUser && !ownerIsSeated) {
-             const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
+             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
              setDoc(memberRef, {
                 userId: authUser.uid,
                 micSlot: 0,
@@ -277,7 +278,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     });
     
     // Fetch Chat Messages
-    const messagesColRef = collection(firestore, 'rooms', roomId as string, 'messages');
+    const messagesColRef = collection(firestore, 'rooms', roomId, 'messages');
     const messagesQuery = query(messagesColRef, orderBy('timestamp', 'asc'));
     const unsubMessages = onSnapshot(messagesQuery, (snapshot) => {
         const messagesData = snapshot.docs.map(d => ({id: d.id, ...d.data()}) as RoomMessage);
@@ -301,7 +302,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   const handleLeaveRoom = async () => {
       if (!firestore || !authUser || !roomId) return;
-      const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
+      const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       try {
         await deleteDoc(memberRef);
         router.push('/chat/rooms');
@@ -320,7 +321,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
           return;
       }
       
-      // Allow if user is not seated, OR if the user is the owner
       const canSit = isOwner || !currentUserMemberInfo || currentUserMemberInfo.micSlot === null;
       if (!canSit) {
         toast({ title: 'Already Seated', description: 'You must leave your current seat first.', variant: 'destructive'});
@@ -345,7 +345,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   
    const handleStandUp = async () => {
         if (!firestore || !authUser || !roomId) return;
-        const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
+        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
         try {
              await updateDoc(memberRef, { micSlot: null });
         } catch (error) {
@@ -356,7 +356,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   
   const handleKickUser = async (userIdToKick: string) => {
       if (!isOwner || !firestore || !roomId) return;
-      const memberRef = doc(firestore, 'rooms', roomId as string, 'members', userIdToKick);
+      const memberRef = doc(firestore, 'rooms', roomId, 'members', userIdToKick);
       try {
         // Instead of deleting, just move them out of the mic slot
         await updateDoc(memberRef, { micSlot: null });
@@ -368,7 +368,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   
   const handleMuteToggle = async (userIdToMute: string, shouldMute: boolean) => {
       if ((!isOwner && userIdToMute !== authUser?.uid) || !firestore || !roomId) return;
-      const memberRef = doc(firestore, 'rooms', roomId as string, 'members', userIdToMute);
+      const memberRef = doc(firestore, 'rooms', roomId, 'members', userIdToMute);
        try {
         await updateDoc(memberRef, { isMuted: shouldMute });
       } catch(error) {
@@ -382,7 +382,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
     const currentUserProfile = memberProfiles.get(authUser.uid);
     
-    const messagesColRef = collection(firestore, 'rooms', roomId as string, 'messages');
+    const messagesColRef = collection(firestore, 'rooms', roomId, 'messages');
     const newMessage = {
         senderId: authUser.uid,
         senderName: currentUserProfile?.displayName || 'User',
@@ -455,8 +455,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                 </div>
             </div>
             <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon">
-                    <Settings className="h-5 w-5" />
+                <Button variant="ghost" size="icon" asChild>
+                    <Link href={`/chat/rooms/${roomId}/settings`}>
+                        <Settings className="h-5 w-5" />
+                    </Link>
                 </Button>
                 <Button variant="destructive" size="sm" onClick={handleLeaveRoom}>
                     <LogOut className="mr-2 h-4 w-4"/> Leave
