@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, updateDoc, arrayRemove, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, arrayRemove, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Shield, Lock, ArrowLeft, UserX, UserCog } from 'lucide-react';
+import { Shield, Lock, ArrowLeft, UserX, UserCog, HelpCircle } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/lib/types';
@@ -122,6 +122,7 @@ export default function SettingsPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
+    const [findingHelp, setFindingHelp] = useState(false);
 
     useEffect(() => {
         if (!user || !firestore) return;
@@ -139,6 +140,47 @@ export default function SettingsPage() {
             title: "Coming Soon!",
             description: "App Lock functionality will be available in a future update."
         });
+    };
+    
+    const handleHelpCenterClick = async () => {
+        if (!firestore) return;
+        setFindingHelp(true);
+        try {
+            const usersRef = collection(firestore, 'users');
+            const q = query(
+                usersRef,
+                where('officialBadge.isOfficial', '==', true),
+                where('isOnline', '==', true),
+                limit(1)
+            );
+
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                toast({
+                    variant: 'destructive',
+                    title: 'No Support Available',
+                    description: 'No support agents are currently online. Please try again later.',
+                });
+            } else {
+                const agent = querySnapshot.docs[0].data() as UserProfile;
+                router.push(`/chat/${agent.uid}`);
+            }
+        } catch (error) {
+            console.error("Error finding help agent:", error);
+            const permissionError = new FirestorePermissionError({
+                path: 'users',
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            toast({
+                variant: 'destructive',
+                title: 'Error',
+                description: 'Could not connect to the help center. Please try again.',
+            });
+        } finally {
+            setFindingHelp(false);
+        }
     };
     
     const baseButtonClassName = "w-full text-base py-8 justify-center rounded-lg border-b-4 active:translate-y-1 active:border-b-0 transition-all duration-150 ease-in-out";
@@ -185,6 +227,18 @@ export default function SettingsPage() {
                                 </div>
                             </AccordionTrigger>
                             {/* Content could be added here if it becomes a collapsible section */}
+                        </AccordionItem>
+                        <AccordionItem value="item-3">
+                            <AccordionTrigger 
+                                className="text-base font-medium px-2" 
+                                onClick={handleHelpCenterClick}
+                                disabled={findingHelp}
+                            >
+                               <div className="flex items-center gap-3">
+                                    <HelpCircle className="h-5 w-5" />
+                                    <span>{findingHelp ? "Finding help..." : "Help Center"}</span>
+                                </div>
+                            </AccordionTrigger>
                         </AccordionItem>
                     </Accordion>
                 </div>
