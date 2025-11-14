@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, ChangeEvent, useEffect } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Camera, Image as ImageIcon, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import type { Room } from '@/lib/types';
 
 export default function RoomSettingsPage({ params }: { params: { roomId: string } }) {
-  const { roomId } = params;
+  const { roomId } = React.use(params);
   const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
