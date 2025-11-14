@@ -50,6 +50,7 @@ export default function RoomsPage() {
             return;
         }
 
+        setLoading(true);
         const roomsCollectionRef = collection(firestore, 'rooms');
 
         // Listener for all rooms, which we will then filter on the client
@@ -60,9 +61,10 @@ export default function RoomsPage() {
                 const userRoom = allRooms.find(room => room.ownerId === user.uid) || null;
                 setMyRoom(userRoom);
 
+                // Filter for rooms that are not owned by the current user AND have members
                 const otherPublicRooms = allRooms
-                    .filter(room => room.ownerId !== user.uid && room.members && room.members.length > 0)
-                    .sort((a, b) => (b.members?.length || 0) - (a.members?.length || 0)); // Sort by member count descending
+                    .filter(room => room.ownerId !== user.uid && Array.isArray(room.members) && room.members.length > 0)
+                    .sort((a, b) => (b.members?.length || 0) - (a.members?.length || 0)); 
                 setPublicRooms(otherPublicRooms);
 
                 setLoading(false);

@@ -37,7 +37,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy, arrayUnion, arrayRemove, writeBatch } from 'firebase/firestore';
 import type { Room, RoomMember, UserProfile, RoomMessage } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -303,24 +303,24 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   }, [chatMessages]);
 
   const handleLeaveRoom = async () => {
-      if (!firestore || !authUser || !roomId) return;
+      if (!firestore || !authUser || !roomId || !room) return;
       
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       const roomRef = doc(firestore, 'rooms', roomId);
-
+      const batch = writeBatch(firestore);
+      
       try {
-        // This transactionally removes the user from the members subcollection
-        // and the members array on the room document.
-        await deleteDoc(memberRef);
-        await updateDoc(roomRef, {
-            members: arrayRemove(authUser.uid)
-        });
+        // Remove the user from the members subcollection
+        batch.delete(memberRef);
+        // Atomically remove the user's ID from the members array on the room document
+        batch.update(roomRef, { members: arrayRemove(authUser.uid) });
+
+        await batch.commit();
+
       } catch(error) {
-        // If doc doesn't exist, that's fine. It means they were just a listener.
-        // Or if the arrayRemove fails, we still try to navigate away.
-        if((error as any).code !== 'not-found') {
-          console.error("Error leaving room:", error);
-        }
+        console.error("Error leaving room:", error);
+        // Even if an error occurs (e.g., user was already removed),
+        // we still want to navigate them away.
       } finally {
         router.push('/chat/rooms');
       }
