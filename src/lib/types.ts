@@ -100,9 +100,11 @@ export type Room = {
     id: string;
     name: string;
     ownerId: string;
+    ownerIsOfficial?: boolean;
     photoURL?: string;
     createdAt: any;
     members: string[];
+    memberCount: number;
     lockedSlots?: number[];
 };
 

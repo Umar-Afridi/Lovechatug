@@ -6,7 +6,7 @@ import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Users, Home, ArrowLeft } from 'lucide-react';
+import { PlusCircle, Users, Home } from 'lucide-react';
 import Link from 'next/link';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -14,21 +14,30 @@ import type { Room } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { OfficialBadge } from '@/components/ui/official-badge';
+
 
 const RoomCard = ({ room }: { room: Room }) => {
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'R';
   return (
     <Link href={`/chat/rooms/${room.id}`} className="block">
       <div className="border rounded-lg p-4 flex flex-col items-center gap-3 text-center hover:bg-muted/50 transition-colors h-full">
-        <Avatar className="h-20 w-20 border">
-          <AvatarImage src={room.photoURL} />
-          <AvatarFallback className="text-2xl bg-muted">{getInitials(room.name)}</AvatarFallback>
-        </Avatar>
+        <div className="relative">
+          <Avatar className="h-20 w-20 border">
+            <AvatarImage src={room.photoURL} />
+            <AvatarFallback className="text-2xl bg-muted">{getInitials(room.name)}</AvatarFallback>
+          </Avatar>
+           {room.ownerIsOfficial && (
+              <div className="absolute -top-1 -right-1">
+                <OfficialBadge size="icon" className="h-6 w-6" />
+              </div>
+            )}
+        </div>
         <div className="space-y-1 flex-1 flex flex-col justify-center">
           <h3 className="font-semibold truncate leading-tight">{room.name}</h3>
           <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
             <Users className="h-3 w-3" />
-            {room.members?.length || 0} listening
+            {room.memberCount || 0} listening
           </p>
         </div>
       </div>
@@ -54,24 +63,36 @@ export default function RoomsPage() {
         setLoading(true);
         const roomsCollectionRef = collection(firestore, 'rooms');
 
-        // Listener for all rooms, which we will then filter on the client
-        const unsubAllRooms = onSnapshot(roomsCollectionRef, 
-            (snapshot) => {
-                const allRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
-                
-                const userRoom = allRooms.find(room => room.ownerId === user.uid) || null;
+        // Listener for all rooms to find the user's own room
+        const myRoomQuery = query(roomsCollectionRef, where('ownerId', '==', user.uid));
+        const unsubMyRoom = onSnapshot(myRoomQuery, (snapshot) => {
+            if (!snapshot.empty) {
+                const userRoom = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Room;
                 setMyRoom(userRoom);
+            } else {
+                setMyRoom(null);
+            }
+        });
 
-                // Filter for rooms that are not owned by the current user AND have members
-                const otherPublicRooms = allRooms
-                    .filter(room => room.ownerId !== user.uid && Array.isArray(room.members) && room.members.length > 0)
-                    .sort((a, b) => (b.members?.length || 0) - (a.members?.length || 0)); 
-                setPublicRooms(otherPublicRooms);
+        // Listener for popular rooms
+        const popularRoomsQuery = query(
+            roomsCollectionRef,
+            where('memberCount', '>', 0),
+            orderBy('ownerIsOfficial', 'desc'),
+            orderBy('memberCount', 'desc')
+        );
 
+        const unsubPublicRooms = onSnapshot(popularRoomsQuery,
+            (snapshot) => {
+                const allPublicRooms = snapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() } as Room))
+                    .filter(room => room.ownerId !== user.uid);
+                
+                setPublicRooms(allPublicRooms);
                 setLoading(false);
             },
             (error) => {
-                console.error("Error fetching rooms: ", error);
+                console.error("Error fetching popular rooms: ", error);
                 const permissionError = new FirestorePermissionError({path: 'rooms', operation: 'list'});
                 errorEmitter.emit('permission-error', permissionError);
                 setLoading(false);
@@ -79,7 +100,8 @@ export default function RoomsPage() {
         );
         
         return () => {
-            unsubAllRooms();
+            unsubMyRoom();
+            unsubPublicRooms();
         };
     }, [firestore, user]);
 

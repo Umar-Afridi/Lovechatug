@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, ChangeEvent } from 'react';
+import { useState, useRef, ChangeEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Camera, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,9 +11,11 @@ import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, setDoc, doc, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import type { UserProfile } from '@/lib/types';
+
 
 export default function CreateRoomPage() {
   const router = useRouter();
@@ -26,6 +28,18 @@ export default function CreateRoomPage() {
   const [roomName, setRoomName] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    if (user && firestore) {
+      const userDocRef = doc(firestore, 'users', user.uid);
+      getDoc(userDocRef).then((docSnap) => {
+        if (docSnap.exists()) {
+          setUserProfile(docSnap.data() as UserProfile);
+        }
+      });
+    }
+  }, [user, firestore]);
   
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -51,7 +65,7 @@ export default function CreateRoomPage() {
       });
       return;
     }
-    if (!user || !firestore) {
+    if (!user || !firestore || !userProfile) {
         toast({ title: 'Authentication Error', description: 'You must be logged in to create a room.', variant: 'destructive'});
         return;
     }
@@ -71,9 +85,11 @@ export default function CreateRoomPage() {
         const newRoomData = {
             name: roomName,
             ownerId: user.uid,
+            ownerIsOfficial: userProfile.officialBadge?.isOfficial ?? false,
             photoURL: photoURL,
             createdAt: serverTimestamp(),
-            members: [user.uid], // Owner is the first member
+            members: [user.uid],
+            memberCount: 1,
         };
         const docRef = await addDoc(roomsRef, newRoomData);
 

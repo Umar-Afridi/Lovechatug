@@ -344,15 +344,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     }
   }, [chatMessages]);
   
-  useEffect(() => {
-    // This effect handles leaving the room when the component unmounts
-    // which happens on navigation, browser close, or disconnect.
-    return () => {
-      handleLeaveRoom();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const handleLeaveRoom = async () => {
       if (!firestore || !authUser || !roomId || !room) return;
       
@@ -363,16 +354,25 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         const batch = writeBatch(firestore);
         
         batch.delete(memberRef);
-        batch.update(roomRef, { members: arrayRemove(authUser.uid) });
+        batch.update(roomRef, { memberCount: room.memberCount > 0 ? room.memberCount - 1 : 0 });
 
         await batch.commit();
-        router.push('/chat/rooms');
 
       } catch(error) {
         console.error("Error leaving room:", error);
-         router.push('/chat/rooms');
+      } finally {
+        router.push('/chat/rooms');
       }
   };
+
+  useEffect(() => {
+    // This effect handles leaving the room when the component unmounts
+    // which happens on navigation, browser close, or disconnect.
+    return () => {
+      handleLeaveRoom();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestore, authUser, roomId, room]);
 
    const handleSit = async (slotNumber: number) => {
       if (!firestore || !authUser || !roomId) return;
@@ -613,7 +613,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                     <Button 
                         variant="ghost" 
                         size="icon" 
-                        onClick={() => handleMuteToggle(authUser!.uid, !currentUserMemberInfo?.isMuted)}
+                        onClick={() => authUser && currentUserMemberInfo && handleMuteToggle(authUser.uid, !currentUserMemberInfo.isMuted)}
                         disabled={!isUserOnMic}
                     >
                         {currentUserMemberInfo?.isMuted ? <MicOff className="h-5 w-5"/> : <Mic className="h-5 w-5"/>}
@@ -632,5 +632,3 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     </>
   );
 }
-
-    
