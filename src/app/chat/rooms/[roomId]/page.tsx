@@ -367,6 +367,11 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
    const handleSit = async (slotNumber: number) => {
       if (!firestore || !authUser || !roomId) return;
+      
+      if (!isOwner && (slotNumber === 0 || slotNumber === -1)) {
+        toast({ title: "Permission Denied", description: "Only the room owner can take this seat.", variant: "destructive" });
+        return;
+      }
 
       const isSlotOccupied = members.some(m => m.micSlot === slotNumber);
       if (isSlotOccupied) {
@@ -518,11 +523,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                   <Button variant="ghost" size="icon" onClick={() => handleInvite()}>
                       <UserPlus className="h-5 w-5" />
                   </Button>
-                  <Button variant="ghost" size="icon" asChild>
-                      <Link href={`/chat/rooms/${roomId}/settings`}>
-                          <Settings className="h-5 w-5" />
-                      </Link>
-                  </Button>
+                  {isOwner && (
+                    <Button variant="ghost" size="icon" asChild>
+                        <Link href={`/chat/rooms/${roomId}/settings`}>
+                            <Settings className="h-5 w-5" />
+                        </Link>
+                    </Button>
+                  )}
                   <Button variant="destructive" size="sm" onClick={handleLeaveRoom}>
                       <LogOut className="mr-2 h-4 w-4"/> Leave
                   </Button>
@@ -535,13 +542,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                       {ownerMember && ownerProfile && ownerMember.micSlot === 0 ? (
                           <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                       ) : (
-                          <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={!!currentUserMemberInfo} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
+                          <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={!isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
                       )}
 
                       {superAdminMember && superAdminProfile ? (
                           <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                       ) : (
-                          <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={!!currentUserMemberInfo} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
+                          <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={!isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
                       )}
                   </div>
                   
@@ -566,7 +573,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                               return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                           }
                           
-                          return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={!!currentUserMemberInfo} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(slotNumber)} onInvite={handleInvite} />
+                          return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(slotNumber)} onInvite={handleInvite} />
                       })}
                   </div>
               </div>
@@ -590,7 +597,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                             onChange={(e) => setChatInputValue(e.target.value)}
                             onKeyDown={handleChatKeyPress}
                         />
-                        <Button size="icon" variant="ghost" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSendChatMessage}>
+                         <Button size="icon" variant="ghost" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSendChatMessage}>
                             <Send className="h-4 w-4" />
                         </Button>
                     </div>
