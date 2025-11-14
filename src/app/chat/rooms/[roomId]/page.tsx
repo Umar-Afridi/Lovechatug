@@ -37,7 +37,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy, arrayUnion, arrayRemove, writeBatch } from 'firebase/firestore';
+import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy, arrayUnion, arrayRemove, writeBatch, where, Timestamp } from 'firebase/firestore';
 import type { Room, RoomMember, UserProfile, RoomMessage } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -187,18 +187,36 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
     );
 };
 
-const RoomChatMessage = ({ message }: { message: RoomMessage }) => (
-    <div className="flex items-start gap-3">
-        <Avatar className="h-8 w-8">
-            <AvatarImage src={message.senderPhotoURL} />
-            <AvatarFallback>{message.senderName.charAt(0)}</AvatarFallback>
-        </Avatar>
-        <div className="flex flex-col">
-            <p className="text-sm font-semibold">{message.senderName}</p>
-            <p className="text-sm text-muted-foreground">{message.content}</p>
+const RoomChatMessage = ({ message, senderProfile }: { message: RoomMessage; senderProfile: UserProfile | null }) => {
+    if (!senderProfile) return null; // Don't render message if sender profile is not loaded
+    return (
+        <div className="flex items-start gap-3">
+            <div className="relative shrink-0">
+                <Avatar className="h-8 w-8">
+                    <AvatarImage src={message.senderPhotoURL} />
+                    <AvatarFallback>{message.senderName.charAt(0)}</AvatarFallback>
+                </Avatar>
+                 {senderProfile.officialBadge?.isOfficial && (
+                    <div className="absolute -top-1 -left-1">
+                        <OfficialBadge color={senderProfile.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
+                    </div>
+                )}
+            </div>
+            <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                    <p className={cn(
+                        "text-sm font-semibold",
+                        senderProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+                    )}>
+                        {message.senderName}
+                    </p>
+                    {senderProfile.verifiedBadge?.showBadge && <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} />}
+                </div>
+                <p className="text-sm text-muted-foreground">{message.content}</p>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 
 export default function RoomPage({ params }: { params: { roomId: string } }) {
@@ -218,6 +236,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   
   const [isInviteSheetOpen, setInviteSheetOpen] = useState(false);
   const [inviteSlot, setInviteSlot] = useState<number | undefined>(undefined);
+  
+  // Ref to store the timestamp when the component mounts
+  const joinTimestampRef = useRef(Timestamp.now());
 
   const chatViewportRef = useRef<HTMLDivElement>(null);
 
@@ -279,12 +300,33 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         setLoading(false);
     });
     
-    // Fetch Chat Messages
+    // Fetch Chat Messages from the point of joining onwards
     const messagesColRef = collection(firestore, 'rooms', roomId, 'messages');
-    const messagesQuery = query(messagesColRef, orderBy('timestamp', 'asc'));
+    const messagesQuery = query(messagesColRef, orderBy('timestamp', 'asc'), where('timestamp', '>=', joinTimestampRef.current));
     const unsubMessages = onSnapshot(messagesQuery, (snapshot) => {
         const messagesData = snapshot.docs.map(d => ({id: d.id, ...d.data()}) as RoomMessage);
-        setChatMessages(messagesData);
+        
+         const newMessageSenders = messagesData
+            .map(m => m.senderId)
+            .filter(id => !memberProfiles.has(id));
+        
+        if (newMessageSenders.length > 0) {
+             newMessageSenders.forEach(userId => {
+                const userDocRef = doc(firestore, 'users', userId);
+                getDoc(userDocRef).then(userSnap => {
+                    if (userSnap.exists()) {
+                        setMemberProfiles(prev => new Map(prev).set(userId, userSnap.data() as UserProfile));
+                    }
+                });
+            });
+        }
+
+        setChatMessages(prevMessages => {
+            const newMessages = messagesData.filter(
+                (newMessage) => !prevMessages.some((prevMessage) => prevMessage.id === newMessage.id)
+            );
+            return [...prevMessages, ...newMessages];
+        });
     });
 
     return () => {
@@ -316,13 +358,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         batch.update(roomRef, { members: arrayRemove(authUser.uid) });
 
         await batch.commit();
+        router.push('/chat/rooms');
 
       } catch(error) {
         console.error("Error leaving room:", error);
         // Even if an error occurs (e.g., user was already removed),
         // we still want to navigate them away.
-      } finally {
-        router.push('/chat/rooms');
+         router.push('/chat/rooms');
       }
   };
 
@@ -394,7 +436,16 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const handleSendChatMessage = async () => {
     if (!firestore || !authUser || !roomId || !chatInputValue.trim()) return;
 
-    const currentUserProfile = memberProfiles.get(authUser.uid);
+    let currentUserProfile = memberProfiles.get(authUser.uid);
+
+    // If profile is not in state, fetch it once.
+    if (!currentUserProfile) {
+        const userDoc = await getDoc(doc(firestore, 'users', authUser.uid));
+        if (userDoc.exists()) {
+            currentUserProfile = userDoc.data() as UserProfile;
+            setMemberProfiles(prev => new Map(prev).set(authUser.uid, currentUserProfile!));
+        }
+    }
     
     const messagesColRef = collection(firestore, 'rooms', roomId, 'messages');
     const newMessage = {
@@ -540,7 +591,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
               <ScrollArea className="flex-1 px-4" viewportRef={chatViewportRef}>
                   <div className="space-y-4 py-4">
                       {chatMessages.map(msg => (
-                          <RoomChatMessage key={msg.id} message={msg} />
+                          <RoomChatMessage key={msg.id} message={msg} senderProfile={memberProfiles.get(msg.senderId) ?? null} />
                       ))}
                   </div>
               </ScrollArea>
