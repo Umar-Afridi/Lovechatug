@@ -150,20 +150,23 @@ export default function SettingsPage() {
             const q = query(
                 usersRef,
                 where('officialBadge.isOfficial', '==', true),
-                where('isOnline', 'in', [true, undefined]),
                 limit(1)
             );
 
             const querySnapshot = await getDocs(q);
+            const onlineAgents = querySnapshot.docs
+                .map(doc => doc.data() as UserProfile)
+                .filter(agent => agent.isOnline);
 
-            if (querySnapshot.empty) {
+
+            if (onlineAgents.length === 0) {
                 toast({
                     variant: 'destructive',
                     title: 'No Support Available',
                     description: 'No support agents are currently online. Please try again later.',
                 });
             } else {
-                const agent = querySnapshot.docs[0].data() as UserProfile;
+                const agent = onlineAgents[0];
                 router.push(`/chat/${agent.uid}`);
             }
         } catch (error) {
