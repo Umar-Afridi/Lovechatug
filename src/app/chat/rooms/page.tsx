@@ -15,6 +15,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { OfficialBadge } from '@/components/ui/official-badge';
+import { ArrowLeft } from 'lucide-react';
 
 
 const RoomCard = ({ room }: { room: Room }) => {
@@ -75,9 +76,9 @@ export default function RoomsPage() {
         });
 
         // Listener for popular rooms
+        // This query requires a composite index on ownerIsOfficial (desc) and memberCount (desc)
         const popularRoomsQuery = query(
             roomsCollectionRef,
-            where('memberCount', '>', 0),
             orderBy('ownerIsOfficial', 'desc'),
             orderBy('memberCount', 'desc')
         );
@@ -86,7 +87,8 @@ export default function RoomsPage() {
             (snapshot) => {
                 const allPublicRooms = snapshot.docs
                     .map(doc => ({ id: doc.id, ...doc.data() } as Room))
-                    .filter(room => room.ownerId !== user.uid);
+                     // Also filter out empty rooms and own room on the client-side
+                    .filter(room => room.ownerId !== user.uid && room.memberCount > 0);
                 
                 setPublicRooms(allPublicRooms);
                 setLoading(false);
@@ -115,7 +117,7 @@ export default function RoomsPage() {
 
   return (
     <div className="flex flex-col h-full bg-background">
-        <Tabs defaultValue="my-room" className="flex flex-col flex-1">
+       <Tabs defaultValue="my-room" className="flex flex-col flex-1">
             <TabsList className="grid w-full grid-cols-2 m-4 mb-0">
                 <TabsTrigger value="my-room">My Room</TabsTrigger>
                 <TabsTrigger value="popular">Popular</TabsTrigger>
