@@ -158,8 +158,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     if (!firestore || !roomId) return;
     setLoading(true);
 
-    const roomDocRef = doc(firestore, 'rooms', roomId);
-    const membersColRef = collection(firestore, 'rooms', roomId, 'members');
+    const roomDocRef = doc(firestore, 'rooms', roomId as string);
+    const membersColRef = collection(firestore, 'rooms', roomId as string, 'members');
 
     const unsubRoom = onSnapshot(roomDocRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -196,7 +196,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     });
     
     // Fetch Chat Messages
-    const messagesColRef = collection(firestore, 'rooms', roomId, 'messages');
+    const messagesColRef = collection(firestore, 'rooms', roomId as string, 'messages');
     const messagesQuery = query(messagesColRef, orderBy('timestamp', 'asc'));
     const unsubMessages = onSnapshot(messagesQuery, (snapshot) => {
         const messagesData = snapshot.docs.map(d => ({id: d.id, ...d.data()}) as RoomMessage);
@@ -209,7 +209,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         unsubMessages();
     };
 
-  }, [firestore, roomId, router, toast]);
+  }, [firestore, roomId, router, toast, memberProfiles]);
   
   // Auto-scroll chat
   useEffect(() => {
@@ -220,7 +220,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   const handleLeaveRoom = async () => {
       if (!firestore || !authUser || !roomId) return;
-      const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+      const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
       try {
         await deleteDoc(memberRef);
         router.push('/chat/rooms');
@@ -233,7 +233,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const handleSit = async (slotNumber: number) => {
       if (!firestore || !authUser || !roomId) return;
       
-      const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+      const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
       
       const newMemberData = {
           userId: authUser.uid,
@@ -251,7 +251,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   
    const handleStandUp = async () => {
         if (!firestore || !authUser || !roomId) return;
-        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+        const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
         try {
              // Instead of deleting, update micSlot to null or a value indicating they are an audience member
              await updateDoc(memberRef, { micSlot: null });
@@ -263,7 +263,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   
   const handleKickUser = async (userIdToKick: string) => {
       if (!isOwner || !firestore || !roomId) return;
-      const memberRef = doc(firestore, 'rooms', roomId, 'members', userIdToKick);
+      const memberRef = doc(firestore, 'rooms', roomId as string, 'members', userIdToKick);
       try {
         await deleteDoc(memberRef);
       } catch(error) {
@@ -274,7 +274,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   
   const handleMuteToggle = async (userIdToMute: string, shouldMute: boolean) => {
       if ((!isOwner && userIdToMute !== authUser?.uid) || !firestore || !roomId) return;
-      const memberRef = doc(firestore, 'rooms', roomId, 'members', userIdToMute);
+      const memberRef = doc(firestore, 'rooms', roomId as string, 'members', userIdToMute);
        try {
         await updateDoc(memberRef, { isMuted: shouldMute });
       } catch(error) {
@@ -288,7 +288,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
     const currentUserProfile = memberProfiles.get(authUser.uid);
     
-    const messagesColRef = collection(firestore, 'rooms', roomId, 'messages');
+    const messagesColRef = collection(firestore, 'rooms', roomId as string, 'messages');
     const newMessage = {
         senderId: authUser.uid,
         senderName: currentUserProfile?.displayName || 'User',
@@ -318,7 +318,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   }
   
   const ownerMember = members.find(m => m.userId === room.ownerId);
-  const ownerProfile = ownerMember ? memberProfiles.get(ownerMember.userId) : null;
+  const ownerOnOwnerSlot = ownerMember?.micSlot === 0 ? ownerMember : null;
+  const ownerProfile = ownerOnOwnerSlot ? memberProfiles.get(ownerOnOwnerSlot.userId) : null;
+  
   const superAdminProfile = null; // Placeholder for future super admin feature
 
   const occupiedSlots = new Set(members.map(m => m.micSlot).filter(s => s !== null && s !== 0 && s !== -1));
@@ -352,9 +354,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             <div className="p-4 md:p-6 space-y-8">
                 {/* Owner & Super Admin Mics */}
                 <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
-                     {ownerMember && ownerProfile ? (
-                        <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={isOwner} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleSit(0)}/>
-                    ) : <div/>}
+                     {ownerOnOwnerSlot && ownerProfile ? (
+                        <UserMic member={ownerOnOwnerSlot} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerOnOwnerSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleSit(0)}/>
+                    ) : <MicPlaceholder onSit={handleSit} slotNumber={0} disabled={!!currentUserMemberInfo?.micSlot && currentUserMemberInfo.micSlot !== 0} />}
 
                     {/* Placeholder for Super Admin */}
                      {superAdminProfile ? (
@@ -385,7 +387,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                             return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
                         }
                         
-                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={!!currentUserMemberInfo?.micSlot}/>
+                        // Disable sitting if the user is already on a mic slot (and it's not THIS slot, though that's covered by occupiedSlots)
+                        const isUserAlreadySeated = !!currentUserMemberInfo?.micSlot;
+                        
+                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserAlreadySeated || occupiedSlots.has(slotNumber)}/>
                     })}
                 </div>
             </div>
