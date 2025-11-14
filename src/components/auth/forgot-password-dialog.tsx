@@ -24,15 +24,13 @@ export function ForgotPasswordDialog() {
   const [email, setEmail] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handlePasswordReset = async () => {
+    setError(null);
     const trimmedEmail = email.trim();
     if (!auth || !trimmedEmail) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Please enter your email address.',
-      });
+      setError('Please enter your email address.');
       return;
     }
     
@@ -44,13 +42,18 @@ export function ForgotPasswordDialog() {
         title: 'Check your email',
         description: `If an account exists for ${trimmedEmail}, a password reset link has been sent.`,
       });
-      setIsOpen(false);
+      setIsOpen(false); // Close dialog only on success
     } catch (error: any) {
       console.error('Error sending password reset email:', error);
+      let friendlyMessage = 'Could not send password reset email. Please try again later.';
+      if (error.code === 'auth/user-not-found') {
+          friendlyMessage = 'No account found with this email address.';
+      }
+      setError(friendlyMessage);
       toast({
         variant: 'destructive',
         title: 'Request Failed',
-        description: 'Could not send password reset email. Please try again later.',
+        description: friendlyMessage,
       });
     } finally {
       setIsSending(false);
@@ -58,7 +61,13 @@ export function ForgotPasswordDialog() {
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+        setIsOpen(open);
+        if (!open) {
+            setError(null);
+            setEmail('');
+        }
+    }}>
       <DialogTrigger asChild>
         <button className="text-sm font-medium text-primary hover:underline underline-offset-4">
           Forgot Password?
@@ -84,6 +93,7 @@ export function ForgotPasswordDialog() {
               required
             />
           </div>
+           {error && <p className="text-sm font-medium text-destructive">{error}</p>}
         </div>
         <DialogFooter>
           <DialogClose asChild>
