@@ -59,45 +59,39 @@ export function SignupForm() {
     const usersRef = collection(firestore, 'users');
 
     try {
-        // FIX: Removed username availability check that caused permission errors.
-        // The logic for handling non-unique usernames can be added later if needed,
-        // for example, by using Firestore Security Rules to enforce uniqueness.
-
         // Step 1: Create the user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // Step 2: Update the user's profile in Firebase Auth (e.g., display name)
-        await updateProfile(user, {
-          displayName: fullName,
-        });
-        
-        // Step 3: Create the user document in Firestore
-        const userDocRef = doc(firestore, 'users', user.uid);
-        const userData: Omit<UserProfile, 'officialBadge' | 'lastColorfulNameRequestAt' | 'lastVerificationRequestAt' | 'verificationApplicationStatus' | 'colorfulName'> = {
-          uid: user.uid,
-          displayName: fullName,
-          email: email,
-          username: username,
-          photoURL: user.photoURL ?? '',
-          friends: [],
-          bio: '',
-          isOnline: false,
-          lastSeen: serverTimestamp(),
-          blockedUsers: [],
-          blockedBy: [],
-          verifiedBadge: {
-            showBadge: false,
-            badgeColor: 'blue'
-          },
-          isDisabled: false,
-        };
-        await setDoc(userDocRef, userData, { merge: true });
-        
-        // Step 4: Send verification email
+        // Step 2: Send verification email IMMEDIATELY after user creation
         await sendEmailVerification(user);
 
-        // Step 5: Show success message and sign the user out
+        // Step 3: Update the user's profile in Firebase Auth and create Firestore doc in parallel
+        await Promise.all([
+            updateProfile(user, {
+                displayName: fullName,
+            }),
+            setDoc(doc(firestore, 'users', user.uid), {
+                uid: user.uid,
+                displayName: fullName,
+                email: email,
+                username: username,
+                photoURL: user.photoURL ?? '',
+                friends: [],
+                bio: '',
+                isOnline: false,
+                lastSeen: serverTimestamp(),
+                blockedUsers: [],
+                blockedBy: [],
+                verifiedBadge: {
+                    showBadge: false,
+                    badgeColor: 'blue'
+                },
+                isDisabled: false,
+            } as Omit<UserProfile, 'officialBadge' | 'lastColorfulNameRequestAt' | 'lastVerificationRequestAt' | 'verificationApplicationStatus' | 'colorfulName'>, { merge: true })
+        ]);
+        
+        // Step 4: Show success message and sign the user out
         setMessage("A verification email has been sent. Please check your inbox and verify your email before logging in.");
         (event.target as HTMLFormElement).reset();
         await auth.signOut();
