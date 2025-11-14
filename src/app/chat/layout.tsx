@@ -45,16 +45,35 @@ import {
   AlertDialogTitle,
   AlertDialogFooter,
 } from '@/components/ui/alert-dialog';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, createContext, useContext } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import type { UserProfile } from '@/lib/types';
+import type { UserProfile, Room } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getDatabase, ref, onValue, off, onDisconnect, serverTimestamp as rtdbServerTimestamp, set } from 'firebase/database';
 import { useSound } from '@/hooks/use-sound';
+import { FloatingRoomIndicator } from '@/components/chat/floating-room-indicator';
+
+
+// Context for sharing current room state
+interface RoomContextType {
+  currentRoom: Room | null;
+  setCurrentRoom: (room: Room | null) => void;
+  leaveCurrentRoom: () => void;
+}
+
+const RoomContext = createContext<RoomContextType | null>(null);
+
+export const useRoomContext = () => {
+  const context = useContext(RoomContext);
+  if (!context) {
+    throw new Error('useRoomContext must be used within a ChatAppLayout');
+  }
+  return context;
+};
 
 
 // Custom hook to get user profile data in real-time
@@ -186,6 +205,8 @@ export default function ChatAppLayout({
   const [isAccountDisabled, setAccountDisabled] = useState(false);
   const { toast } = useToast();
   
+  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+
   const handleAccountDisabled = useCallback(() => {
     setAccountDisabled(true);
   }, []);
@@ -196,6 +217,25 @@ export default function ChatAppLayout({
   const playRequestSound = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a');
   const isFirstRequestLoad = useRef(true);
   
+  const leaveCurrentRoom = useCallback(async () => {
+    if (!firestore || !user || !currentRoom) return;
+
+    const memberRef = doc(firestore, 'rooms', currentRoom.id, 'members', user.uid);
+    const roomRef = doc(firestore, 'rooms', currentRoom.id);
+    
+    try {
+        const batch = writeBatch(firestore);
+        batch.delete(memberRef);
+        batch.update(roomRef, { memberCount: -1 });
+        await batch.commit();
+    } catch (error) {
+        console.warn("Could not cleanly leave room on context:", error);
+    } finally {
+       setCurrentRoom(null);
+    }
+  }, [firestore, user, currentRoom]);
+
+
   useEffect(() => {
     if (!firestore || !user?.uid) {
       return;
@@ -235,6 +275,7 @@ export default function ChatAppLayout({
 
   const handleSignOut = async () => {
     if (auth && user && firestore) {
+      await leaveCurrentRoom(); // Leave room before signing out
       const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
       const db = getDatabase();
       const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
@@ -277,95 +318,98 @@ export default function ChatAppLayout({
   const showSidebar = !isMobile || !isChatDetailPage;
 
   return (
-    <>
-    <AlertDialog open={isAccountDisabled}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Account Disabled</AlertDialogTitle>
-            <AlertDialogDescription>
-              Your account has been disabled by an administrator. You will be logged out.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={handleSignOut}>OK</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+    <RoomContext.Provider value={{ currentRoom, setCurrentRoom, leaveCurrentRoom }}>
+      <AlertDialog open={isAccountDisabled}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Account Disabled</AlertDialogTitle>
+              <AlertDialogDescription>
+                Your account has been disabled by an administrator. You will be logged out.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={handleSignOut}>OK</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
-    <div className="flex h-screen bg-background">
-      <SidebarProvider>
-        {showSidebar && (
-          <Sidebar side="left" collapsible="icon" className="group hidden md:flex">
-              <SidebarHeader>
-                  <Link href="/profile" className="h-12 w-full justify-start gap-2 px-2 flex items-center">
-                      <Avatar className="h-8 w-8">
-                      <AvatarImage
-                          src={profile?.photoURL ?? undefined}
-                          alt={profile?.displayName ?? 'user-avatar'}
-                      />
-                      <AvatarFallback>
-                          {getInitials(profile?.displayName)}
-                      </AvatarFallback>
-                      </Avatar>
-                      <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
-                      <span className={cn(
-                        "truncate text-sm font-medium",
-                        profile?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
-                      )}>
-                          {profile?.displayName ?? 'User'}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                          {profile?.email ?? 'No email'}
-                      </span>
-                      </div>
-                  </Link>
-              </SidebarHeader>
-              <SidebarContent>
-              <SidebarMenu>
-                  {menuItems.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                      <Link href={item.href}>
-                      <SidebarMenuButton
-                          isActive={pathname === item.href || (item.href === '/chat' && pathname.startsWith('/chat') && !menuItems.slice(1).some(i => pathname.startsWith(i.href)))}
-                          tooltip={item.label}
-                      >
-                          <item.icon />
-                          <span>{item.label}</span>
-                           {item.id === 'friend-requests' && requestCount > 0 && (
-                              <SidebarMenuBadge>{requestCount}</SidebarMenuBadge>
-                          )}
-                      </SidebarMenuButton>
-                      </Link>
-                  </SidebarMenuItem>
-                  ))}
-              </SidebarMenu>
-              </SidebarContent>
-              <SidebarFooter>
-              <SidebarMenu>
-                  <SidebarMenuItem>
-                    <Link href="/profile" className="w-full">
-                      <SidebarMenuButton tooltip="Settings">
-                          <Settings />
-                          <span>Settings</span>
-                      </SidebarMenuButton>
+      <div className="flex h-screen bg-background">
+        <SidebarProvider>
+          {showSidebar && (
+            <Sidebar side="left" collapsible="icon" className="group hidden md:flex">
+                <SidebarHeader>
+                    <Link href="/profile" className="h-12 w-full justify-start gap-2 px-2 flex items-center">
+                        <Avatar className="h-8 w-8">
+                        <AvatarImage
+                            src={profile?.photoURL ?? undefined}
+                            alt={profile?.displayName ?? 'user-avatar'}
+                        />
+                        <AvatarFallback>
+                            {getInitials(profile?.displayName)}
+                        </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
+                        <span className={cn(
+                          "truncate text-sm font-medium",
+                          profile?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+                        )}>
+                            {profile?.displayName ?? 'User'}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                            {profile?.email ?? 'No email'}
+                        </span>
+                        </div>
                     </Link>
-                  </SidebarMenuItem>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton tooltip="Logout" onClick={handleSignOut}>
-                            <LogOut />
-                            <span>Logout</span>
+                </SidebarHeader>
+                <SidebarContent>
+                <SidebarMenu>
+                    {menuItems.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                        <Link href={item.href}>
+                        <SidebarMenuButton
+                            isActive={pathname === item.href || (item.href === '/chat' && pathname.startsWith('/chat') && !menuItems.slice(1).some(i => pathname.startsWith(i.href)))}
+                            tooltip={item.label}
+                        >
+                            <item.icon />
+                            <span>{item.label}</span>
+                            {item.id === 'friend-requests' && requestCount > 0 && (
+                                <SidebarMenuBadge>{requestCount}</SidebarMenuBadge>
+                            )}
                         </SidebarMenuButton>
+                        </Link>
                     </SidebarMenuItem>
-              </SidebarMenu>
-              </SidebarFooter>
-          </Sidebar>
-        )}
-        <SidebarInset>
-          {children}
-        </SidebarInset>
-      </SidebarProvider>
-    </div>
-    </>
+                    ))}
+                </SidebarMenu>
+                </SidebarContent>
+                <SidebarFooter>
+                <SidebarMenu>
+                    <SidebarMenuItem>
+                      <Link href="/profile" className="w-full">
+                        <SidebarMenuButton tooltip="Settings">
+                            <Settings />
+                            <span>Settings</span>
+                        </SidebarMenuButton>
+                      </Link>
+                    </SidebarMenuItem>
+                      <SidebarMenuItem>
+                          <SidebarMenuButton tooltip="Logout" onClick={handleSignOut}>
+                              <LogOut />
+                              <span>Logout</span>
+                          </SidebarMenuButton>
+                      </SidebarMenuItem>
+                </SidebarMenu>
+                </SidebarFooter>
+            </Sidebar>
+          )}
+          <SidebarInset>
+            {children}
+            {currentRoom && !pathname.startsWith(`/chat/rooms/${currentRoom.id}`) && (
+              <FloatingRoomIndicator room={currentRoom} />
+            )}
+          </SidebarInset>
+        </SidebarProvider>
+      </div>
+    </RoomContext.Provider>
   );
 }
 
@@ -392,5 +436,3 @@ const menuItems = [
      label: 'Call History',
   },
 ];
-
-    
