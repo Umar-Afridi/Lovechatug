@@ -8,7 +8,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // यह फंक्शन चेक करता है कि درخواست करने والا یوزر ہی دستاویز کا مالک ہے۔
+    // यह फंक्शन चेक करता है कि درخواست करने वाला یوزر ہی دستاویز کا مالک ہے۔
     // It checks if the requesting user is the owner of the document (matching UID).
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
@@ -73,7 +73,8 @@ service cloud.firestore {
     
     // 6. وائس چیٹ رومز کا مجموعہ (Voice Chat Rooms Collection)
     match /rooms/{roomId} {
-        allow read: if isSignedIn();
+        allow get: if isSignedIn(); // Changed from `read` to `get` for single doc reads
+        allow list: if isSignedIn(); // Added rule to allow listing all rooms
         allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
         allow update: if isRoomOwner(roomId);
         
@@ -91,5 +92,4 @@ service cloud.firestore {
     }
   }
 }
-
     
