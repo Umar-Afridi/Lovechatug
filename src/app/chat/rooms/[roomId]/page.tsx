@@ -19,6 +19,7 @@ import {
   UserPlus,
   VolumeX,
   User,
+  ShieldAlert,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -48,6 +49,7 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { RoomInviteSheet } from '@/components/chat/room-invite-sheet';
 import { RoomUserProfileSheet } from '@/components/chat/room-user-profile-sheet';
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 
 const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLockToggle, isLocked, onInvite }: { 
@@ -101,7 +103,7 @@ const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLock
     </Popover>
 );
 
-const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, onMuteToggle, onStandUp, onViewProfile }: { 
+const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, onMuteToggle, onStandUp, onViewProfile, onKickFromRoom }: { 
     member: RoomMember | null;
     userProfile: UserProfile | null;
     role?: 'owner' | 'super' | 'member'; 
@@ -111,6 +113,7 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
     onMuteToggle: (userId: string, isMuted: boolean) => void;
     onStandUp: () => void;
     onViewProfile: (user: UserProfile) => void;
+    onKickFromRoom: (userId: string) => void;
 }) => {
     
     if (!userProfile || !member) return null;
@@ -186,9 +189,15 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                 </DropdownMenuItem>
                 {canManage && <DropdownMenuSeparator />}
                 {canManage && (
-                    <DropdownMenuItem className="text-red-500 focus:text-red-500" onClick={() => onKick(member.userId)}>
+                    <DropdownMenuItem className="focus:bg-destructive/10" onClick={() => onKick(member.userId)}>
                         <UserX className="mr-2 h-4 w-4" />
                         <span>Remove from Mic</span>
+                    </DropdownMenuItem>
+                )}
+                 {canManage && (
+                    <DropdownMenuItem className="text-red-500 focus:text-red-500" onClick={() => onKickFromRoom(member.userId)}>
+                        <ShieldAlert className="mr-2 h-4 w-4" />
+                        <span>Kick from Room</span>
                     </DropdownMenuItem>
                 )}
             </DropdownMenuContent>
@@ -253,6 +262,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   
+  const [isKicked, setIsKicked] = useState(false);
+
   const joinTimestampRef = useRef(Timestamp.now());
 
   const chatViewportRef = useRef<HTMLDivElement>(null);
@@ -289,7 +300,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   
   // Fetch Room and Member data
   useEffect(() => {
-    if (!firestore || !roomId) return;
+    if (!firestore || !roomId || !authUser) return;
     setLoading(true);
 
     const roomDocRef = doc(firestore, 'rooms', roomId);
@@ -299,6 +310,14 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         if (docSnap.exists()) {
             const roomData = { id: docSnap.id, ...docSnap.data() } as Room;
             setRoom(roomData);
+
+            // Check if current user has been kicked
+            const kickedInfo = roomData.kickedUsers?.[authUser.uid];
+            if (kickedInfo) {
+                // For now, we just kick them out. In future, we can check the timestamp.
+                setIsKicked(true);
+            }
+
         } else {
             toast({ title: "Room not found", variant: "destructive" });
             router.push('/chat/rooms');
@@ -374,7 +393,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         unsubMessages();
     };
 
-  }, [firestore, roomId, router, toast, isOwner, authUser, memberProfiles, room?.ownerId]);
+  }, [firestore, roomId, router, toast, authUser, memberProfiles, room?.ownerId, isOwner]);
   
   useEffect(() => {
     if(chatViewportRef.current) {
@@ -409,6 +428,14 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             router.push('/chat/rooms');
         });
     };
+    
+    // This effect runs when isKicked becomes true
+    useEffect(() => {
+        if (isKicked) {
+            handleLeaveRoom();
+        }
+    }, [isKicked, handleLeaveRoom]);
+
 
   useEffect(() => {
     // This effect handles leaving the room when the component unmounts (e.g., browser close)
@@ -419,7 +446,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     window.addEventListener('beforeunload', cleanup);
     return () => {
       window.removeEventListener('beforeunload', cleanup);
-      cleanup(); // Also run on component unmount (e.g. navigating away)
+      handleLeaveRoom(); // Also run on component unmount (e.g. navigating away)
     };
   }, [handleLeaveRoom]);
 
@@ -464,7 +491,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         }
     };
   
-  const handleKickUser = async (userIdToKick: string) => {
+  const handleKickUserFromMic = async (userIdToKick: string) => {
       if (!isOwner || !firestore || !roomId) return;
       const memberRef = doc(firestore, 'rooms', roomId, 'members', userIdToKick);
       try {
@@ -475,6 +502,35 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       }
   };
   
+  const handleKickUserFromRoom = async (userIdToKick: string) => {
+    if (!isOwner || !firestore || !room || !authUser || userIdToKick === authUser.uid) return;
+
+    const roomRef = doc(firestore, 'rooms', room.id);
+    const memberRef = doc(firestore, 'rooms', room.id, 'members', userIdToKick);
+
+    try {
+        const batch = writeBatch(firestore);
+
+        // Remove user from the members subcollection
+        batch.delete(memberRef);
+        
+        // Add user to the kickedUsers map in the room document
+        const kickedField = `kickedUsers.${userIdToKick}`;
+        batch.update(roomRef, {
+            memberCount: increment(-1),
+            [kickedField]: serverTimestamp()
+        });
+
+        await batch.commit();
+        toast({ title: 'User Kicked', description: 'The user has been removed from the room.' });
+
+    } catch (error) {
+        console.error('Error kicking user from room:', error);
+        const permissionError = new FirestorePermissionError({ path: roomRef.path, operation: 'update' });
+        errorEmitter.emit('permission-error', permissionError);
+    }
+};
+
   const handleMuteToggle = async (userIdToMute: string, shouldMute: boolean) => {
       if ((!isOwner && userIdToMute !== authUser?.uid) || !firestore || !roomId) return;
       const memberRef = doc(firestore, 'rooms', roomId, 'members', userIdToMute);
@@ -596,6 +652,18 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   return (
     <>
+      <AlertDialog open={isKicked}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>You have been kicked from the room</AlertDialogTitle>
+            <AlertDialogDescription>
+              The room owner has removed you from this room.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogAction onClick={() => router.push('/chat/rooms')}>OK</AlertDialogAction>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <RoomInviteSheet 
         isOpen={isInviteSheetOpen} 
         onOpenChange={setInviteSheetOpen}
@@ -645,13 +713,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
               <div className="p-4 md:p-6 space-y-8">
                   <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
                       {ownerMember && ownerProfile && ownerMember.micSlot === 0 ? (
-                          <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp} onViewProfile={handleViewProfile}/>
+                          <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUserFromMic} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp} onViewProfile={handleViewProfile} onKickFromRoom={handleKickUserFromRoom} />
                       ) : (
                           <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={!isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
                       )}
 
                       {superAdminMember && superAdminProfile ? (
-                          <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp} onViewProfile={handleViewProfile}/>
+                          <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUserFromMic} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp} onViewProfile={handleViewProfile} onKickFromRoom={handleKickUserFromRoom}/>
                       ) : (
                           <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
                       )}
@@ -675,7 +743,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                           const userProfileInSlot = memberInSlot ? memberProfiles.get(memberInSlot.userId) : null;
                           
                           if (memberInSlot && userProfileInSlot) {
-                              return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp} onViewProfile={handleViewProfile} />
+                              return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUserFromMic} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp} onViewProfile={handleViewProfile} onKickFromRoom={handleKickUserFromRoom} />
                           }
                           
                           return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(slotNumber)} onInvite={handleInvite} />

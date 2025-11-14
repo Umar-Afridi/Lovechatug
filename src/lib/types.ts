@@ -106,6 +106,9 @@ export type Room = {
     members: string[];
     memberCount: number;
     lockedSlots?: number[];
+    kickedUsers?: {
+      [userId: string]: any; // Store server timestamp for when a user was kicked
+    }
 };
 
 export type RoomMember = {
@@ -122,5 +125,3 @@ export type RoomMessage = {
   content: string;
   timestamp: any; // Firestore ServerTimestamp
 };
-
-    

@@ -8,7 +8,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // यह फंक्शन चेक करता है कि درخواست करने वाला یوزر ہی دستاویز کا مالک ہے۔
+    // यह फंक्शन चेक करता है कि درخواست کرنے वाला یوزر ہی دستاویز کا مالک ہے۔
     // It checks if the requesting user is the owner of the document (matching UID).
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
