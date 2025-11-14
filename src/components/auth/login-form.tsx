@@ -65,14 +65,8 @@ export function LoginForm() {
                 verifiedBadge: { showBadge: false, badgeColor: 'blue' },
                 isDisabled: false,
             };
-            await setDoc(userDocRef, newUserProfile, { merge: true }).catch((serverError) => {
-              const permissionError = new FirestorePermissionError({
-                path: userDocRef.path,
-                operation: 'create',
-                requestResourceData: newUserProfile,
-              });
-              errorEmitter.emit('permission-error', permissionError);
-            });
+            await setDoc(userDocRef, newUserProfile, { merge: true });
+            router.push('/chat'); // Redirect new user to chat
         } else {
              const userData = docSnap.data() as UserProfile;
               if (userData.isDisabled) {
@@ -85,8 +79,8 @@ export function LoginForm() {
                   });
                   return;
               }
+              router.push('/chat'); // Redirect existing user to chat
         }
-        router.push('/chat');
 
     } catch (error: any) {
         if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
