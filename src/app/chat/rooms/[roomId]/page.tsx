@@ -349,9 +349,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       const roomRef = doc(firestore, 'rooms', roomId);
-      const batch = writeBatch(firestore);
       
       try {
+        const batch = writeBatch(firestore);
+        
         // Remove the user from the members subcollection
         batch.delete(memberRef);
         // Atomically remove the user's ID from the members array on the room document
@@ -377,12 +378,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
           return;
       }
       
-      const canSit = !currentUserMemberInfo || currentUserMemberInfo.micSlot === null || isOwner;
-      if (!canSit) {
-        toast({ title: 'Already Seated', description: 'You must leave your current seat first.', variant: 'destructive'});
-        return;
-      }
-
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       
       const newMemberData = {
@@ -503,8 +498,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const superAdminMember = members.find(m => m.micSlot === -1);
   const superAdminProfile = superAdminMember ? memberProfiles.get(superAdminMember.userId) : null;
 
-  const isUserSeated = currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined;
-
   return (
     <>
       <RoomInviteSheet 
@@ -549,13 +542,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                       {ownerMember && ownerProfile && ownerMember.micSlot === 0 ? (
                           <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                       ) : (
-                          <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={(isUserSeated && !isOwner)} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
+                          <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
                       )}
 
                       {superAdminMember && superAdminProfile ? (
                           <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                       ) : (
-                          <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={isUserSeated && !isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
+                          <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
                       )}
                   </div>
                   
@@ -582,7 +575,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                               return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                           }
                           
-                          return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserSeated && !isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(slotNumber)} onInvite={handleInvite} />
+                          return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(slotNumber)} onInvite={handleInvite} />
                       })}
                   </div>
               </div>
