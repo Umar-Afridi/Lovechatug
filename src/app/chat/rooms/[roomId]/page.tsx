@@ -285,7 +285,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const [isKicked, setIsKicked] = useState(false);
 
   const joinTimestampRef = useRef(Timestamp.now());
-  const prevMemberIdsRef = useRef<Set<string>>(new Set());
+  const prevMemberIdsRef = useRef<string[]>([]);
 
   const chatViewportRef = useRef<HTMLDivElement>(null);
 
@@ -347,6 +347,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     
     const unsubMembers = onSnapshot(membersColRef, async (snapshot) => {
         const membersData = snapshot.docs.map(d => d.data() as RoomMember);
+        const memberIds = membersData.map(m => m.userId);
+
         setMembers(membersData);
         
         const ownerMember = membersData.find(m => m.userId === room?.ownerId);
@@ -359,10 +361,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             }, { merge: true });
         }
 
-        const currentMemberIds = new Set(membersData.map(m => m.userId));
-        const newMemberIds = membersData
-            .map(m => m.userId)
-            .filter(id => !memberProfiles.has(id));
+        const newMemberIds = memberIds.filter(id => !memberProfiles.has(id));
 
         const updatedProfiles = new Map(memberProfiles);
         let profilesChanged = false;
@@ -378,67 +377,63 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             });
         }
         
-        const prevMemberIds = prevMemberIdsRef.current;
-        const joinedUserIds = [...currentMemberIds].filter(id => !prevMemberIds.has(id));
-        if (joinedUserIds.length > 0) {
-            const newJoinMessages: RoomMessage[] = [];
-            for (const userId of joinedUserIds) {
-                let profile = updatedProfiles.get(userId);
-                if (!profile) {
-                    const userSnap = await getDoc(doc(firestore, 'users', userId));
-                    if (userSnap.exists()) {
-                        profile = userSnap.data() as UserProfile;
-                        updatedProfiles.set(userId, profile);
-                        profilesChanged = true;
-                    }
-                }
-                if (profile) {
-                    newJoinMessages.push({
-                        id: `notification-join-${Date.now()}-${profile.uid}`,
-                        senderId: 'system',
-                        senderName: 'System',
-                        senderPhotoURL: '',
-                        content: `${profile.displayName} has joined the room`,
-                        timestamp: serverTimestamp(),
-                        type: 'notification',
-                    });
+        const prevMemberIdList = prevMemberIdsRef.current;
+        const joinedUserIds = memberIds.filter(id => !prevMemberIdList.includes(id));
+        const leftUserIds = prevMemberIdList.filter(id => !memberIds.includes(id));
+
+        const newNotifications: RoomMessage[] = [];
+
+        for (const userId of joinedUserIds) {
+            let profile = updatedProfiles.get(userId);
+            if (!profile) { // Fetch if not already fetched
+                const userSnap = await getDoc(doc(firestore, 'users', userId));
+                if (userSnap.exists()) {
+                    profile = userSnap.data() as UserProfile;
+                    updatedProfiles.set(userId, profile);
+                    profilesChanged = true;
                 }
             }
-            if (newJoinMessages.length > 0) {
-                 setChatMessages(prev => [...prev, ...newJoinMessages]);
+            if (profile) {
+                newNotifications.push({
+                    id: `notification-join-${Date.now()}-${profile.uid}`,
+                    senderId: 'system',
+                    senderName: 'System',
+                    senderPhotoURL: '',
+                    content: `${profile.displayName} has joined the room`,
+                    timestamp: serverTimestamp(),
+                    type: 'notification',
+                });
             }
         }
         
-        const leftUserIds = [...prevMemberIds].filter(id => !currentMemberIds.has(id));
-         if (leftUserIds.length > 0) {
-            const newLeaveMessages: RoomMessage[] = [];
-            for (const userId of leftUserIds) {
-                const profile = memberProfiles.get(userId);
-                if (profile) {
-                    newLeaveMessages.push({
-                        id: `notification-leave-${Date.now()}-${profile.uid}`,
-                        senderId: 'system',
-                        senderName: 'System',
-                        senderPhotoURL: '',
-                        content: `${profile.displayName} has left the room`,
-                        timestamp: serverTimestamp(),
-                        type: 'notification',
-                    });
-                }
-            }
-             if (newLeaveMessages.length > 0) {
-                setChatMessages(prev => [...prev, ...newLeaveMessages]);
+         for (const userId of leftUserIds) {
+            const profile = memberProfiles.get(userId);
+            if (profile) {
+                 newNotifications.push({
+                    id: `notification-leave-${Date.now()}-${profile.uid}`,
+                    senderId: 'system',
+                    senderName: 'System',
+                    senderPhotoURL: '',
+                    content: `${profile.displayName} has left the room`,
+                    timestamp: serverTimestamp(),
+                    type: 'notification',
+                });
             }
         }
         
+        if (newNotifications.length > 0) {
+            setChatMessages(prev => [...prev, ...newNotifications].sort((a,b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0)));
+        }
+
         if (profilesChanged) {
             setMemberProfiles(updatedProfiles);
         }
-        prevMemberIdsRef.current = currentMemberIds;
+        
+        prevMemberIdsRef.current = memberIds;
         setLoading(false);
     }, (error) => {
         const permissionError = new FirestorePermissionError({path: membersColRef.path, operation: 'list'});
-        errorEmitter.emit('permission-error', permissionError);
+        errorEmitter.emit('permission-error', error);
         setLoading(false);
     });
     
@@ -507,6 +502,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   }, [firestore, authUser, roomId]);
 
     const handleNavigateBack = () => {
+        handleLeaveRoom();
         router.push('/chat/rooms');
     };
     
