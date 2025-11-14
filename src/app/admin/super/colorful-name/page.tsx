@@ -66,7 +66,10 @@ export default function ManageColorfulNamePage() {
     const q = query(usersRef);
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setAllUsers(snapshot.docs.map((d) => d.data() as UserProfile));
+      const usersList = snapshot.docs
+        .map((d) => d.data() as UserProfile)
+        .filter(u => !u.officialBadge?.isOfficial);
+      setAllUsers(usersList);
       setLoading(false);
     }, (error) => {
         const permissionError = new FirestorePermissionError({ path: 'users', operation: 'list'});
