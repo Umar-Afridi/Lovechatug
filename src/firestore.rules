@@ -74,7 +74,7 @@ service cloud.firestore {
     // 6. وائس چیٹ رومز کا مجموعہ (Voice Chat Rooms Collection)
     match /rooms/{roomId} {
         allow get: if isSignedIn();
-        allow list: if isSignedIn();
+        allow list: if isSignedIn(); // This rule allows any signed-in user to list all rooms.
         allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
         allow update: if isRoomOwner(roomId);
         allow delete: if isRoomOwner(roomId);

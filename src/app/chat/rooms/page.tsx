@@ -56,34 +56,10 @@ export default function RoomsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (userLoading) {
-            setLoading(true);
-            return;
-        }
-        if (!firestore) {
-            setLoading(false);
-            return;
-        }
-
-        const roomsCollectionRef = collection(firestore, 'rooms');
-
-        let unsubMyRoom = () => {};
-        if (user) {
-            // Listener for all rooms to find the user's own room
-            const myRoomQuery = query(roomsCollectionRef, where('ownerId', '==', user.uid));
-            unsubMyRoom = onSnapshot(myRoomQuery, (snapshot) => {
-                if (!snapshot.empty) {
-                    const userRoom = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Room;
-                    setMyRoom(userRoom);
-                } else {
-                    setMyRoom(null);
-                }
-            });
-        }
-
-
+        if (!firestore) return;
+    
         // Listener for popular rooms
-        // This query requires a composite index on ownerIsOfficial (desc) and memberCount (desc)
+        const roomsCollectionRef = collection(firestore, 'rooms');
         const popularRoomsQuery = query(
             roomsCollectionRef,
             orderBy('ownerIsOfficial', 'desc'),
@@ -94,11 +70,12 @@ export default function RoomsPage() {
             (snapshot) => {
                 const allPublicRooms = snapshot.docs
                     .map(doc => ({ id: doc.id, ...doc.data() } as Room))
-                     // Also filter out empty rooms and own room on the client-side
-                    .filter(room => (!user || room.ownerId !== user.uid) && room.memberCount > 0);
+                    .filter(room => room.memberCount > 0);
                 
                 setPublicRooms(allPublicRooms);
-                setLoading(false);
+                
+                // If user is also loaded, stop loading.
+                if(!userLoading) setLoading(false);
             },
             (error) => {
                 console.error("Error fetching popular rooms: ", error);
@@ -109,10 +86,54 @@ export default function RoomsPage() {
         );
         
         return () => {
-            unsubMyRoom();
             unsubPublicRooms();
         };
-    }, [firestore, user, userLoading]);
+    }, [firestore, userLoading]);
+
+    useEffect(() => {
+        if (userLoading) {
+            setLoading(true);
+            return;
+        }
+        if (!firestore) {
+            setLoading(false);
+            return;
+        }
+
+        let unsubMyRoom = () => {};
+        if (user) {
+            // Find the user's room from the already fetched public rooms
+            const userRoom = publicRooms.find(room => room.ownerId === user.uid);
+            if (userRoom) {
+                setMyRoom(userRoom);
+            } else {
+                 // If not found, it might be an empty room, so query for it.
+                 const roomsCollectionRef = collection(firestore, 'rooms');
+                 const myRoomQuery = query(roomsCollectionRef, where('ownerId', '==', user.uid));
+                 unsubMyRoom = onSnapshot(myRoomQuery, (snapshot) => {
+                    if (!snapshot.empty) {
+                        const userRoomData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Room;
+                        setMyRoom(userRoomData);
+                    } else {
+                        setMyRoom(null);
+                    }
+                });
+            }
+            // Filter out own room from public list
+            setPublicRooms(prev => prev.filter(r => r.ownerId !== user.uid));
+        } else {
+            setMyRoom(null);
+        }
+
+        // Data is ready
+        setLoading(false);
+
+        return () => {
+            unsubMyRoom();
+        }
+
+    }, [user, userLoading, firestore, publicRooms]);
+
 
   if (loading) {
       return (
