@@ -39,28 +39,30 @@ const RoomCard = ({ room }: { room: Room }) => {
 export default function RoomsPage() {
     const { user } = useUser();
     const firestore = useFirestore();
-    const [rooms, setRooms] = useState<Room[]>([]);
-    const [userHasRoom, setUserHasRoom] = useState<boolean | null>(null);
+    const [myRoom, setMyRoom] = useState<Room | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!firestore) return;
+        if (!firestore || !user) {
+            setLoading(false);
+            return;
+        }
 
-        const roomsQuery = query(collection(firestore, 'rooms'));
+        const roomsQuery = query(collection(firestore, 'rooms'), where("ownerId", "==", user.uid));
+        
         const unsubscribe = onSnapshot(roomsQuery, 
             (snapshot) => {
-                const roomsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
-                setRooms(roomsData);
-
-                if(user) {
-                    const currentUserRoom = roomsData.find(room => room.ownerId === user.uid);
-                    setUserHasRoom(!!currentUserRoom);
+                if (snapshot.empty) {
+                    setMyRoom(null);
+                } else {
+                    const roomData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Room;
+                    setMyRoom(roomData);
                 }
                 setLoading(false);
             },
             (error) => {
-                console.error("Error fetching rooms: ", error);
-                const permissionError = new FirestorePermissionError({path: 'rooms', operation: 'list'});
+                console.error("Error fetching user's room: ", error);
+                const permissionError = new FirestorePermissionError({path: `rooms query for user ${user.uid}`, operation: 'list'});
                 errorEmitter.emit('permission-error', permissionError);
                 setLoading(false);
             }
@@ -72,7 +74,7 @@ export default function RoomsPage() {
   if (loading) {
       return (
         <div className="flex h-full flex-col items-center justify-center p-8 text-center bg-muted/20">
-            <p className="text-muted-foreground">Loading rooms...</p>
+            <p className="text-muted-foreground">Loading your room...</p>
         </div>
       )
   }
@@ -80,8 +82,12 @@ export default function RoomsPage() {
   return (
     <ScrollArea className="h-full">
         <div className="p-4 md:p-6">
-            {!userHasRoom && (
-                 <div className="flex h-full flex-col items-center justify-center p-8 text-center bg-muted/20 rounded-lg mb-6">
+            {myRoom ? (
+                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    <RoomCard room={myRoom} />
+                </div>
+            ) : (
+                 <div className="flex h-full flex-col items-center justify-center p-8 text-center bg-muted/20 rounded-lg">
                     <h2 className="text-2xl font-bold mb-2">Voice Rooms</h2>
                     <p className="text-muted-foreground mb-6 max-w-sm">
                         Create a room to talk with friends, host events, or just hang out.
@@ -94,18 +100,6 @@ export default function RoomsPage() {
                     </Button>
                 </div>
             )}
-           
-            {rooms.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                    {rooms.map(room => (
-                        <RoomCard key={room.id} room={room} />
-                    ))}
-                </div>
-            ) : userHasRoom === false ? (
-                 <div className="text-center text-muted-foreground mt-8">
-                    <p>No active rooms right now. Why not create one?</p>
-                </div>
-            ) : null}
         </div>
     </ScrollArea>
   );
