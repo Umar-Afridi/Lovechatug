@@ -49,13 +49,18 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
                 router.push(`/chat/rooms/${roomId}`);
                 return;
             }
-            setRoom({ id: docSnap.id, ...roomData });
-            setRoomName(roomData.name);
-            setImagePreview(roomData.photoURL || null);
+            const fullRoomData = { id: docSnap.id, ...roomData };
+            setRoom(fullRoomData);
+            // Only set these on initial load or if they haven't been edited by the user yet
+            if (loading) {
+              setRoomName(fullRoomData.name);
+              setImagePreview(fullRoomData.photoURL || null);
+            }
             setLoading(false);
         } else {
             toast({ title: "Room not found", variant: "destructive" });
             router.push('/chat/rooms');
+            setLoading(false);
         }
     }, (error) => {
         console.error("Error fetching room settings:", error);
@@ -64,7 +69,7 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
     });
 
     return () => unsubscribe();
-  }, [firestore, roomId, user, router, toast]);
+  }, [firestore, roomId, user, router, toast, loading]);
 
   
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
