@@ -21,7 +21,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Shield } from 'lucide-react';
 
 export default function RoomSettingsPage({ params }: { params: { roomId: string } }) {
-  const { roomId } = params;
+  const { roomId } = React.use(params);
   const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);

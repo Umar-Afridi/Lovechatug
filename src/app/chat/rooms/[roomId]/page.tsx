@@ -203,7 +203,7 @@ const RoomChatMessage = ({ message }: { message: RoomMessage }) => (
 
 
 export default function RoomPage({ params }: { params: { roomId: string } }) {
-  const { roomId } = params;
+  const { roomId } = React.use(params);
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -307,7 +307,12 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         await updateDoc(memberRef, { micSlot: null });
         router.push('/chat/rooms');
       } catch(error) {
-        const permissionError = new FirestorePermissionError({path: memberRef.path, operation: 'delete'});
+        // If doc doesn't exist, it's fine, just go back.
+        if((error as any).code === 'not-found') {
+            router.push('/chat/rooms');
+            return;
+        }
+        const permissionError = new FirestorePermissionError({path: memberRef.path, operation: 'update'});
         errorEmitter.emit('permission-error', permissionError);
       }
   };
@@ -470,7 +475,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             <div className="p-4 md:p-6 space-y-8">
                 {/* Owner & Super Admin Mics */}
                 <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
-                     {ownerMember && ownerProfile ? (
+                     {ownerMember && ownerProfile && ownerMember.micSlot === 0 ? (
                         <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                     ) : (
                         <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={(isUserSeated && !isOwner)} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
