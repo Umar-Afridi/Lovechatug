@@ -175,30 +175,37 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                     <User className="mr-2 h-4 w-4" />
                     <span>View Profile</span>
                  </DropdownMenuItem>
-                 {(isCurrentUser || canManage) && <DropdownMenuSeparator />}
+                 
                  {isCurrentUser && (
-                     <DropdownMenuItem onClick={onStandUp}>
-                        <UserX className="mr-2 h-4 w-4" />
-                        <span>Leave Mic</span>
-                    </DropdownMenuItem>
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => onMuteToggle(member.userId, !member.isMuted)}>
+                            {member.isMuted ? <Volume2 className="mr-2 h-4 w-4" /> : <MicOff className="mr-2 h-4 w-4" />}
+                            <span>{member.isMuted ? 'Unmute' : 'Mute'}</span>
+                        </DropdownMenuItem>
+                         <DropdownMenuItem onClick={onStandUp}>
+                            <UserX className="mr-2 h-4 w-4" />
+                            <span>Leave Mic</span>
+                        </DropdownMenuItem>
+                    </>
                  )}
-                 {(isCurrentUser || canManage) && <DropdownMenuSeparator />}
-                <DropdownMenuItem onClick={() => onMuteToggle(member.userId, !member.isMuted)} disabled={!canManage && !isCurrentUser}>
-                    {member.isMuted ? <Volume2 className="mr-2 h-4 w-4" /> : <MicOff className="mr-2 h-4 w-4" />}
-                    <span>{member.isMuted ? 'Unmute' : 'Mute'} {isCurrentUser ? "" : "User"}</span>
-                </DropdownMenuItem>
-                {canManage && <DropdownMenuSeparator />}
+                 
                 {canManage && (
-                    <DropdownMenuItem className="focus:bg-destructive/10" onClick={() => onKick(member.userId)}>
-                        <UserX className="mr-2 h-4 w-4" />
-                        <span>Remove from Mic</span>
-                    </DropdownMenuItem>
-                )}
-                 {canManage && (
-                    <DropdownMenuItem className="text-red-500 focus:text-red-500" onClick={() => onKickFromRoom(member.userId)}>
-                        <ShieldAlert className="mr-2 h-4 w-4" />
-                        <span>Kick from Room</span>
-                    </DropdownMenuItem>
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => onMuteToggle(member.userId, !member.isMuted)}>
+                            {member.isMuted ? <Volume2 className="mr-2 h-4 w-4" /> : <MicOff className="mr-2 h-4 w-4" />}
+                            <span>{member.isMuted ? 'Unmute' : 'Mute'} User</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="focus:bg-destructive/10" onClick={() => onKick(member.userId)}>
+                            <UserX className="mr-2 h-4 w-4" />
+                            <span>Remove from Mic</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-red-500 focus:text-red-500" onClick={() => onKickFromRoom(member.userId)}>
+                            <ShieldAlert className="mr-2 h-4 w-4" />
+                            <span>Kick from Room</span>
+                        </DropdownMenuItem>
+                    </>
                 )}
             </DropdownMenuContent>
         </DropdownMenu>
@@ -424,9 +431,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   }, [firestore, authUser, roomId]);
 
     const handleNavigateBack = () => {
-        handleLeaveRoom().finally(() => {
-            router.push('/chat/rooms');
-        });
+        router.push('/chat/rooms');
     };
     
     // This effect runs when isKicked becomes true
