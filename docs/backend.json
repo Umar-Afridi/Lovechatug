@@ -285,6 +285,57 @@
             }
         },
         "required": ["email", "deletedAt"]
+    },
+    "Room": {
+      "title": "Voice Chat Room",
+      "description": "Represents a voice chat room created by a user.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the room."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "The UID of the user who owns the room."
+        },
+        "photoURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of the room's profile picture."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "members": {
+          "type": "array",
+          "description": "An array of UIDs of the users currently in the room.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["name", "ownerId", "createdAt"]
+    },
+    "RoomMember": {
+        "title": "Room Member",
+        "description": "Represents a user's status within a specific voice chat room.",
+        "type": "object",
+        "properties": {
+            "userId": {
+                "type": "string"
+            },
+            "micSlot": {
+                "type": "number",
+                "description": "The mic slot number the user is occupying (1-8). 0 for owner, -1 for super admin."
+            },
+            "isMuted": {
+                "type": "boolean",
+                "description": "Whether the user is currently muted."
+            }
+        },
+        "required": ["userId", "micSlot", "isMuted"]
     }
   },
   "auth": {
@@ -326,6 +377,18 @@
             "$ref": "#/entities/DeletedUser"
         },
         "description": "Stores the emails of users who have deleted their accounts to prevent re-registration."
+    },
+    "/rooms/{roomId}": {
+      "schema": {
+        "$ref": "#/entities/Room"
+      },
+      "description": "Collection for all voice chat rooms."
+    },
+    "/rooms/{roomId}/members/{userId}": {
+        "schema": {
+            "$ref": "#/entities/RoomMember"
+        },
+        "description": "Sub-collection for members within a specific room."
     }
   }
 }
