@@ -3,7 +3,7 @@
 import { useState, useRef, ChangeEvent, useEffect } from 'react';
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Camera, Image as ImageIcon, Save } from 'lucide-react';
+import { ArrowLeft, Camera, Image as ImageIcon, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,10 +12,13 @@ import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import type { Room } from '@/lib/types';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Shield } from 'lucide-react';
 
 export default function RoomSettingsPage({ params }: { params: { roomId: string } }) {
   const { roomId } = React.use(params);
@@ -34,7 +37,9 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
 
   useEffect(() => {
     if (!firestore || !roomId || !user) {
-        router.push('/chat/rooms');
+        // If any dependency is missing, don't proceed.
+        // The router.push can cause loops if not handled carefully.
+        // It's better to let the user get redirected by a higher-level component.
         return;
     };
 
@@ -55,6 +60,10 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
             toast({ title: "Room not found", variant: "destructive" });
             router.push('/chat/rooms');
         }
+    }, (error) => {
+        console.error("Error fetching room settings:", error);
+        toast({ title: "Error", description: "Could not load room settings.", variant: "destructive"});
+        router.push('/chat/rooms');
     });
 
     return () => unsubscribe();
@@ -126,6 +135,30 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
     }
   };
 
+  const handleDeleteRoom = async () => {
+    if (!firestore || !room) return;
+
+    setIsSaving(true);
+    try {
+      const roomRef = doc(firestore, 'rooms', room.id);
+      await deleteDoc(roomRef);
+      toast({
+        title: 'Room Deleted',
+        description: 'Your room has been permanently deleted.',
+      });
+      router.push('/chat/rooms');
+    } catch (error: any) {
+      console.error("Error deleting room: ", error);
+      if (error.code === 'permission-denied') {
+          const permissionError = new FirestorePermissionError({path: `rooms/${room.id}`, operation: 'delete'});
+          errorEmitter.emit('permission-error', permissionError);
+      } else {
+           toast({ title: 'Error', description: 'Could not delete the room. Please try again.', variant: 'destructive'});
+      }
+      setIsSaving(false);
+    }
+  }
+
   if (loading) {
       return (
           <div className="flex h-screen items-center justify-center">
@@ -191,7 +224,40 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
             />
           </div>
 
-          {/* Placeholder for future settings */}
+          <div className="space-y-4">
+             <Alert>
+                <Shield className="h-4 w-4" />
+                <AlertTitle>Security Notice</AlertTitle>
+                <AlertDescription>
+                    Currently, all rooms are public. Room locking and password features are coming soon!
+                </AlertDescription>
+            </Alert>
+          </div>
+          
+           <div className="space-y-2 pt-8">
+            <AlertDialog>
+                <AlertDialogTrigger asChild>
+                    <Button variant="destructive" className="w-full">
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete Room
+                    </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This will permanently delete your room. All data will be lost and this action cannot be undone.
+                    </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteRoom} className="bg-destructive hover:bg-destructive/90">
+                        Yes, Delete Room
+                    </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+           </div>
         </div>
       </main>
     </div>
