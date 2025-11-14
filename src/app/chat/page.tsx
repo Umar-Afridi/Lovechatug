@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { Search, MessageSquare, PlusSquare, UserPlus, Phone, Settings } from 'lucide-react';
+import { Search, MessageSquare, PlusSquare, UserPlus, Phone, Settings, Users } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -351,7 +351,7 @@ export default function ChatPage() {
       },
       (serverError) => {
         const permissionError = new FirestorePermissionError({ path: incomingRequestsRef.path, operation: 'list' });
-        errorEmitter.emit('permission-error', permissionError);
+        errorEmitter.emit('permission-error', serverError);
       }
     );
     
@@ -364,7 +364,7 @@ export default function ChatPage() {
         setSentRequests(requests);
     }, (serverError) => {
         const permissionError = new FirestorePermissionError({ path: sentRequestsRef.path, operation: 'list' });
-        errorEmitter.emit('permission-error', permissionError);
+        errorEmitter.emit('permission-error', serverError);
     });
 
     return () => {
@@ -421,7 +421,7 @@ export default function ChatPage() {
                 path: usersRef.path,
                 operation: 'list',
             });
-            errorEmitter.emit('permission-error', permissionError);
+            errorEmitter.emit('permission-error', serverError);
         }
       }
     };
@@ -632,5 +632,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    
