@@ -3,7 +3,7 @@
 import { useState, useRef, ChangeEvent, useEffect } from 'react';
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Camera, Image as ImageIcon, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, Camera, Image as ImageIcon, Save, Trash2, Palette, Lock, UserCog } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -53,7 +53,6 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
             const fullRoomData = { id: docSnap.id, ...roomData };
             setRoom(fullRoomData);
             
-            // Only set form state on the very first load to avoid overwriting user input
             if (initialLoadRef.current) {
               setRoomName(fullRoomData.name);
               setImagePreview(fullRoomData.photoURL || null);
@@ -106,7 +105,6 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
     try {
         let photoURL = room.photoURL || '';
 
-        // Check if the image preview is a new base64 image
         if (imagePreview && imagePreview.startsWith('data:image')) {
             const storage = getStorage();
             const imageRef = storageRef(storage, `room-avatars/${room.id}_${Date.now()}`);
@@ -163,6 +161,13 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
       setIsSaving(false);
     }
   }
+  
+  const handleFeatureComingSoon = () => {
+    toast({
+      title: "Feature Coming Soon",
+      description: "This feature will be available in a future update.",
+    });
+  };
 
   if (loading) {
       return (
@@ -237,6 +242,21 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
                     Currently, all rooms are public. Room locking and password features are coming soon!
                 </AlertDescription>
             </Alert>
+          </div>
+
+          <div className="space-y-4">
+            <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleFeatureComingSoon}>
+              <Palette className="mr-4 h-5 w-5" />
+              Themes
+            </Button>
+            <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleFeatureComingSoon}>
+              <Lock className="mr-4 h-5 w-5" />
+              Lock Room
+            </Button>
+             <Button variant="outline" className="w-full justify-start py-6 text-base" onClick={handleFeatureComingSoon}>
+              <UserCog className="mr-4 h-5 w-5" />
+              Admin Panel
+            </Button>
           </div>
           
            <div className="space-y-2 pt-8">
