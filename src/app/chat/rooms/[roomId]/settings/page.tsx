@@ -34,6 +34,7 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const initialLoadRef = useRef(true);
 
   useEffect(() => {
     if (!firestore || !roomId || !user) {
@@ -51,10 +52,12 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
             }
             const fullRoomData = { id: docSnap.id, ...roomData };
             setRoom(fullRoomData);
-            // Only set these on initial load or if they haven't been edited by the user yet
-            if (loading) {
+            
+            // Only set form state on the very first load to avoid overwriting user input
+            if (initialLoadRef.current) {
               setRoomName(fullRoomData.name);
               setImagePreview(fullRoomData.photoURL || null);
+              initialLoadRef.current = false;
             }
             setLoading(false);
         } else {
@@ -69,7 +72,7 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
     });
 
     return () => unsubscribe();
-  }, [firestore, roomId, user, router, toast, loading]);
+  }, [firestore, roomId, user, router, toast]);
 
   
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
