@@ -151,16 +151,16 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                             </div>
                         )}
                     </div>
-                    <div className="flex items-center gap-1 w-24 justify-center">
-                      <p className={cn(
+                     <div className="flex items-center gap-1 w-24 justify-center">
+                        <p className={cn(
                           "font-semibold text-sm truncate",
                           userProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
-                      )}>
-                          {userProfile.displayName.split(' ')[0]}
-                      </p>
-                      {userProfile.verifiedBadge?.showBadge && (
-                          <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-4 w-4 shrink-0" />
-                      )}
+                        )}>
+                            {userProfile.displayName.split(' ')[0]}
+                        </p>
+                        {userProfile.verifiedBadge?.showBadge && (
+                            <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-4 w-4 shrink-0" />
+                        )}
                     </div>
                 </div>
             </DropdownMenuTrigger>
@@ -291,7 +291,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         unsubMessages();
     };
 
-  }, [firestore, roomId, router, toast, isOwner, authUser, memberProfiles]);
+  }, [firestore, roomId, router, toast, isOwner, authUser, memberProfiles, room?.ownerId]);
   
   // Auto-scroll chat
   useEffect(() => {

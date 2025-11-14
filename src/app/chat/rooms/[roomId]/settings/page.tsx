@@ -37,9 +37,6 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
 
   useEffect(() => {
     if (!firestore || !roomId || !user) {
-        // If any dependency is missing, don't proceed.
-        // The router.push can cause loops if not handled carefully.
-        // It's better to let the user get redirected by a higher-level component.
         return;
     };
 
@@ -52,7 +49,7 @@ export default function RoomSettingsPage({ params }: { params: { roomId: string 
                 router.push(`/chat/rooms/${roomId}`);
                 return;
             }
-            setRoom(roomData);
+            setRoom({ id: docSnap.id, ...roomData });
             setRoomName(roomData.name);
             setImagePreview(roomData.photoURL || null);
             setLoading(false);
