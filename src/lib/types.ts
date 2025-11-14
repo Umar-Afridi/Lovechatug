@@ -98,11 +98,12 @@ export type Room = {
     photoURL?: string;
     createdAt: any;
     members: string[];
+    lockedSlots?: number[];
 };
 
 export type RoomMember = {
     userId: string;
-    micSlot: number; // 0 for owner, 1-8 for members, -1 for super admin
+    micSlot: number | null; // 0 for owner, 1-8 for members, -1 for super admin
     isMuted: boolean;
 };
 

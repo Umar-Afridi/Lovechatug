@@ -14,6 +14,8 @@ import {
   Send,
   Settings,
   Lock,
+  LockOpen,
+  UserPlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -34,7 +36,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy, arrayUnion, arrayRemove } from 'firebase/firestore';
 import type { Room, RoomMember, UserProfile, RoomMessage } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -43,26 +45,55 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 
 
-const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled }: { onSit: (slot: number) => void; slotNumber: number; slotType?: 'owner' | 'super'; disabled?: boolean }) => (
+const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLockToggle, isLocked, onInvite }: { 
+    onSit: (slot: number) => void; 
+    slotNumber: number; 
+    slotType?: 'owner' | 'super'; 
+    disabled?: boolean;
+    isOwner: boolean;
+    onLockToggle: (slot: number) => void;
+    isLocked: boolean;
+    onInvite: (slot: number) => void;
+}) => (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="flex flex-col items-center gap-2 text-center disabled:opacity-50" disabled={disabled}>
+        <button className="flex flex-col items-center gap-2 text-center disabled:opacity-50" disabled={disabled && !isOwner}>
             <div className={cn("w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center border-2 border-dashed",
                 slotType === 'owner' && 'border-yellow-500/50',
                 slotType === 'super' && 'border-blue-500/50',
-                !slotType && 'border-muted-foreground/30'
+                !slotType && 'border-muted-foreground/30',
+                isLocked && 'border-red-500/50'
             )}>
-                {slotType === 'owner' && <Crown className="w-8 h-8 text-yellow-500/50" />}
-                {slotType === 'super' && <Shield className="w-8 h-8 text-blue-500/50" />}
-                {!slotType && <span className="text-2xl font-bold text-muted-foreground/30">{slotNumber}</span>}
+                 {isLocked ? (
+                    <Lock className="w-8 h-8 text-red-500/50" />
+                 ) : slotType === 'owner' ? (
+                    <Crown className="w-8 h-8 text-yellow-500/50" />
+                 ) : slotType === 'super' ? (
+                    <Shield className="w-8 h-8 text-blue-500/50" />
+                 ) : (
+                    <span className="text-2xl font-bold text-muted-foreground/30">{slotNumber}</span>
+                 )}
             </div>
-             <p className="font-semibold text-sm text-muted-foreground/50 capitalize">{slotType || 'Empty'}</p>
+             <p className="font-semibold text-sm text-muted-foreground/50 capitalize">{slotType || (isLocked ? 'Locked' : 'Empty')}</p>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0">
-         <Button variant="ghost" onClick={() => onSit(slotNumber)} className="w-full justify-start px-4 py-2">
-            Take Seat
-        </Button>
+         <div className="flex flex-col">
+            <Button variant="ghost" onClick={() => onSit(slotNumber)} className="w-full justify-start px-4 py-2" disabled={isLocked}>
+                <Mic className="mr-2 h-4 w-4"/> Take Seat
+            </Button>
+            {isOwner && (
+                <>
+                    <Button variant="ghost" onClick={() => onInvite(slotNumber)} className="w-full justify-start px-4 py-2">
+                       <UserPlus className="mr-2 h-4 w-4"/> Invite
+                    </Button>
+                    <Button variant="ghost" onClick={() => onLockToggle(slotNumber)} className="w-full justify-start px-4 py-2">
+                        {isLocked ? <LockOpen className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                        {isLocked ? 'Unlock' : 'Lock'}
+                    </Button>
+                </>
+            )}
+         </div>
       </PopoverContent>
     </Popover>
 );
@@ -189,6 +220,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserMemberInfo = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
+  const lockedSlots = useMemo(() => room?.lockedSlots || [], [room]);
 
   // Fetch Room and Member data
   useEffect(() => {
@@ -208,22 +240,19 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         }
     });
     
-    // Separate effect for auto-seating the owner, depending on room data
-    let ownerSeated = false; // Flag to prevent multiple sets
     const unsubMembers = onSnapshot(membersColRef, (snapshot) => {
         const membersData = snapshot.docs.map(d => d.data() as RoomMember);
         setMembers(membersData);
         
         // Auto-seat owner if they enter the room and are not seated
-        const ownerIsAlreadySeated = membersData.some(m => m.userId === room?.ownerId);
-        if(isOwner && authUser && !ownerIsAlreadySeated && !ownerSeated) {
+        const ownerIsSeated = membersData.some(m => m.userId === room?.ownerId);
+        if(isOwner && authUser && !ownerIsSeated) {
              const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
              setDoc(memberRef, {
                 userId: authUser.uid,
                 micSlot: 0,
                 isMuted: false,
             }, { merge: true });
-            ownerSeated = true;
         }
 
         const newMemberIds = membersData
@@ -284,7 +313,14 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
    const handleSit = async (slotNumber: number) => {
       if (!firestore || !authUser || !roomId) return;
+
+      const isSlotOccupied = members.some(m => m.micSlot === slotNumber);
+      if (isSlotOccupied) {
+          toast({ title: 'Slot Taken', description: 'This mic slot is already occupied.', variant: 'destructive'});
+          return;
+      }
       
+      // Allow if user is not seated, OR if the user is the owner
       const canSit = isOwner || !currentUserMemberInfo || currentUserMemberInfo.micSlot === null;
       if (!canSit) {
         toast({ title: 'Already Seated', description: 'You must leave your current seat first.', variant: 'destructive'});
@@ -371,6 +407,26 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     }
   };
 
+  const handleLockToggle = async (slotNumber: number) => {
+    if (!isOwner || !firestore || !room) return;
+    const roomRef = doc(firestore, 'rooms', room.id);
+    const isCurrentlyLocked = lockedSlots.includes(slotNumber);
+
+    try {
+        if (isCurrentlyLocked) {
+            await updateDoc(roomRef, { lockedSlots: arrayRemove(slotNumber) });
+        } else {
+            await updateDoc(roomRef, { lockedSlots: arrayUnion(slotNumber) });
+        }
+    } catch(error) {
+        console.error("Error toggling lock state:", error);
+    }
+  };
+
+  const handleInvite = (slotNumber: number) => {
+      toast({ title: "Coming Soon!", description: "Friend invitation feature will be implemented soon."});
+  }
+
   if (loading || !room) {
     return <div className="flex h-screen items-center justify-center">Loading Room...</div>;
   }
@@ -413,15 +469,15 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                 {/* Owner & Super Admin Mics */}
                 <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
                      {ownerMember && ownerProfile ? (
-                        <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
+                        <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                     ) : (
-                        <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={isUserSeated && !isOwner} />
+                        <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={isUserSeated && !isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
                     )}
 
                      {superAdminMember && superAdminProfile ? (
                         <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                     ) : (
-                         <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={isUserSeated && !isOwner} />
+                         <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={isUserSeated} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
                     )}
                 </div>
                 
@@ -445,10 +501,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                         const userProfileInSlot = memberInSlot ? memberProfiles.get(memberInSlot.userId) : null;
                         
                         if (memberInSlot && userProfileInSlot) {
-                            return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
+                            return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                         }
                         
-                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserSeated && !isOwner} />
+                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserSeated} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(slotNumber)} onInvite={handleInvite} />
                     })}
                 </div>
             </div>
