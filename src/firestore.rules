@@ -73,10 +73,11 @@ service cloud.firestore {
     
     // 6. وائس چیٹ رومز کا مجموعہ (Voice Chat Rooms Collection)
     match /rooms/{roomId} {
-        allow get: if isSignedIn(); // Changed from `read` to `get` for single doc reads
-        allow list: if isSignedIn(); // Added rule to allow listing all rooms
+        allow get: if isSignedIn();
+        allow list: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
         allow update: if isRoomOwner(roomId);
+        allow delete: if isRoomOwner(roomId);
         
         match /members/{userId} {
             allow read: if isRoomMember(roomId);
@@ -92,4 +93,3 @@ service cloud.firestore {
     }
   }
 }
-    
