@@ -44,6 +44,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { Textarea } from '@/components/ui/textarea';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
+import { RoomInviteSheet } from '@/components/chat/room-invite-sheet';
 
 
 const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLockToggle, isLocked, onInvite }: { 
@@ -219,6 +220,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const [chatMessages, setChatMessages] = useState<RoomMessage[]>([]);
   const [chatInputValue, setChatInputValue] = useState('');
   
+  const [isInviteSheetOpen, setInviteSheetOpen] = useState(false);
+  const [inviteSlot, setInviteSlot] = useState<number | undefined>(undefined);
+
   const chatViewportRef = useRef<HTMLDivElement>(null);
 
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
@@ -430,7 +434,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   };
 
   const handleInvite = (slotNumber?: number) => {
-      toast({ title: "Coming Soon!", description: "Friend invitation feature will be implemented soon."});
+      setInviteSlot(slotNumber);
+      setInviteSheetOpen(true);
   }
 
   if (loading || !room) {
@@ -446,106 +451,114 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const isUserSeated = currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined;
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-        <header className="flex items-center justify-between gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
-            <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" onClick={() => router.back()}>
-                    <ArrowLeft className="h-5 w-5" />
-                </Button>
-                <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8">
-                        <AvatarImage src={room.photoURL} />
-                        <AvatarFallback>{room.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    <h1 className="text-xl font-bold truncate">{room.name}</h1>
-                </div>
-            </div>
-            <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" onClick={() => handleInvite()}>
-                    <UserPlus className="h-5 w-5" />
-                </Button>
-                <Button variant="ghost" size="icon" asChild>
-                    <Link href={`/chat/rooms/${roomId}/settings`}>
-                        <Settings className="h-5 w-5" />
-                    </Link>
-                </Button>
-                <Button variant="destructive" size="sm" onClick={handleLeaveRoom}>
-                    <LogOut className="mr-2 h-4 w-4"/> Leave
-                </Button>
-             </div>
-        </header>
-        
-        <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="p-4 md:p-6 space-y-8">
-                {/* Owner & Super Admin Mics */}
-                <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
-                     {ownerMember && ownerProfile && ownerMember.micSlot === 0 ? (
-                        <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
-                    ) : (
-                        <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={(isUserSeated && !isOwner)} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
-                    )}
+    <>
+      <RoomInviteSheet 
+        isOpen={isInviteSheetOpen} 
+        onOpenChange={setInviteSheetOpen}
+        room={room}
+        slotNumber={inviteSlot}
+      />
+      <div className="flex h-screen flex-col bg-background">
+          <header className="flex items-center justify-between gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
+              <div className="flex items-center gap-4">
+                  <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                      <ArrowLeft className="h-5 w-5" />
+                  </Button>
+                  <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                          <AvatarImage src={room.photoURL} />
+                          <AvatarFallback>{room.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <h1 className="text-xl font-bold truncate">{room.name}</h1>
+                  </div>
+              </div>
+              <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="icon" onClick={() => handleInvite()}>
+                      <UserPlus className="h-5 w-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" asChild>
+                      <Link href={`/chat/rooms/${roomId}/settings`}>
+                          <Settings className="h-5 w-5" />
+                      </Link>
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={handleLeaveRoom}>
+                      <LogOut className="mr-2 h-4 w-4"/> Leave
+                  </Button>
+              </div>
+          </header>
+          
+          <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="p-4 md:p-6 space-y-8">
+                  {/* Owner & Super Admin Mics */}
+                  <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
+                      {ownerMember && ownerProfile && ownerMember.micSlot === 0 ? (
+                          <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
+                      ) : (
+                          <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={(isUserSeated && !isOwner)} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
+                      )}
 
-                     {superAdminMember && superAdminProfile ? (
-                        <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
-                    ) : (
-                         <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={isUserSeated && !isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
-                    )}
-                </div>
-                
-                {/* Separator */}
-                <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-background px-2 text-muted-foreground">
-                        Audience
-                        </span>
-                    </div>
-                </div>
+                      {superAdminMember && superAdminProfile ? (
+                          <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
+                      ) : (
+                          <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={isUserSeated && !isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
+                      )}
+                  </div>
+                  
+                  {/* Separator */}
+                  <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                          <span className="bg-background px-2 text-muted-foreground">
+                          Audience
+                          </span>
+                      </div>
+                  </div>
 
-                {/* User Mics */}
-                <div className="grid grid-cols-4 gap-x-4 gap-y-6">
-                    {Array.from({ length: 8 }).map((_, i) => {
-                        const slotNumber = i + 1;
-                        const memberInSlot = members.find(m => m.micSlot === slotNumber);
-                        const userProfileInSlot = memberInSlot ? memberProfiles.get(memberInSlot.userId) : null;
-                        
-                        if (memberInSlot && userProfileInSlot) {
-                            return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
-                        }
-                        
-                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserSeated && !isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(slotNumber)} onInvite={handleInvite} />
-                    })}
-                </div>
-            </div>
+                  {/* User Mics */}
+                  <div className="grid grid-cols-4 gap-x-4 gap-y-6">
+                      {Array.from({ length: 8 }).map((_, i) => {
+                          const slotNumber = i + 1;
+                          const memberInSlot = members.find(m => m.micSlot === slotNumber);
+                          const userProfileInSlot = memberInSlot ? memberProfiles.get(memberInSlot.userId) : null;
+                          
+                          if (memberInSlot && userProfileInSlot) {
+                              return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
+                          }
+                          
+                          return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserSeated && !isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(slotNumber)} onInvite={handleInvite} />
+                      })}
+                  </div>
+              </div>
 
-            {/* In-Room Chat */}
-            <ScrollArea className="flex-1 px-4" viewportRef={chatViewportRef}>
-                <div className="space-y-4 py-4">
-                    {chatMessages.map(msg => (
-                        <RoomChatMessage key={msg.id} message={msg} />
-                    ))}
-                </div>
-            </ScrollArea>
+              {/* In-Room Chat */}
+              <ScrollArea className="flex-1 px-4" viewportRef={chatViewportRef}>
+                  <div className="space-y-4 py-4">
+                      {chatMessages.map(msg => (
+                          <RoomChatMessage key={msg.id} message={msg} />
+                      ))}
+                  </div>
+              </ScrollArea>
 
-             {/* In-Room Chat Input */}
-            <footer className="shrink-0 border-t bg-muted/40 p-2 md:p-4">
-                <div className="relative flex items-center gap-2">
-                    <Textarea 
-                        placeholder="Send a message to the room..."
-                        className="min-h-[40px] max-h-[100px] resize-none pr-12"
-                        rows={1}
-                        value={chatInputValue}
-                        onChange={(e) => setChatInputValue(e.target.value)}
-                        onKeyDown={handleChatKeyPress}
-                    />
-                    <Button size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSendChatMessage}>
-                        <Send className="h-4 w-4" />
-                    </Button>
-                </div>
-            </footer>
-        </div>
-    </div>
+              {/* In-Room Chat Input */}
+              <footer className="shrink-0 border-t bg-muted/40 p-2 md:p-4">
+                  <div className="relative flex items-center gap-2">
+                      <Textarea 
+                          placeholder="Send a message to the room..."
+                          className="min-h-[40px] max-h-[100px] resize-none pr-12"
+                          rows={1}
+                          value={chatInputValue}
+                          onChange={(e) => setChatInputValue(e.target.value)}
+                          onKeyDown={handleChatKeyPress}
+                      />
+                      <Button size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSendChatMessage}>
+                          <Send className="h-4 w-4" />
+                      </Button>
+                  </div>
+              </footer>
+          </div>
+      </div>
+    </>
   );
 }

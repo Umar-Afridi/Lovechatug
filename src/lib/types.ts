@@ -34,7 +34,7 @@ export type Message = {
   senderId: string;
   content: string;
   timestamp: any; // Firestore ServerTimestamp
-  type: 'text' | 'image' | 'audio';
+  type: 'text' | 'image' | 'audio' | 'room_invite'; // Added 'room_invite' type
   mediaUrl?: string;
   status: 'sent' | 'delivered' | 'read';
   replyTo?: {
@@ -44,6 +44,11 @@ export type Message = {
   };
   isUploading?: boolean;
   uploadFailed?: boolean;
+  roomInvite?: {
+    roomId: string;
+    roomName: string;
+    roomPhotoURL?: string;
+  }
 };
 
 export type Chat = {

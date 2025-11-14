@@ -40,6 +40,7 @@ import {
   Trash2,
   AlertCircle,
   Ban,
+  DoorOpen,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
@@ -812,6 +813,29 @@ export default function ChatIdPage({
                 );
             case 'image':
                  return msg.mediaUrl ? <img src={msg.mediaUrl} alt="sent image" className="rounded-lg max-w-full" /> : <p>Image not available</p>;
+             case 'room_invite':
+                if (!msg.roomInvite) return <p>Invalid room invite</p>;
+                return (
+                    <div className="space-y-2">
+                        <p className="font-semibold">Room Invitation</p>
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-black/10">
+                            <Avatar className="h-8 w-8">
+                                <AvatarImage src={msg.roomInvite.roomPhotoURL} />
+                                <AvatarFallback>{msg.roomInvite.roomName.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 overflow-hidden">
+                                <p className="truncate font-medium text-sm">{msg.roomInvite.roomName}</p>
+                            </div>
+                        </div>
+                        <Button
+                            size="sm"
+                            className="w-full bg-green-600 hover:bg-green-700"
+                            onClick={() => router.push(`/chat/rooms/${msg.roomInvite?.roomId}`)}
+                        >
+                            <DoorOpen className="mr-2 h-4 w-4"/> Join Room
+                        </Button>
+                    </div>
+                );
             default:
                 return null;
         }
