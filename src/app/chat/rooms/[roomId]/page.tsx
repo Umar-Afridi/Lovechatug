@@ -112,18 +112,18 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                                 <OfficialBadge color={userProfile.officialBadge.badgeColor} size="icon" className="h-5 w-5" />
                             </div>
                         )}
-                         {userProfile.verifiedBadge?.showBadge && (
-                             <div className="absolute bottom-1 -right-1">
-                                <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-5 w-5"/>
-                            </div>
-                        )}
                     </div>
-                    <p className={cn(
-                        "font-semibold text-sm truncate w-24",
-                        userProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
-                    )}>
-                        {userProfile.displayName.split(' ')[0]}
-                    </p>
+                    <div className="flex items-center gap-1 w-24 justify-center">
+                      <p className={cn(
+                          "font-semibold text-sm truncate",
+                          userProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+                      )}>
+                          {userProfile.displayName.split(' ')[0]}
+                      </p>
+                      {userProfile.verifiedBadge?.showBadge && (
+                          <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-4 w-4 shrink-0" />
+                      )}
+                    </div>
                 </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
@@ -205,6 +205,16 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     const unsubMembers = onSnapshot(membersColRef, (snapshot) => {
         const membersData = snapshot.docs.map(d => d.data() as RoomMember);
         setMembers(membersData);
+        
+        // Auto-seat owner if they enter the room and are not seated
+        if(isOwner && authUser && !membersData.some(m => m.userId === authUser.uid)) {
+             const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
+             setDoc(memberRef, {
+                userId: authUser.uid,
+                micSlot: 0,
+                isMuted: false,
+            }, { merge: true });
+        }
 
         const newMemberIds = membersData
             .map(m => m.userId)
@@ -241,7 +251,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         unsubMessages();
     };
 
-  }, [firestore, roomId, router, toast, memberProfiles]);
+  }, [firestore, roomId, router, toast, memberProfiles, isOwner, authUser]);
   
   // Auto-scroll chat
   useEffect(() => {
@@ -349,10 +359,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     return <div className="flex h-screen items-center justify-center">Loading Room...</div>;
   }
   
-  const ownerOnOwnerSlot = members.find(m => m.userId === room.ownerId && m.micSlot === 0);
-  const ownerProfile = ownerOnOwnerSlot ? memberProfiles.get(ownerOnOwnerSlot.userId) : null;
+  const ownerMember = members.find(m => m.userId === room.ownerId && m.micSlot === 0);
+  const ownerProfile = ownerMember ? memberProfiles.get(ownerMember.userId) : null;
   
-  // For now, super admin is a visual placeholder.
   const superAdminMember = members.find(m => m.micSlot === -1);
   const superAdminProfile = superAdminMember ? memberProfiles.get(superAdminMember.userId) : null;
 
@@ -388,8 +397,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             <div className="p-4 md:p-6 space-y-8">
                 {/* Owner & Super Admin Mics */}
                 <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
-                     {ownerOnOwnerSlot && ownerProfile ? (
-                        <UserMic member={ownerOnOwnerSlot} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerOnOwnerSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
+                     {ownerMember && ownerProfile ? (
+                        <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
                     ) : (
                         <Popover>
                           <PopoverTrigger asChild>
@@ -408,9 +417,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                         </Popover>
                     )}
 
-                    {/* Placeholder for Super Admin */}
-                     {superAdminProfile ? (
-                        <UserMic member={superAdminMember!} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember?.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => {}}/>
+                     {superAdminProfile && superAdminMember ? (
+                        <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember?.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => {}}/>
                     ) : (
                          <div className="flex flex-col items-center gap-2 text-center">
                             <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center border-2 border-dashed border-blue-500/50">
