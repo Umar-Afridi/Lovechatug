@@ -66,7 +66,7 @@ export function LoginForm() {
                 isDisabled: false,
             };
             await setDoc(userDocRef, newUserProfile, { merge: true });
-            router.push('/chat'); // Redirect new user to chat
+            // Redirection is now handled by the layout
         } else {
              const userData = docSnap.data() as UserProfile;
               if (userData.isDisabled) {
@@ -79,7 +79,7 @@ export function LoginForm() {
                   });
                   return;
               }
-              router.push('/chat'); // Redirect existing user to chat
+              // Redirection is now handled by the layout
         }
 
     } catch (error: any) {
@@ -119,15 +119,13 @@ export function LoginForm() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
-      // Check if user document exists
       const userDocRef = doc(firestore, 'users', userCredential.user.uid);
       const userDocSnap = await getDoc(userDocRef);
 
       if (userDocSnap.exists()) {
           const userData = userDocSnap.data() as UserProfile;
-          // Check if the user is disabled
           if (userData.isDisabled) {
-              await auth.signOut(); // Sign the user out
+              await auth.signOut();
               setError("Your account has been disabled. Please contact support.");
               toast({
                   variant: "destructive",
@@ -145,11 +143,10 @@ export function LoginForm() {
           title: "Email Not Verified",
           description: "Please check your inbox and verify your email address.",
         });
-        // Optionally, re-send verification email
         await sendEmailVerification(userCredential.user);
-        return; // Stop the login process
+        return;
       }
-      router.push('/chat');
+      // Redirection is now handled by the layout
     } catch (err: any) {
       let friendlyMessage = "An unknown error occurred.";
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {

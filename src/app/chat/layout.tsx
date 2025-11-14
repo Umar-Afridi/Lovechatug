@@ -267,11 +267,21 @@ export default function ChatAppLayout({
   }, [firestore, user?.uid, requestCount, playRequestSound]);
 
 
-  useEffect(() => {
-    if (!authLoading && !user && pathname !== '/') {
-      router.push('/');
+ useEffect(() => {
+    if (!authLoading) {
+      if (user) {
+        // If user is logged in, and they are on the root page, redirect to chat
+        if (pathname === '/' || pathname === '/signup') {
+          router.push('/chat');
+        }
+      } else {
+        // If user is not logged in, and they are trying to access a protected page, redirect to login
+        if (pathname.startsWith('/chat') || pathname.startsWith('/profile') || pathname.startsWith('/settings')) {
+          router.push('/');
+        }
+      }
     }
-  }, [authLoading, user, router, pathname]);
+  }, [authLoading, user, pathname, router]);
 
   const handleSignOut = async () => {
     if (auth && user && firestore) {
@@ -299,7 +309,7 @@ export default function ChatAppLayout({
     );
   }
   
-  if (!user && !isAccountDisabled) {
+  if (!user && !isAccountDisabled && (pathname.startsWith('/chat') || pathname.startsWith('/profile') || pathname.startsWith('/settings'))) {
     return (
        <div className="flex h-screen w-full items-center justify-center">
         <p>Redirecting...</p>
@@ -316,6 +326,12 @@ export default function ChatAppLayout({
   };
 
   const showSidebar = !isMobile || !isChatDetailPage;
+
+  // Render children directly if we are on login/signup pages
+  if (!user) {
+      return <>{children}</>;
+  }
+
 
   return (
     <RoomContext.Provider value={{ currentRoom, setCurrentRoom, leaveCurrentRoom }}>
