@@ -150,7 +150,7 @@ export default function SettingsPage() {
             const q = query(
                 usersRef,
                 where('officialBadge.isOfficial', '==', true),
-                where('isOnline', '==', true),
+                where('isOnline', 'in', [true, undefined]),
                 limit(1)
             );
 
