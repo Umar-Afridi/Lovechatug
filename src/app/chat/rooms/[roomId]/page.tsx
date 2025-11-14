@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -38,7 +38,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy, arrayUnion, arrayRemove, writeBatch, where, Timestamp } from 'firebase/firestore';
+import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy, arrayUnion, arrayRemove, writeBatch, where, Timestamp, increment } from 'firebase/firestore';
 import type { Room, RoomMember, UserProfile, RoomMessage } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -344,8 +344,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     }
   }, [chatMessages]);
   
-  const handleLeaveRoom = async () => {
-      if (!firestore || !authUser || !roomId || !room) return;
+  const handleLeaveRoom = useCallback(async () => {
+      if (!firestore || !authUser || !roomId) return;
       
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       const roomRef = doc(firestore, 'rooms', roomId);
@@ -354,25 +354,27 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         const batch = writeBatch(firestore);
         
         batch.delete(memberRef);
-        batch.update(roomRef, { memberCount: room.memberCount > 0 ? room.memberCount - 1 : 0 });
+        batch.update(roomRef, { memberCount: increment(-1) });
 
         await batch.commit();
 
       } catch(error) {
         console.error("Error leaving room:", error);
-      } finally {
-        router.push('/chat/rooms');
       }
-  };
+  }, [firestore, authUser, roomId]);
+
+    const handleNavigateBack = () => {
+        handleLeaveRoom().finally(() => {
+            router.push('/chat/rooms');
+        });
+    };
 
   useEffect(() => {
-    // This effect handles leaving the room when the component unmounts
-    // which happens on navigation, browser close, or disconnect.
+    // This effect handles leaving the room when the component unmounts (e.g., browser close)
     return () => {
       handleLeaveRoom();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, authUser, roomId, room]);
+  }, [handleLeaveRoom]);
 
    const handleSit = async (slotNumber: number) => {
       if (!firestore || !authUser || !roomId) return;
@@ -517,7 +519,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       <div className="flex h-screen flex-col bg-background">
           <header className="flex items-center justify-between gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
               <div className="flex items-center gap-4">
-                  <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                  <Button variant="ghost" size="icon" onClick={handleNavigateBack}>
                       <ArrowLeft className="h-5 w-5" />
                   </Button>
                   <div className="flex items-center gap-3">
@@ -539,7 +541,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                         </Link>
                     </Button>
                   )}
-                  <Button variant="destructive" size="sm" onClick={handleLeaveRoom}>
+                  <Button variant="destructive" size="sm" onClick={handleNavigateBack}>
                       <LogOut className="mr-2 h-4 w-4"/> Leave
                   </Button>
               </div>
