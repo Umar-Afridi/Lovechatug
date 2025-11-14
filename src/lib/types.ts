@@ -34,7 +34,7 @@ export type Message = {
   senderId: string;
   content: string;
   timestamp: any; // Firestore ServerTimestamp
-  type: 'text' | 'image' | 'audio' | 'room_invite'; // Added 'room_invite' type
+  type: 'text' | 'image' | 'audio' | 'room_invite' | 'notification'; // Added 'notification' type
   mediaUrl?: string;
   status: 'sent' | 'delivered' | 'read';
   replyTo?: {
@@ -124,4 +124,5 @@ export type RoomMessage = {
   senderPhotoURL: string;
   content: string;
   timestamp: any; // Firestore ServerTimestamp
+  type?: 'text' | 'notification'; // Add type for notifications
 };

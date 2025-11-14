@@ -20,6 +20,7 @@ import {
   VolumeX,
   User,
   ShieldAlert,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -49,6 +50,7 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { RoomInviteSheet } from '@/components/chat/room-invite-sheet';
 import { RoomUserProfileSheet } from '@/components/chat/room-user-profile-sheet';
+import { RoomMembersSheet } from '@/components/chat/room-members-sheet';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 
@@ -213,7 +215,17 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
 };
 
 const RoomChatMessage = ({ message, senderProfile }: { message: RoomMessage; senderProfile: UserProfile | null }) => {
+    
+    if (message.type === 'notification') {
+        return (
+            <div className="text-center text-xs text-muted-foreground py-1">
+                {message.content}
+            </div>
+        )
+    }
+
     if (!senderProfile) return null; // Don't render message if sender profile is not loaded
+    
     return (
         <div className="flex items-start gap-3">
             <div className="relative shrink-0">
@@ -265,6 +277,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const [isRoomMuted, setIsRoomMuted] = useState(false);
   
   const [isProfileSheetOpen, setProfileSheetOpen] = useState(false);
+  const [isMembersSheetOpen, setMembersSheetOpen] = useState(false);
   const [selectedUserProfile, setSelectedUserProfile] = useState<UserProfile | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
@@ -272,6 +285,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const [isKicked, setIsKicked] = useState(false);
 
   const joinTimestampRef = useRef(Timestamp.now());
+  const prevMemberIdsRef = useRef<Set<string>>(new Set());
 
   const chatViewportRef = useRef<HTMLDivElement>(null);
 
@@ -331,7 +345,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         }
     });
     
-    const unsubMembers = onSnapshot(membersColRef, (snapshot) => {
+    const unsubMembers = onSnapshot(membersColRef, async (snapshot) => {
         const membersData = snapshot.docs.map(d => d.data() as RoomMember);
         setMembers(membersData);
         
@@ -350,15 +364,57 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             .filter(id => !memberProfiles.has(id));
 
         if (newMemberIds.length > 0) {
-            newMemberIds.forEach(userId => {
-                const userDocRef = doc(firestore, 'users', userId);
-                getDoc(userDocRef).then(userSnap => {
-                    if (userSnap.exists()) {
-                        setMemberProfiles(prev => new Map(prev).set(userId, userSnap.data() as UserProfile));
-                    }
-                });
+            const userProfilesToFetch = newMemberIds.map(userId => getDoc(doc(firestore, 'users', userId)));
+            const userDocs = await Promise.all(userProfilesToFetch);
+            const newProfiles = new Map(memberProfiles);
+            userDocs.forEach(userSnap => {
+                if (userSnap.exists()) {
+                    newProfiles.set(userSnap.id, userSnap.data() as UserProfile);
+                }
             });
+            setMemberProfiles(newProfiles);
         }
+
+        const currentMemberIds = new Set(membersData.map(m => m.userId));
+        const prevMemberIds = prevMemberIdsRef.current;
+
+        // Check for new joins
+        const joinedUserIds = [...currentMemberIds].filter(id => !prevMemberIds.has(id));
+        if (joinedUserIds.length > 0 && prevMemberIds.size > 0) { // Don't show for initial load
+             const joinedProfiles = joinedUserIds.map(id => memberProfiles.get(id) || { displayName: 'Someone' }).filter(Boolean);
+             for (const profile of joinedProfiles) {
+                const joinMessage: RoomMessage = {
+                    id: `notification-${Date.now()}-${profile!.uid}`,
+                    senderId: 'system',
+                    senderName: 'System',
+                    senderPhotoURL: '',
+                    content: `${profile.displayName} has joined the room`,
+                    timestamp: serverTimestamp(),
+                    type: 'notification',
+                };
+                setChatMessages(prev => [...prev, joinMessage]);
+             }
+        }
+        
+        // Check for leaves
+        const leftUserIds = [...prevMemberIds].filter(id => !currentMemberIds.has(id));
+        if (leftUserIds.length > 0) {
+            const leftProfiles = leftUserIds.map(id => memberProfiles.get(id) || { displayName: 'Someone' }).filter(Boolean);
+             for (const profile of leftProfiles) {
+                const leaveMessage: RoomMessage = {
+                    id: `notification-${Date.now()}-${profile!.uid}`,
+                    senderId: 'system',
+                    senderName: 'System',
+                    senderPhotoURL: '',
+                    content: `${profile.displayName} has left the room`,
+                    timestamp: serverTimestamp(),
+                    type: 'notification',
+                };
+                setChatMessages(prev => [...prev, leaveMessage]);
+             }
+        }
+
+        prevMemberIdsRef.current = currentMemberIds;
         setLoading(false);
     }, (error) => {
         const permissionError = new FirestorePermissionError({path: membersColRef.path, operation: 'list'});
@@ -610,6 +666,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       setSelectedUserProfile(user);
       setProfileSheetOpen(true);
   };
+  
+  const handleViewMembers = () => {
+    setMembersSheetOpen(true);
+  }
 
   const handleSendFriendRequest = async (receiverId: string) => {
       if (!firestore || !authUser) return;
@@ -683,6 +743,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         friendRequests={friendRequests}
         onSendRequest={handleSendFriendRequest}
       />
+      <RoomMembersSheet
+        isOpen={isMembersSheetOpen}
+        onOpenChange={setMembersSheetOpen}
+        members={members}
+        memberProfiles={memberProfiles}
+        onViewProfile={handleViewProfile}
+      />
       <div className="flex h-screen flex-col bg-background">
           <header className="flex items-center justify-between gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
               <div className="flex items-center gap-4">
@@ -708,6 +775,12 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                         </Link>
                     </Button>
                   )}
+                  <Button variant="ghost" size="icon" className="relative" onClick={handleViewMembers}>
+                        <Users className="h-5 w-5" />
+                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                          {room.memberCount || 0}
+                        </span>
+                  </Button>
                   <Button variant="destructive" size="sm" onClick={handleNavigateBack}>
                       <LogOut className="mr-2 h-4 w-4"/> Leave
                   </Button>
