@@ -93,13 +93,6 @@ export default function RoomsPage() {
 
   return (
     <div className="flex flex-col h-full bg-background">
-        <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
-            <Button variant="ghost" size="icon" onClick={() => router.back()}>
-                <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <h1 className="text-xl font-bold">Rooms</h1>
-        </header>
-
         <Tabs defaultValue="my-room" className="flex flex-col flex-1">
             <TabsList className="grid w-full grid-cols-2 m-4 mb-0">
                 <TabsTrigger value="my-room">My Room</TabsTrigger>
