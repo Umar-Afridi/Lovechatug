@@ -68,10 +68,6 @@ const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLock
             )}>
                  {isLocked ? (
                     <Lock className="w-8 h-8 text-red-500/50" />
-                 ) : slotType === 'owner' ? (
-                    <Crown className="w-8 h-8 text-yellow-500/50" />
-                 ) : slotType === 'super' ? (
-                    <Shield className="w-8 h-8 text-blue-500/50" />
                  ) : (
                     <Mic className="w-8 h-8 text-muted-foreground/30" />
                  )}
@@ -310,12 +306,20 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       if (!firestore || !authUser || !roomId) return;
       
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+      const roomRef = doc(firestore, 'rooms', roomId);
+
       try {
-        await updateDoc(memberRef, { micSlot: null });
+        // This transactionally removes the user from the members subcollection
+        // and the members array on the room document.
+        await deleteDoc(memberRef);
+        await updateDoc(roomRef, {
+            members: arrayRemove(authUser.uid)
+        });
       } catch(error) {
         // If doc doesn't exist, that's fine. It means they were just a listener.
+        // Or if the arrayRemove fails, we still try to navigate away.
         if((error as any).code !== 'not-found') {
-          console.error("Error standing up:", error);
+          console.error("Error leaving room:", error);
         }
       } finally {
         router.push('/chat/rooms');
