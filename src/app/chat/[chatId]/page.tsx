@@ -190,6 +190,25 @@ export default function ChatIdPage({
             setHaveIBlocked(currentUserData.blockedUsers?.includes(otherUserIdFromParams) ?? false);
             setAmIBlocked(otherUserData.blockedUsers?.includes(authUser.uid) ?? false);
 
+            // Ensure chat document exists if it's a new chat (e.g. from friend request)
+            const chatId = [authUser.uid, otherUserIdFromParams].sort().join('_');
+            const chatRef = doc(firestore, 'chats', chatId);
+            const chatSnap = await getDoc(chatRef);
+            if (!chatSnap.exists()) {
+              const newChatData = {
+                members: [authUser.uid, otherUserData.uid],
+                participants: [authUser.uid, otherUserData.uid], // For security rules
+                createdAt: serverTimestamp(),
+                participantDetails: {
+                    [authUser.uid]: { displayName: currentUserData.displayName, photoURL: currentUserData.photoURL },
+                    [otherUserData.uid]: { displayName: otherUserData.displayName, photoURL: otherUserData.photoURL }
+                },
+                unreadCount: { [authUser.uid]: 0, [otherUserData.uid]: 0 },
+                typing: { [authUser.uid]: false, [otherUserData.uid]: false }
+              };
+              await setDoc(chatRef, newChatData);
+            }
+
         } catch (error: any) {
             console.error("Error setting up chat page:", error);
             const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' });
@@ -1111,5 +1130,3 @@ export default function ChatIdPage({
     </>
   );
 }
-
-    

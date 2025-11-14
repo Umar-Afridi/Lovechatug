@@ -18,6 +18,7 @@ import {
   LockOpen,
   UserPlus,
   VolumeX,
+  User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -38,14 +39,15 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy, arrayUnion, arrayRemove, writeBatch, where, Timestamp, increment } from 'firebase/firestore';
-import type { Room, RoomMember, UserProfile, RoomMessage } from '@/lib/types';
+import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy, arrayUnion, arrayRemove, writeBatch, where, Timestamp, increment, getDocs } from 'firebase/firestore';
+import type { Room, RoomMember, UserProfile, RoomMessage, FriendRequest } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { Textarea } from '@/components/ui/textarea';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { RoomInviteSheet } from '@/components/chat/room-invite-sheet';
+import { RoomUserProfileSheet } from '@/components/chat/room-user-profile-sheet';
 
 
 const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLockToggle, isLocked, onInvite }: { 
@@ -99,7 +101,7 @@ const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLock
     </Popover>
 );
 
-const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, onMuteToggle, onStandUp }: { 
+const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, onMuteToggle, onStandUp, onViewProfile }: { 
     member: RoomMember | null;
     userProfile: UserProfile | null;
     role?: 'owner' | 'super' | 'member'; 
@@ -108,6 +110,7 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
     onKick: (userId: string) => void;
     onMuteToggle: (userId: string, isMuted: boolean) => void;
     onStandUp: () => void;
+    onViewProfile: (user: UserProfile) => void;
 }) => {
     
     if (!userProfile || !member) return null;
@@ -118,7 +121,7 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
 
     return (
         <DropdownMenu>
-            <DropdownMenuTrigger asChild disabled={!canManage && !isCurrentUser}>
+            <DropdownMenuTrigger asChild>
                  <div className="flex flex-col items-center gap-2 text-center cursor-pointer">
                     <div className="relative">
                         <Avatar className={cn("w-20 h-20 border-2", member.isMuted ? "border-muted" : "border-primary")}>
@@ -165,6 +168,11 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                 </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
+                 <DropdownMenuItem onClick={() => onViewProfile(userProfile)}>
+                    <User className="mr-2 h-4 w-4" />
+                    <span>View Profile</span>
+                 </DropdownMenuItem>
+                 {(isCurrentUser || canManage) && <DropdownMenuSeparator />}
                  {isCurrentUser && (
                      <DropdownMenuItem onClick={onStandUp}>
                         <UserX className="mr-2 h-4 w-4" />
@@ -240,6 +248,11 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   
   const [isRoomMuted, setIsRoomMuted] = useState(false);
   
+  const [isProfileSheetOpen, setProfileSheetOpen] = useState(false);
+  const [selectedUserProfile, setSelectedUserProfile] = useState<UserProfile | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  
   const joinTimestampRef = useRef(Timestamp.now());
 
   const chatViewportRef = useRef<HTMLDivElement>(null);
@@ -249,6 +262,31 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const isUserOnMic = useMemo(() => currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined, [currentUserMemberInfo]);
   const lockedSlots = useMemo(() => room?.lockedSlots || [], [room]);
 
+  // Fetch Current User Profile and Friend Requests
+  useEffect(() => {
+    if (!firestore || !authUser) return;
+    const unsubProfile = onSnapshot(doc(firestore, 'users', authUser.uid), (doc) => {
+        if(doc.exists()) setCurrentUserProfile(doc.data() as UserProfile);
+    });
+
+    const requestsRef = collection(firestore, 'friendRequests');
+    const sentQuery = query(requestsRef, where('senderId', '==', authUser.uid));
+    const receivedQuery = query(requestsRef, where('receiverId', '==', authUser.uid));
+
+    const unsubSent = onSnapshot(sentQuery, snap => {
+        setFriendRequests(prev => [...prev.filter(r => r.senderId !== authUser.uid), ...snap.docs.map(d => d.data() as FriendRequest)]);
+    });
+    const unsubReceived = onSnapshot(receivedQuery, snap => {
+        setFriendRequests(prev => [...prev.filter(r => r.receiverId !== authUser.uid), ...snap.docs.map(d => d.data() as FriendRequest)]);
+    });
+
+    return () => {
+        unsubProfile();
+        unsubSent();
+        unsubReceived();
+    }
+  }, [firestore, authUser]);
+  
   // Fetch Room and Member data
   useEffect(() => {
     if (!firestore || !roomId) return;
@@ -351,6 +389,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       const roomRef = doc(firestore, 'rooms', roomId);
       
       try {
+        const memberDoc = await getDoc(memberRef);
+        if (!memberDoc.exists()) return; // Already left or never joined
+
         const batch = writeBatch(firestore);
         
         batch.delete(memberRef);
@@ -371,8 +412,14 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   useEffect(() => {
     // This effect handles leaving the room when the component unmounts (e.g., browser close)
+    const cleanup = () => {
+        handleLeaveRoom();
+    }
+    // Using beforeunload for tab/browser close
+    window.addEventListener('beforeunload', cleanup);
     return () => {
-      handleLeaveRoom();
+      window.removeEventListener('beforeunload', cleanup);
+      cleanup(); // Also run on component unmount (e.g. navigating away)
     };
   }, [handleLeaveRoom]);
 
@@ -498,6 +545,45 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       setInviteSheetOpen(true);
   }
 
+  const handleViewProfile = (user: UserProfile) => {
+      setSelectedUserProfile(user);
+      setProfileSheetOpen(true);
+  };
+
+  const handleSendFriendRequest = async (receiverId: string) => {
+      if (!firestore || !authUser) return;
+      const requestsRef = collection(firestore, 'friendRequests');
+      const newRequest = {
+          senderId: authUser.uid,
+          receiverId: receiverId,
+          status: 'pending' as const,
+          createdAt: serverTimestamp(),
+      };
+      
+      try {
+          // Check if a request already exists
+          const q = query(requestsRef, where('senderId', '==', authUser.uid), where('receiverId', '==', receiverId));
+          const q2 = query(requestsRef, where('senderId', '==', receiverId), where('receiverId', '==', authUser.uid));
+          
+          const [sentSnapshot, receivedSnapshot] = await Promise.all([getDocs(q), getDocs(q2)]);
+
+          if (!sentSnapshot.empty || !receivedSnapshot.empty) {
+            toast({ title: 'Request Already Exists', description: 'A friend request between you and this user already exists.', variant: 'default' });
+            return;
+          }
+
+          await addDoc(requestsRef, newRequest);
+          toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
+          setProfileSheetOpen(false); // Close sheet on success
+      } catch (error) {
+          console.error("Error sending friend request:", error);
+          const permissionError = new FirestorePermissionError({ path: requestsRef.path, operation: 'create', requestResourceData: newRequest });
+          errorEmitter.emit('permission-error', permissionError);
+          toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive'});
+      }
+  };
+
+
   if (loading || !room) {
     return <div className="flex h-screen items-center justify-center">Loading Room...</div>;
   }
@@ -515,6 +601,14 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         onOpenChange={setInviteSheetOpen}
         room={room}
         slotNumber={inviteSlot}
+      />
+       <RoomUserProfileSheet
+        isOpen={isProfileSheetOpen}
+        onOpenChange={setProfileSheetOpen}
+        userToView={selectedUserProfile}
+        currentUser={currentUserProfile}
+        friendRequests={friendRequests}
+        onSendRequest={handleSendFriendRequest}
       />
       <div className="flex h-screen flex-col bg-background">
           <header className="flex items-center justify-between gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
@@ -551,13 +645,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
               <div className="p-4 md:p-6 space-y-8">
                   <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
                       {ownerMember && ownerProfile && ownerMember.micSlot === 0 ? (
-                          <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
+                          <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp} onViewProfile={handleViewProfile}/>
                       ) : (
                           <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={!isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
                       )}
 
                       {superAdminMember && superAdminProfile ? (
-                          <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
+                          <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp} onViewProfile={handleViewProfile}/>
                       ) : (
                           <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
                       )}
@@ -581,7 +675,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                           const userProfileInSlot = memberInSlot ? memberProfiles.get(memberInSlot.userId) : null;
                           
                           if (memberInSlot && userProfileInSlot) {
-                              return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
+                              return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp} onViewProfile={handleViewProfile} />
                           }
                           
                           return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(slotNumber)} onInvite={handleInvite} />
