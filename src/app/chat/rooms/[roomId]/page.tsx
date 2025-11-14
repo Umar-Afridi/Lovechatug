@@ -52,6 +52,7 @@ import { RoomInviteSheet } from '@/components/chat/room-invite-sheet';
 import { RoomUserProfileSheet } from '@/components/chat/room-user-profile-sheet';
 import { RoomMembersSheet } from '@/components/chat/room-members-sheet';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 
 
 const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLockToggle, isLocked, onInvite }: { 
@@ -378,9 +379,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         }
         
         const prevMemberIdList = prevMemberIdsRef.current;
+        
         const joinedUserIds = memberIds.filter(id => !prevMemberIdList.includes(id));
         const leftUserIds = prevMemberIdList.filter(id => !memberIds.includes(id));
-        const newNotifications: RoomMessage[] = [];
 
         for (const userId of joinedUserIds) {
             let profile = updatedProfiles.get(userId) || memberProfiles.get(userId);
@@ -405,6 +406,12 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                 });
             }
         }
+        
+        if (notificationQueue.current.length > 0) {
+            setChatMessages(prev => [...prev, ...notificationQueue.current]);
+            notificationQueue.current = [];
+        }
+
 
         if (profilesChanged) {
             setMemberProfiles(updatedProfiles);
@@ -441,8 +448,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         setChatMessages(prevMessages => {
             const existingMessageIds = new Set(prevMessages.map(m => m.id));
             const newMessages = messagesData.filter(m => !existingMessageIds.has(m.id));
-            const combined = [...prevMessages, ...newMessages, ...notificationQueue.current];
-            notificationQueue.current = [];
+            const combined = [...prevMessages, ...newMessages];
             return combined.sort((a,b) => ((a.timestamp?.seconds ?? Date.now()/1000) - (b.timestamp?.seconds ?? Date.now()/1000)));
         });
     });
@@ -768,7 +774,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                     </Button>
                   )}
                   <Button variant="ghost" size="icon" className="relative" onClick={handleViewMembers}>
-                        <Users className="h-5 w-5" />
+                      <Users className="h-5 w-5" />
+                      {members.length > 0 && (
+                          <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{members.length}</Badge>
+                      )}
                   </Button>
                   <Button variant="destructive" size="sm" onClick={handleNavigateBack}>
                       <LogOut className="mr-2 h-4 w-4"/> Leave
