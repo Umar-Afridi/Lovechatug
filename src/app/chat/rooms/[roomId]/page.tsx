@@ -76,7 +76,7 @@ const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLock
                  )}
             </div>
              <p className="font-semibold text-sm text-muted-foreground/50 capitalize">
-                {slotType ? slotType : (isLocked ? 'Locked' : slotNumber)}
+                {slotType ? slotType : slotNumber}
              </p>
         </button>
       </PopoverTrigger>
@@ -429,7 +429,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     }
   };
 
-  const handleInvite = (slotNumber: number) => {
+  const handleInvite = (slotNumber?: number) => {
       toast({ title: "Coming Soon!", description: "Friend invitation feature will be implemented soon."});
   }
 
@@ -461,6 +461,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                 </div>
             </div>
             <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" onClick={() => handleInvite()}>
+                    <UserPlus className="h-5 w-5" />
+                </Button>
                 <Button variant="ghost" size="icon" asChild>
                     <Link href={`/chat/rooms/${roomId}/settings`}>
                         <Settings className="h-5 w-5" />
