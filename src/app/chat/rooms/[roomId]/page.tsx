@@ -287,9 +287,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   const joinTimestampRef = useRef(Timestamp.now());
   const prevMemberIdsRef = useRef<string[]>([]);
-  const notificationQueueRef = useRef<RoomMessage[]>([]);
-  const isInitialMemberLoadRef = useRef(true);
-
+  
   const chatViewportRef = useRef<HTMLDivElement>(null);
 
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
@@ -322,129 +320,166 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     }
   }, [firestore, authUser]);
   
-  // Fetch Room and Member data
+  // Join/Leave Logic
+    useEffect(() => {
+        if (!firestore || !authUser || !roomId || !currentUserProfile) return;
+
+        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+        const roomRef = doc(firestore, 'rooms', roomId);
+
+        const joinRoom = async () => {
+             const memberDoc = await getDoc(memberRef);
+             const roomDoc = await getDoc(roomRef);
+
+             if (!roomDoc.exists()) return; // Room deleted
+             
+             const roomData = roomDoc.data() as Room;
+
+             // Check if kicked
+             if (roomData.kickedUsers?.[authUser.uid]) {
+                 setIsKicked(true);
+                 return;
+             }
+
+            if (!memberDoc.exists()) {
+                const batch = writeBatch(firestore);
+                batch.set(memberRef, {
+                    userId: authUser.uid,
+                    micSlot: roomData.ownerId === authUser.uid ? 0 : null,
+                    isMuted: false,
+                });
+                batch.update(roomRef, { memberCount: increment(1) });
+                await batch.commit();
+            } else if (roomData.ownerId === authUser.uid && memberDoc.data()?.micSlot !== 0) {
+                 await setDoc(memberRef, { micSlot: 0 }, { merge: true });
+            }
+        };
+
+        joinRoom();
+
+        const leaveRoom = async () => {
+            try {
+                const memberDoc = await getDoc(memberRef);
+                if (memberDoc.exists()) {
+                    const batch = writeBatch(firestore);
+                    batch.delete(memberRef);
+                    batch.update(roomRef, { memberCount: increment(-1) });
+                    await batch.commit();
+                }
+            } catch (error) {
+                // This can fail if the page is closing, which is fine.
+                console.warn("Could not cleanly leave room:", error);
+            }
+        };
+
+        const handleBeforeUnload = () => {
+            // This is a best-effort attempt, modern browsers may not guarantee its execution.
+            leaveRoom();
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            leaveRoom(); // Main cleanup action
+        };
+    }, [firestore, authUser, roomId, currentUserProfile]);
+  
+  // Fetch Room, Members, and Messages
   useEffect(() => {
     if (!firestore || !roomId || !authUser) return;
     setLoading(true);
 
     const roomDocRef = doc(firestore, 'rooms', roomId);
     const membersColRef = collection(firestore, 'rooms', roomId, 'members');
-
+    
+    // --- Room Listener ---
     const unsubRoom = onSnapshot(roomDocRef, (docSnap) => {
         if (docSnap.exists()) {
             const roomData = { id: docSnap.id, ...docSnap.data() } as Room;
             setRoom(roomData);
 
-            if (roomData.ownerId === authUser.uid) {
-                const ownerMember = members.find(m => m.userId === authUser.uid);
-                if (!ownerMember || ownerMember.micSlot !== 0) {
-                    const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-                    setDoc(memberRef, {
-                        userId: authUser.uid,
-                        micSlot: 0,
-                        isMuted: ownerMember?.isMuted ?? false,
-                    }, { merge: true });
-                }
-            }
-
-            const kickedInfo = roomData.kickedUsers?.[authUser.uid];
-            if (kickedInfo) {
+            if (roomData.kickedUsers?.[authUser.uid]) {
                 setIsKicked(true);
             }
-
         } else {
             toast({ title: "Room not found", variant: "destructive" });
             router.push('/chat/rooms');
         }
     });
     
+    // --- Members Listener ---
     const unsubMembers = onSnapshot(membersColRef, async (snapshot) => {
         const membersData = snapshot.docs.map(d => d.data() as RoomMember);
         setMembers(membersData);
-        
+        setLoading(false); // We can show the room UI once members are loaded
+
         const memberIds = membersData.map(m => m.userId);
-        const currentProfiles = new Map(memberProfiles);
+        const newProfiles = new Map(memberProfiles);
         let profilesChanged = false;
 
-        const newMemberIds = memberIds.filter(id => !currentProfiles.has(id));
+        const newMemberIds = memberIds.filter(id => !newProfiles.has(id));
 
         if (newMemberIds.length > 0) {
-            const userProfilesToFetch = newMemberIds.map(userId => getDoc(doc(firestore, 'users', userId)));
-            const userDocs = await Promise.all(userProfilesToFetch);
+            const userDocs = await Promise.all(newMemberIds.map(userId => getDoc(doc(firestore, 'users', userId))));
             userDocs.forEach(userSnap => {
                 if (userSnap.exists()) {
-                    currentProfiles.set(userSnap.id, userSnap.data() as UserProfile);
+                    newProfiles.set(userSnap.id, userSnap.data() as UserProfile);
                     profilesChanged = true;
                 }
             });
         }
-
-        const prevMemberIdList = prevMemberIdsRef.current;
-        const joinedUserIds = memberIds.filter(id => !prevMemberIdList.includes(id));
-        const leftUserIds = prevMemberIdList.filter(id => !memberIds.includes(id));
-
-        const processNotifications = () => {
-            const notifications: RoomMessage[] = [];
-             // On initial load, don't show "joined" for everyone, just the current user.
-            if (isInitialMemberLoadRef.current) {
-                const currentUserProfile = currentProfiles.get(authUser.uid);
-                if (currentUserProfile) {
-                     notifications.push({
-                        id: `notification-join-${Date.now()}-${currentUserProfile.uid}`,
-                        senderId: 'system', senderName: 'System', senderPhotoURL: '',
-                        content: `${currentUserProfile.displayName} has joined the room`,
-                        timestamp: serverTimestamp(), type: 'notification',
-                    });
-                }
-            } else {
-                 joinedUserIds.forEach(userId => {
-                    const profile = currentProfiles.get(userId);
-                    if (profile) {
-                         notifications.push({
-                            id: `notification-join-${Date.now()}-${profile.uid}`,
-                            senderId: 'system', senderName: 'System', senderPhotoURL: '',
-                            content: `${profile.displayName} has joined the room`,
-                            timestamp: serverTimestamp(), type: 'notification',
-                        });
-                    }
-                });
-            }
-
-            leftUserIds.forEach(userId => {
-                const profile = memberProfiles.get(userId); // Use old profiles map for left users
-                if (profile) {
-                     notifications.push({
-                        id: `notification-leave-${Date.now()}-${profile.uid}`,
-                        senderId: 'system', senderName: 'System', senderPhotoURL: '',
-                        content: `${profile.displayName} has left the room`,
-                        timestamp: serverTimestamp(), type: 'notification',
-                    });
-                }
-            });
-
-            if (notifications.length > 0) {
-                setChatMessages(prev => [...prev, ...notifications]);
-            }
-        }
-        
-        processNotifications();
         
         if (profilesChanged) {
-            setMemberProfiles(currentProfiles);
+            setMemberProfiles(newProfiles);
         }
+
+        // --- Join/Leave Notifications ---
+        const oldMemberIds = prevMemberIdsRef.current;
+        const justJoinedIds = memberIds.filter(id => !oldMemberIds.includes(id));
+        const justLeftIds = oldMemberIds.filter(id => !memberIds.includes(id));
+        const notifications: RoomMessage[] = [];
+
+        justJoinedIds.forEach(userId => {
+            const profile = newProfiles.get(userId);
+            if (profile) {
+                notifications.push({
+                    id: `notification-join-${Date.now()}-${profile.uid}`,
+                    senderId: 'system', senderName: 'System', senderPhotoURL: '',
+                    content: `${profile.displayName} has joined the room`,
+                    timestamp: serverTimestamp(), type: 'notification',
+                });
+            }
+        });
+
+        justLeftIds.forEach(userId => {
+            const profile = memberProfiles.get(userId); // Use old profiles map
+            if (profile) {
+                notifications.push({
+                    id: `notification-leave-${Date.now()}-${profile.uid}`,
+                    senderId: 'system', senderName: 'System', senderPhotoURL: '',
+                    content: `${profile.displayName} has left the room`,
+                    timestamp: serverTimestamp(), type: 'notification',
+                });
+            }
+        });
         
+        if (notifications.length > 0) {
+             setChatMessages(prev => [...prev, ...notifications]);
+        }
+
         prevMemberIdsRef.current = memberIds;
-        isInitialMemberLoadRef.current = false;
-        setLoading(false);
+
     }, (error) => {
         const permissionError = new FirestorePermissionError({path: membersColRef.path, operation: 'list'});
         errorEmitter.emit('permission-error', error);
         setLoading(false);
     });
     
+    // --- Messages Listener ---
     const messagesColRef = collection(firestore, 'rooms', roomId, 'messages');
     const messagesQuery = query(messagesColRef, orderBy('timestamp', 'asc'), where('timestamp', '>=', joinTimestampRef.current));
-    const unsubMessages = onSnapshot(messagesQuery, (snapshot) => {
+    const unsubMessages = onSnapshot(messagesQuery, async (snapshot) => {
         const messagesData = snapshot.docs.map(d => ({id: d.id, ...d.data()}) as RoomMessage);
         
          const newMessageSenders = messagesData
@@ -452,14 +487,16 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             .filter(id => id !== 'system' && !memberProfiles.has(id));
         
         if (newMessageSenders.length > 0) {
-             newMessageSenders.forEach(userId => {
-                const userDocRef = doc(firestore, 'users', userId);
-                getDoc(userDocRef).then(userSnap => {
+             const userDocs = await Promise.all(newMessageSenders.map(userId => getDoc(doc(firestore, 'users', userId))));
+             setMemberProfiles(prev => {
+                const newProfiles = new Map(prev);
+                userDocs.forEach(userSnap => {
                     if (userSnap.exists()) {
-                        setMemberProfiles(prev => new Map(prev).set(userId, userSnap.data() as UserProfile));
+                         newProfiles.set(userSnap.id, userSnap.data() as UserProfile);
                     }
                 });
-            });
+                return newProfiles;
+             });
         }
 
         setChatMessages(prevMessages => {
@@ -467,7 +504,12 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             const newMessages = messagesData.filter(m => !existingMessageIds.has(m.id));
             if (newMessages.length === 0) return prevMessages;
             const combined = [...prevMessages, ...newMessages];
-            return combined.sort((a,b) => ((a.timestamp?.seconds ?? Date.now()/1000) - (b.timestamp?.seconds ?? Date.now()/1000)));
+            // Sort to ensure order is correct, especially with notifications
+            return combined.sort((a,b) => {
+                const aTime = a.timestamp?.seconds ?? Date.now() / 1000;
+                const bTime = b.timestamp?.seconds ?? Date.now() / 1000;
+                return aTime - bTime;
+            });
         });
     });
 
@@ -477,7 +519,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         unsubMessages();
     };
 
-  }, [firestore, roomId, router, toast, authUser]);
+  }, [firestore, roomId, authUser, toast, router]);
   
   useEffect(() => {
     if(chatViewportRef.current) {
@@ -485,50 +527,15 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     }
   }, [chatMessages]);
   
-  const handleLeaveRoom = useCallback(async () => {
-      if (!firestore || !authUser || !roomId) return;
-      
-      const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-      const roomRef = doc(firestore, 'rooms', roomId);
-      
-      try {
-        const memberDoc = await getDoc(memberRef);
-        if (!memberDoc.exists()) return; // Already left or never joined
-
-        const batch = writeBatch(firestore);
-        
-        batch.delete(memberRef);
-        batch.update(roomRef, { memberCount: increment(-1) });
-
-        await batch.commit();
-
-      } catch(error) {
-        console.error("Error leaving room:", error);
-      }
-  }, [firestore, authUser, roomId]);
-
     const handleNavigateBack = () => {
         router.push('/chat/rooms');
     };
     
     useEffect(() => {
         if (isKicked) {
-            handleLeaveRoom();
             router.push('/chat/rooms');
         }
-    }, [isKicked, handleLeaveRoom, router]);
-
-
-  useEffect(() => {
-    const cleanup = () => {
-        handleLeaveRoom();
-    }
-    window.addEventListener('beforeunload', cleanup);
-    return () => {
-      window.removeEventListener('beforeunload', cleanup);
-      handleLeaveRoom();
-    };
-  }, [handleLeaveRoom]);
+    }, [isKicked, router]);
 
    const handleSit = async (slotNumber: number) => {
       if (!firestore || !authUser || !roomId) return;
