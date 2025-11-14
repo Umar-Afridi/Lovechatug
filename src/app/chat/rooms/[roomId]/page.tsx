@@ -287,7 +287,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   const joinTimestampRef = useRef(Timestamp.now());
   const prevMemberIdsRef = useRef<string[]>([]);
-  const notificationQueue = useRef<RoomMessage[]>([]);
+  const notificationQueueRef = useRef<RoomMessage[]>([]);
+  const isInitialMemberLoadRef = useRef(true);
 
   const chatViewportRef = useRef<HTMLDivElement>(null);
 
@@ -359,65 +360,81 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     
     const unsubMembers = onSnapshot(membersColRef, async (snapshot) => {
         const membersData = snapshot.docs.map(d => d.data() as RoomMember);
-        const memberIds = membersData.map(m => m.userId);
-
         setMembers(membersData);
         
-        const newMemberIds = memberIds.filter(id => !memberProfiles.has(id));
-        const updatedProfiles = new Map(memberProfiles);
+        const memberIds = membersData.map(m => m.userId);
+        const currentProfiles = new Map(memberProfiles);
         let profilesChanged = false;
+
+        const newMemberIds = memberIds.filter(id => !currentProfiles.has(id));
 
         if (newMemberIds.length > 0) {
             const userProfilesToFetch = newMemberIds.map(userId => getDoc(doc(firestore, 'users', userId)));
             const userDocs = await Promise.all(userProfilesToFetch);
             userDocs.forEach(userSnap => {
                 if (userSnap.exists()) {
-                    updatedProfiles.set(userSnap.id, userSnap.data() as UserProfile);
+                    currentProfiles.set(userSnap.id, userSnap.data() as UserProfile);
                     profilesChanged = true;
                 }
             });
         }
-        
+
         const prevMemberIdList = prevMemberIdsRef.current;
-        
         const joinedUserIds = memberIds.filter(id => !prevMemberIdList.includes(id));
         const leftUserIds = prevMemberIdList.filter(id => !memberIds.includes(id));
 
-        for (const userId of joinedUserIds) {
-            let profile = updatedProfiles.get(userId) || memberProfiles.get(userId);
-             if (profile) {
-                notificationQueue.current.push({
-                    id: `notification-join-${Date.now()}-${profile.uid}`,
-                    senderId: 'system', senderName: 'System', senderPhotoURL: '',
-                    content: `${profile.displayName} has joined the room`,
-                    timestamp: serverTimestamp(), type: 'notification',
+        const processNotifications = () => {
+            const notifications: RoomMessage[] = [];
+             // On initial load, don't show "joined" for everyone, just the current user.
+            if (isInitialMemberLoadRef.current) {
+                const currentUserProfile = currentProfiles.get(authUser.uid);
+                if (currentUserProfile) {
+                     notifications.push({
+                        id: `notification-join-${Date.now()}-${currentUserProfile.uid}`,
+                        senderId: 'system', senderName: 'System', senderPhotoURL: '',
+                        content: `${currentUserProfile.displayName} has joined the room`,
+                        timestamp: serverTimestamp(), type: 'notification',
+                    });
+                }
+            } else {
+                 joinedUserIds.forEach(userId => {
+                    const profile = currentProfiles.get(userId);
+                    if (profile) {
+                         notifications.push({
+                            id: `notification-join-${Date.now()}-${profile.uid}`,
+                            senderId: 'system', senderName: 'System', senderPhotoURL: '',
+                            content: `${profile.displayName} has joined the room`,
+                            timestamp: serverTimestamp(), type: 'notification',
+                        });
+                    }
                 });
+            }
+
+            leftUserIds.forEach(userId => {
+                const profile = memberProfiles.get(userId); // Use old profiles map for left users
+                if (profile) {
+                     notifications.push({
+                        id: `notification-leave-${Date.now()}-${profile.uid}`,
+                        senderId: 'system', senderName: 'System', senderPhotoURL: '',
+                        content: `${profile.displayName} has left the room`,
+                        timestamp: serverTimestamp(), type: 'notification',
+                    });
+                }
+            });
+
+            if (notifications.length > 0) {
+                setChatMessages(prev => [...prev, ...notifications]);
             }
         }
         
-        for (const userId of leftUserIds) {
-            const profile = memberProfiles.get(userId);
-            if (profile) {
-                 notificationQueue.current.push({
-                    id: `notification-leave-${Date.now()}-${profile.uid}`,
-                    senderId: 'system', senderName: 'System', senderPhotoURL: '',
-                    content: `${profile.displayName} has left the room`,
-                    timestamp: serverTimestamp(), type: 'notification',
-                });
-            }
-        }
+        processNotifications();
         
-        if (notificationQueue.current.length > 0) {
-            setChatMessages(prev => [...prev, ...notificationQueue.current]);
-            notificationQueue.current = [];
-        }
-
-
         if (profilesChanged) {
-            setMemberProfiles(updatedProfiles);
+            setMemberProfiles(currentProfiles);
         }
         
         prevMemberIdsRef.current = memberIds;
+        isInitialMemberLoadRef.current = false;
         setLoading(false);
     }, (error) => {
         const permissionError = new FirestorePermissionError({path: membersColRef.path, operation: 'list'});
@@ -432,7 +449,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         
          const newMessageSenders = messagesData
             .map(m => m.senderId)
-            .filter(id => !memberProfiles.has(id));
+            .filter(id => id !== 'system' && !memberProfiles.has(id));
         
         if (newMessageSenders.length > 0) {
              newMessageSenders.forEach(userId => {
@@ -448,6 +465,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         setChatMessages(prevMessages => {
             const existingMessageIds = new Set(prevMessages.map(m => m.id));
             const newMessages = messagesData.filter(m => !existingMessageIds.has(m.id));
+            if (newMessages.length === 0) return prevMessages;
             const combined = [...prevMessages, ...newMessages];
             return combined.sort((a,b) => ((a.timestamp?.seconds ?? Date.now()/1000) - (b.timestamp?.seconds ?? Date.now()/1000)));
         });
@@ -776,7 +794,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                   <Button variant="ghost" size="icon" className="relative" onClick={handleViewMembers}>
                       <Users className="h-5 w-5" />
                       {members.length > 0 && (
-                          <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{members.length}</Badge>
+                          <Badge variant="secondary" className="absolute -top-1 -right-2 h-5 min-w-[1.25rem] justify-center p-1 text-xs">
+                            {members.length}
+                          </Badge>
                       )}
                   </Button>
                   <Button variant="destructive" size="sm" onClick={handleNavigateBack}>
@@ -788,7 +808,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
           <div className="flex-1 flex flex-col overflow-hidden">
               <div className="p-4 md:p-6 space-y-8">
                   <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
-                      {ownerMember && ownerProfile && ownerMember.micSlot === 0 ? (
+                      {ownerMember && ownerProfile ? (
                           <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUserFromMic} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp} onViewProfile={handleViewProfile} onKickFromRoom={handleKickUserFromRoom} />
                       ) : (
                           <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={!isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
