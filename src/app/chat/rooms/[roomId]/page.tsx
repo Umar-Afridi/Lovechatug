@@ -80,7 +80,7 @@ const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLock
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0">
          <div className="flex flex-col">
-            <Button variant="ghost" onClick={() => onSit(slotNumber)} className="w-full justify-start px-4 py-2" disabled={isLocked && !isOwner}>
+            <Button variant="ghost" onClick={() => onSit(slotNumber)} className="w-full justify-start px-4 py-2" disabled={(isLocked && !isOwner) || (disabled && !isOwner)}>
                 <Mic className="mr-2 h-4 w-4"/> Take Seat
             </Button>
             {isOwner && (
@@ -156,7 +156,7 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                           "font-semibold text-sm truncate",
                           userProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
                         )}>
-                            {userProfile.displayName}
+                            {userProfile.displayName.split(' ')[0]}
                         </p>
                         {userProfile.verifiedBadge?.showBadge && (
                             <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-4 w-4 shrink-0" />
