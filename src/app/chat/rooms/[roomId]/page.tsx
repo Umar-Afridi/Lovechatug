@@ -17,6 +17,7 @@ import {
   Lock,
   LockOpen,
   UserPlus,
+  VolumeX,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -237,13 +238,15 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const [isInviteSheetOpen, setInviteSheetOpen] = useState(false);
   const [inviteSlot, setInviteSlot] = useState<number | undefined>(undefined);
   
-  // Ref to store the timestamp when the component mounts
+  const [isRoomMuted, setIsRoomMuted] = useState(false);
+  
   const joinTimestampRef = useRef(Timestamp.now());
 
   const chatViewportRef = useRef<HTMLDivElement>(null);
 
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserMemberInfo = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
+  const isUserOnMic = useMemo(() => currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined, [currentUserMemberInfo]);
   const lockedSlots = useMemo(() => room?.lockedSlots || [], [room]);
 
   // Fetch Room and Member data
@@ -268,7 +271,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         const membersData = snapshot.docs.map(d => d.data() as RoomMember);
         setMembers(membersData);
         
-        // Auto-seat owner if they enter the room and are not seated
         const ownerMember = membersData.find(m => m.userId === room?.ownerId);
         if(isOwner && authUser && !ownerMember) {
              const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
@@ -300,7 +302,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         setLoading(false);
     });
     
-    // Fetch Chat Messages from the point of joining onwards
     const messagesColRef = collection(firestore, 'rooms', roomId, 'messages');
     const messagesQuery = query(messagesColRef, orderBy('timestamp', 'asc'), where('timestamp', '>=', joinTimestampRef.current));
     const unsubMessages = onSnapshot(messagesQuery, (snapshot) => {
@@ -337,7 +338,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   }, [firestore, roomId, router, toast, isOwner, authUser, memberProfiles, room?.ownerId]);
   
-  // Auto-scroll chat
   useEffect(() => {
     if(chatViewportRef.current) {
         chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
@@ -353,9 +353,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       try {
         const batch = writeBatch(firestore);
         
-        // Remove the user from the members subcollection
         batch.delete(memberRef);
-        // Atomically remove the user's ID from the members array on the room document
         batch.update(roomRef, { members: arrayRemove(authUser.uid) });
 
         await batch.commit();
@@ -363,8 +361,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
       } catch(error) {
         console.error("Error leaving room:", error);
-        // Even if an error occurs (e.g., user was already removed),
-        // we still want to navigate them away.
          router.push('/chat/rooms');
       }
   };
@@ -409,7 +405,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       if (!isOwner || !firestore || !roomId) return;
       const memberRef = doc(firestore, 'rooms', roomId, 'members', userIdToKick);
       try {
-        // Instead of deleting, just move them out of the mic slot
         await updateDoc(memberRef, { micSlot: null });
       } catch(error) {
          const permissionError = new FirestorePermissionError({path: memberRef.path, operation: 'update'});
@@ -433,7 +428,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
     let currentUserProfile = memberProfiles.get(authUser.uid);
 
-    // If profile is not in state, fetch it once.
     if (!currentUserProfile) {
         const userDoc = await getDoc(doc(firestore, 'users', authUser.uid));
         if (userDoc.exists()) {
@@ -537,7 +531,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
           
           <div className="flex-1 flex flex-col overflow-hidden">
               <div className="p-4 md:p-6 space-y-8">
-                  {/* Owner & Super Admin Mics */}
                   <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
                       {ownerMember && ownerProfile && ownerMember.micSlot === 0 ? (
                           <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
@@ -552,7 +545,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                       )}
                   </div>
                   
-                  {/* Separator */}
                   <div className="relative">
                       <div className="absolute inset-0 flex items-center">
                           <span className="w-full border-t" />
@@ -564,7 +556,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                       </div>
                   </div>
 
-                  {/* User Mics */}
                   <div className="grid grid-cols-4 gap-x-4 gap-y-6">
                       {Array.from({ length: 8 }).map((_, i) => {
                           const slotNumber = i + 1;
@@ -580,7 +571,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                   </div>
               </div>
 
-              {/* In-Room Chat */}
               <ScrollArea className="flex-1 px-4" viewportRef={chatViewportRef}>
                   <div className="space-y-4 py-4">
                       {chatMessages.map(msg => (
@@ -589,20 +579,36 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                   </div>
               </ScrollArea>
 
-              {/* In-Room Chat Input */}
-              <footer className="shrink-0 border-t bg-muted/40 p-2 md:p-4">
-                  <div className="relative flex items-center gap-2">
-                      <Textarea 
-                          placeholder="Send a message to the room..."
-                          className="min-h-[40px] max-h-[100px] resize-none pr-12"
-                          rows={1}
-                          value={chatInputValue}
-                          onChange={(e) => setChatInputValue(e.target.value)}
-                          onKeyDown={handleChatKeyPress}
-                      />
-                      <Button size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSendChatMessage}>
-                          <Send className="h-4 w-4" />
-                      </Button>
+              <footer className="shrink-0 border-t bg-muted/40 p-2 md:px-4 md:py-2">
+                  <div className="flex items-center gap-2">
+                       <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleMuteToggle(authUser!.uid, !currentUserMemberInfo?.isMuted)}
+                            disabled={!isUserOnMic}
+                        >
+                           {currentUserMemberInfo?.isMuted ? <MicOff className="h-5 w-5"/> : <Mic className="h-5 w-5"/>}
+                        </Button>
+                        <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => setIsRoomMuted(!isRoomMuted)}
+                        >
+                            {isRoomMuted ? <VolumeX className="h-5 w-5"/> : <Volume2 className="h-5 w-5"/>}
+                        </Button>
+                      <div className="relative flex-1">
+                        <Textarea 
+                            placeholder="Send a message..."
+                            className="min-h-[40px] max-h-[100px] resize-none pr-12 text-sm"
+                            rows={1}
+                            value={chatInputValue}
+                            onChange={(e) => setChatInputValue(e.target.value)}
+                            onKeyDown={handleChatKeyPress}
+                        />
+                        <Button size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSendChatMessage}>
+                            <Send className="h-4 w-4" />
+                        </Button>
+                      </div>
                   </div>
               </footer>
           </div>
