@@ -95,13 +95,13 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                 </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-                 {isCurrentUser && role !== 'owner' && (
+                 {isCurrentUser && (
                      <DropdownMenuItem onClick={onStandUp}>
                         <UserX className="mr-2 h-4 w-4" />
                         <span>Leave Mic</span>
                     </DropdownMenuItem>
                  )}
-                 {isCurrentUser && role !== 'owner' && <DropdownMenuSeparator />}
+                 {isCurrentUser && <DropdownMenuSeparator />}
                 <DropdownMenuItem onClick={() => onMuteToggle(member.userId, !member.isMuted)} disabled={!canManage && !isCurrentUser}>
                     {member.isMuted ? <Volume2 className="mr-2 h-4 w-4" /> : <MicOff className="mr-2 h-4 w-4" />}
                     <span>{member.isMuted ? 'Unmute' : 'Mute'} {isCurrentUser ? "" : "User"}</span>
@@ -253,7 +253,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         if (!firestore || !authUser || !roomId) return;
         const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
         try {
-             // Instead of deleting, update micSlot to null or a value indicating they are an audience member
              await updateDoc(memberRef, { micSlot: null });
         } catch (error) {
             const permissionError = new FirestorePermissionError({ path: memberRef.path, operation: 'update' });
@@ -317,13 +316,12 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     return <div className="flex h-screen items-center justify-center">Loading Room...</div>;
   }
   
-  const ownerMember = members.find(m => m.userId === room.ownerId);
-  const ownerOnOwnerSlot = ownerMember?.micSlot === 0 ? ownerMember : null;
+  const ownerOnOwnerSlot = members.find(m => m.userId === room.ownerId && m.micSlot === 0);
   const ownerProfile = ownerOnOwnerSlot ? memberProfiles.get(ownerOnOwnerSlot.userId) : null;
   
   const superAdminProfile = null; // Placeholder for future super admin feature
 
-  const occupiedSlots = new Set(members.map(m => m.micSlot).filter(s => s !== null && s !== 0 && s !== -1));
+  const occupiedSlots = new Set(members.map(m => m.micSlot).filter(s => s !== null && s !== undefined));
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -355,8 +353,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                 {/* Owner & Super Admin Mics */}
                 <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
                      {ownerOnOwnerSlot && ownerProfile ? (
-                        <UserMic member={ownerOnOwnerSlot} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerOnOwnerSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleSit(0)}/>
-                    ) : <MicPlaceholder onSit={handleSit} slotNumber={0} disabled={!!currentUserMemberInfo?.micSlot && currentUserMemberInfo.micSlot !== 0} />}
+                        <UserMic member={ownerOnOwnerSlot} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerOnOwnerSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
+                    ) : <MicPlaceholder onSit={handleSit} slotNumber={0} disabled={isOwner && occupiedSlots.has(0)} />}
 
                     {/* Placeholder for Super Admin */}
                      {superAdminProfile ? (
@@ -387,10 +385,11 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                             return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
                         }
                         
-                        // Disable sitting if the user is already on a mic slot (and it's not THIS slot, though that's covered by occupiedSlots)
-                        const isUserAlreadySeated = !!currentUserMemberInfo?.micSlot;
+                        // Disable sitting if the user is already on a mic slot, or the slot is occupied.
+                        const isUserAlreadySeated = currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined;
+                        const isSlotOccupied = occupiedSlots.has(slotNumber);
                         
-                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserAlreadySeated || occupiedSlots.has(slotNumber)}/>
+                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserAlreadySeated || isSlotOccupied}/>
                     })}
                 </div>
             </div>
