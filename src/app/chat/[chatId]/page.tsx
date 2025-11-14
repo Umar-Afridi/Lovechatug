@@ -403,7 +403,7 @@ export default function ChatIdPage({
             type: 'audio',
             mediaUrl: URL.createObjectURL(audioBlob),
             status: 'sent', // Will be updated later
-            isUploading: false,
+            isUploading: true, // Mark as uploading
         };
         setMessages(prev => [...prev, optimisticMessage]);
 
@@ -445,11 +445,12 @@ export default function ChatIdPage({
             };
             
             const docRef = await addDoc(messagesRef, newAudioMessageData);
-
-            // 5. Update the local message with the final ID from firestore
+            playSendMessageSound();
+            
+            // 5. Update the local message from uploading to sent
              setMessages(prev => prev.map(msg => 
                 msg.id === localMessageId 
-                ? { ...msg, id: docRef.id, uploadFailed: false, mediaUrl: downloadURL } 
+                ? { ...msg, id: docRef.id, isUploading: false, mediaUrl: downloadURL, status: newAudioMessageData.status as MessageType['status'] } 
                 : msg
             ));
             
@@ -469,12 +470,12 @@ export default function ChatIdPage({
             // Mark the optimistic message as failed
             setMessages(prev => prev.map(msg => 
                 msg.id === localMessageId 
-                ? { ...msg, uploadFailed: true }
+                ? { ...msg, uploadFailed: true, isUploading: false } 
                 : msg
             ));
             toast({ title: 'Error', description: 'Could not send voice message.', variant: 'destructive' });
         }
-    }, [firestore, chatId, authUser, otherUser, toast, currentUser]);
+    }, [firestore, chatId, authUser, otherUser, toast, currentUser, playSendMessageSound]);
 
     const stopRecording = useCallback((send: boolean) => {
         if (recordingIntervalRef.current) {
@@ -493,7 +494,7 @@ export default function ChatIdPage({
 
             if (send) {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                if (audioBlob.size > 100) { 
+                if (audioBlob.size > 100) { // Dont send empty recordings
                     await sendAudioMessage(audioBlob);
                 }
             }
@@ -504,9 +505,10 @@ export default function ChatIdPage({
             mediaRecorderRef.current = null;
         };
         
+        // This check is crucial. Only call stop() if the recorder is actually recording.
         if (mediaRecorderRef.current?.state === 'recording') {
             mediaRecorderRef.current.stop();
-        } else {
+        } else { // If not recording, just clean up state.
              audioChunksRef.current = [];
             setIsRecording(false);
             setRecordingDuration(0);
@@ -545,21 +547,22 @@ export default function ChatIdPage({
         }
     }, [isRecording, toast]);
 
+    // Button-specific handlers
     const handleMicButtonClick = () => {
-        if (isRecording) {
-            // Stop and send if mic is clicked again
-            stopRecording(true);
-        } else {
+        // This button should only START recording.
+        if (!isRecording) {
             startRecording();
         }
     };
 
     const handleCancelRecording = () => {
-        stopRecording(false); // a `false` means don't send
+        // This stops recording and DISCARDS the audio.
+        stopRecording(false);
     };
     
     const handleSendRecording = () => {
-        stopRecording(true); // `true` means send the recording
+        // This stops recording and SENDS the audio.
+        stopRecording(true);
     };
     // --- End Voice Recording Logic ---
 
