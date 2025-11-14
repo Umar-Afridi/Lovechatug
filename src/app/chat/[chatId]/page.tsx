@@ -547,7 +547,8 @@ export default function ChatIdPage({
 
     const handleMicButtonClick = () => {
         if (isRecording) {
-            // This case should be handled by send/cancel buttons now
+            // Stop and send if mic is clicked again
+            stopRecording(true);
         } else {
             startRecording();
         }
@@ -1083,3 +1084,5 @@ export default function ChatIdPage({
     </>
   );
 }
+
+    
