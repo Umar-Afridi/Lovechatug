@@ -286,6 +286,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   const joinTimestampRef = useRef(Timestamp.now());
   const prevMemberIdsRef = useRef<string[]>([]);
+  const notificationQueue = useRef<RoomMessage[]>([]);
 
   const chatViewportRef = useRef<HTMLDivElement>(null);
 
@@ -332,10 +333,20 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             const roomData = { id: docSnap.id, ...docSnap.data() } as Room;
             setRoom(roomData);
 
-            // Check if current user has been kicked
+            if (roomData.ownerId === authUser.uid) {
+                const ownerMember = members.find(m => m.userId === authUser.uid);
+                if (!ownerMember || ownerMember.micSlot !== 0) {
+                    const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+                    setDoc(memberRef, {
+                        userId: authUser.uid,
+                        micSlot: 0,
+                        isMuted: ownerMember?.isMuted ?? false,
+                    }, { merge: true });
+                }
+            }
+
             const kickedInfo = roomData.kickedUsers?.[authUser.uid];
             if (kickedInfo) {
-                // For now, we just kick them out. In future, we can check the timestamp.
                 setIsKicked(true);
             }
 
@@ -351,18 +362,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
         setMembers(membersData);
         
-        const ownerMember = membersData.find(m => m.userId === room?.ownerId);
-        if(isOwner && authUser && !ownerMember) {
-             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-             setDoc(memberRef, {
-                userId: authUser.uid,
-                micSlot: 0,
-                isMuted: false,
-            }, { merge: true });
-        }
-
         const newMemberIds = memberIds.filter(id => !memberProfiles.has(id));
-
         const updatedProfiles = new Map(memberProfiles);
         let profilesChanged = false;
 
@@ -380,49 +380,30 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         const prevMemberIdList = prevMemberIdsRef.current;
         const joinedUserIds = memberIds.filter(id => !prevMemberIdList.includes(id));
         const leftUserIds = prevMemberIdList.filter(id => !memberIds.includes(id));
-
         const newNotifications: RoomMessage[] = [];
 
         for (const userId of joinedUserIds) {
-            let profile = updatedProfiles.get(userId);
-            if (!profile) { // Fetch if not already fetched
-                const userSnap = await getDoc(doc(firestore, 'users', userId));
-                if (userSnap.exists()) {
-                    profile = userSnap.data() as UserProfile;
-                    updatedProfiles.set(userId, profile);
-                    profilesChanged = true;
-                }
-            }
-            if (profile) {
-                newNotifications.push({
+            let profile = updatedProfiles.get(userId) || memberProfiles.get(userId);
+             if (profile) {
+                notificationQueue.current.push({
                     id: `notification-join-${Date.now()}-${profile.uid}`,
-                    senderId: 'system',
-                    senderName: 'System',
-                    senderPhotoURL: '',
+                    senderId: 'system', senderName: 'System', senderPhotoURL: '',
                     content: `${profile.displayName} has joined the room`,
-                    timestamp: serverTimestamp(),
-                    type: 'notification',
+                    timestamp: serverTimestamp(), type: 'notification',
                 });
             }
         }
         
-         for (const userId of leftUserIds) {
+        for (const userId of leftUserIds) {
             const profile = memberProfiles.get(userId);
             if (profile) {
-                 newNotifications.push({
+                 notificationQueue.current.push({
                     id: `notification-leave-${Date.now()}-${profile.uid}`,
-                    senderId: 'system',
-                    senderName: 'System',
-                    senderPhotoURL: '',
+                    senderId: 'system', senderName: 'System', senderPhotoURL: '',
                     content: `${profile.displayName} has left the room`,
-                    timestamp: serverTimestamp(),
-                    type: 'notification',
+                    timestamp: serverTimestamp(), type: 'notification',
                 });
             }
-        }
-        
-        if (newNotifications.length > 0) {
-            setChatMessages(prev => [...prev, ...newNotifications].sort((a,b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0)));
         }
 
         if (profilesChanged) {
@@ -458,10 +439,11 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         }
 
         setChatMessages(prevMessages => {
-            const newMessages = messagesData.filter(
-                (newMessage) => !prevMessages.some((prevMessage) => prevMessage.id === newMessage.id)
-            );
-            return [...prevMessages, ...newMessages];
+            const existingMessageIds = new Set(prevMessages.map(m => m.id));
+            const newMessages = messagesData.filter(m => !existingMessageIds.has(m.id));
+            const combined = [...prevMessages, ...newMessages, ...notificationQueue.current];
+            notificationQueue.current = [];
+            return combined.sort((a,b) => ((a.timestamp?.seconds ?? Date.now()/1000) - (b.timestamp?.seconds ?? Date.now()/1000)));
         });
     });
 
@@ -502,11 +484,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   }, [firestore, authUser, roomId]);
 
     const handleNavigateBack = () => {
-        handleLeaveRoom();
         router.push('/chat/rooms');
     };
     
-    // This effect runs when isKicked becomes true
     useEffect(() => {
         if (isKicked) {
             handleLeaveRoom();
@@ -516,15 +496,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
 
   useEffect(() => {
-    // This effect handles leaving the room when the component unmounts (e.g., browser close)
     const cleanup = () => {
         handleLeaveRoom();
     }
-    // Using beforeunload for tab/browser close
     window.addEventListener('beforeunload', cleanup);
     return () => {
       window.removeEventListener('beforeunload', cleanup);
-      handleLeaveRoom(); // Also run on component unmount (e.g. navigating away)
+      handleLeaveRoom();
     };
   }, [handleLeaveRoom]);
 
@@ -589,10 +567,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     try {
         const batch = writeBatch(firestore);
 
-        // Remove user from the members subcollection
         batch.delete(memberRef);
         
-        // Add user to the kickedUsers map in the room document
         const kickedField = `kickedUsers.${userIdToKick}`;
         batch.update(roomRef, {
             memberCount: increment(-1),
@@ -699,7 +675,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       };
       
       try {
-          // Check if a request already exists
           const q = query(requestsRef, where('senderId', '==', authUser.uid), where('receiverId', '==', receiverId));
           const q2 = query(requestsRef, where('senderId', '==', receiverId), where('receiverId', '==', authUser.uid));
           
@@ -712,7 +687,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
           await addDoc(requestsRef, newRequest);
           toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
-          setProfileSheetOpen(false); // Close sheet on success
+          setProfileSheetOpen(false);
       } catch (error) {
           console.error("Error sending friend request:", error);
           const permissionError = new FirestorePermissionError({ path: requestsRef.path, operation: 'create', requestResourceData: newRequest });
