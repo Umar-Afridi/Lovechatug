@@ -48,7 +48,7 @@ const RoomCard = ({ room }: { room: Room }) => {
 
 
 export default function RoomsPage() {
-    const { user } = useUser();
+    const { user, loading: userLoading } = useUser();
     const firestore = useFirestore();
     const router = useRouter();
     const [myRoom, setMyRoom] = useState<Room | null>(null);
@@ -56,12 +56,15 @@ export default function RoomsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        if (userLoading) {
+            setLoading(true);
+            return;
+        }
         if (!firestore || !user) {
             setLoading(false);
             return;
         }
 
-        setLoading(true);
         const roomsCollectionRef = collection(firestore, 'rooms');
 
         // Listener for all rooms to find the user's own room
@@ -105,7 +108,7 @@ export default function RoomsPage() {
             unsubMyRoom();
             unsubPublicRooms();
         };
-    }, [firestore, user]);
+    }, [firestore, user, userLoading]);
 
   if (loading) {
       return (
