@@ -364,27 +364,36 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             .map(m => m.userId)
             .filter(id => !memberProfiles.has(id));
 
+        const updatedProfiles = new Map(memberProfiles);
+        let profilesChanged = false;
+
         if (newMemberIds.length > 0) {
             const userProfilesToFetch = newMemberIds.map(userId => getDoc(doc(firestore, 'users', userId)));
             const userDocs = await Promise.all(userProfilesToFetch);
-            const newProfiles = new Map(memberProfiles);
             userDocs.forEach(userSnap => {
                 if (userSnap.exists()) {
-                    newProfiles.set(userSnap.id, userSnap.data() as UserProfile);
+                    updatedProfiles.set(userSnap.id, userSnap.data() as UserProfile);
+                    profilesChanged = true;
                 }
             });
-            setMemberProfiles(newProfiles);
         }
-
+        
         const prevMemberIds = prevMemberIdsRef.current;
-
-        // Check for new joins after fetching new profiles
         const joinedUserIds = [...currentMemberIds].filter(id => !prevMemberIds.has(id));
         if (joinedUserIds.length > 0) {
-            const joinedProfiles = joinedUserIds.map(id => memberProfiles.get(id) || new Map(memberProfiles).get(id)).filter(Boolean);
-             for (const profile of joinedProfiles) {
-                 if (profile) {
-                    const joinMessage: RoomMessage = {
+            const newJoinMessages: RoomMessage[] = [];
+            for (const userId of joinedUserIds) {
+                let profile = updatedProfiles.get(userId);
+                if (!profile) {
+                    const userSnap = await getDoc(doc(firestore, 'users', userId));
+                    if (userSnap.exists()) {
+                        profile = userSnap.data() as UserProfile;
+                        updatedProfiles.set(userId, profile);
+                        profilesChanged = true;
+                    }
+                }
+                if (profile) {
+                    newJoinMessages.push({
                         id: `notification-join-${Date.now()}-${profile.uid}`,
                         senderId: 'system',
                         senderName: 'System',
@@ -392,19 +401,21 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                         content: `${profile.displayName} has joined the room`,
                         timestamp: serverTimestamp(),
                         type: 'notification',
-                    };
-                    setChatMessages(prev => [...prev, joinMessage]);
-                 }
-             }
+                    });
+                }
+            }
+            if (newJoinMessages.length > 0) {
+                 setChatMessages(prev => [...prev, ...newJoinMessages]);
+            }
         }
         
-        // Check for leaves
         const leftUserIds = [...prevMemberIds].filter(id => !currentMemberIds.has(id));
-        if (leftUserIds.length > 0) {
-            const leftProfiles = leftUserIds.map(id => memberProfiles.get(id)).filter(Boolean);
-             for (const profile of leftProfiles) {
-                 if (profile) {
-                    const leaveMessage: RoomMessage = {
+         if (leftUserIds.length > 0) {
+            const newLeaveMessages: RoomMessage[] = [];
+            for (const userId of leftUserIds) {
+                const profile = memberProfiles.get(userId);
+                if (profile) {
+                    newLeaveMessages.push({
                         id: `notification-leave-${Date.now()}-${profile.uid}`,
                         senderId: 'system',
                         senderName: 'System',
@@ -412,12 +423,17 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                         content: `${profile.displayName} has left the room`,
                         timestamp: serverTimestamp(),
                         type: 'notification',
-                    };
-                    setChatMessages(prev => [...prev, leaveMessage]);
-                 }
-             }
+                    });
+                }
+            }
+             if (newLeaveMessages.length > 0) {
+                setChatMessages(prev => [...prev, ...newLeaveMessages]);
+            }
         }
-
+        
+        if (profilesChanged) {
+            setMemberProfiles(updatedProfiles);
+        }
         prevMemberIdsRef.current = currentMemberIds;
         setLoading(false);
     }, (error) => {
@@ -460,7 +476,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         unsubMessages();
     };
 
-  }, [firestore, roomId, router, toast, authUser, memberProfiles, room?.ownerId, isOwner]);
+  }, [firestore, roomId, router, toast, authUser]);
   
   useEffect(() => {
     if(chatViewportRef.current) {
@@ -498,8 +514,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     useEffect(() => {
         if (isKicked) {
             handleLeaveRoom();
+            router.push('/chat/rooms');
         }
-    }, [isKicked, handleLeaveRoom]);
+    }, [isKicked, handleLeaveRoom, router]);
 
 
   useEffect(() => {
@@ -781,9 +798,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                   )}
                   <Button variant="ghost" size="icon" className="relative" onClick={handleViewMembers}>
                         <Users className="h-5 w-5" />
-                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                          {room.memberCount || 0}
-                        </span>
                   </Button>
                   <Button variant="destructive" size="sm" onClick={handleNavigateBack}>
                       <LogOut className="mr-2 h-4 w-4"/> Leave
