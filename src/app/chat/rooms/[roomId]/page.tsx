@@ -368,7 +368,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
    const handleSit = async (slotNumber: number) => {
       if (!firestore || !authUser || !roomId) return;
       
-      if (!isOwner && (slotNumber === 0 || slotNumber === -1)) {
+      if (!isOwner && slotNumber === 0) {
         toast({ title: "Permission Denied", description: "Only the room owner can take this seat.", variant: "destructive" });
         return;
       }
@@ -548,7 +548,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                       {superAdminMember && superAdminProfile ? (
                           <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                       ) : (
-                          <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={!isOwner} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
+                          <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
                       )}
                   </div>
                   
