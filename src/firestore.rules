@@ -83,6 +83,13 @@ service cloud.firestore {
             allow update: if isOwner(userId) || isRoomOwner(roomId); // A user can update their own status, or the owner can
             allow delete: if isOwner(userId) || isRoomOwner(roomId); // A user can leave, or the owner can kick them
         }
+        
+        match /messages/{messageId} {
+          allow read, create: if isRoomMember(roomId);
+          allow update, delete: if isOwner(request.resource.data.senderId) || isRoomOwner(roomId);
+        }
     }
   }
 }
+
+    

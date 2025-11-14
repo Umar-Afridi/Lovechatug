@@ -27,8 +27,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc } from 'firebase/firestore';
-import type { Room, RoomMember, UserProfile } from '@/lib/types';
+import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import type { Room, RoomMember, UserProfile, RoomMessage } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { Textarea } from '@/components/ui/textarea';
@@ -99,6 +99,19 @@ const UserMic = ({ member, userProfile, role, isOwner, onKick, onMuteToggle }: {
     );
 };
 
+const RoomChatMessage = ({ message }: { message: RoomMessage }) => (
+    <div className="flex items-start gap-3">
+        <Avatar className="h-8 w-8">
+            <AvatarImage src={message.senderPhotoURL} />
+            <AvatarFallback>{message.senderName.charAt(0)}</AvatarFallback>
+        </Avatar>
+        <div className="flex flex-col">
+            <p className="text-sm font-semibold">{message.senderName}</p>
+            <p className="text-sm text-muted-foreground">{message.content}</p>
+        </div>
+    </div>
+);
+
 
 export default function RoomPage({ params }: { params: { roomId: string } }) {
   const { roomId } = React.use(params);
@@ -111,6 +124,12 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [memberProfiles, setMemberProfiles] = useState<Map<string, UserProfile>>(new Map());
   const [loading, setLoading] = useState(true);
+  
+  const [chatMessages, setChatMessages] = useState<RoomMessage[]>([]);
+  const [chatInputValue, setChatInputValue] = useState('');
+  
+  const chatViewportRef = useRef<HTMLDivElement>(null);
+
 
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserMicSlot = useMemo(() => members.find(m => m.userId === authUser?.uid)?.micSlot, [members, authUser]);
@@ -136,7 +155,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         const membersData = snapshot.docs.map(d => d.data() as RoomMember);
         setMembers(membersData);
 
-        // Fetch profiles for new members
         membersData.forEach(member => {
             if (!memberProfiles.has(member.userId)) {
                 const userDocRef = doc(firestore, 'users', member.userId);
@@ -153,13 +171,29 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
+    
+    // Fetch Chat Messages
+    const messagesColRef = collection(firestore, 'rooms', roomId, 'messages');
+    const messagesQuery = query(messagesColRef, orderBy('timestamp', 'asc'));
+    const unsubMessages = onSnapshot(messagesQuery, (snapshot) => {
+        const messagesData = snapshot.docs.map(d => ({id: d.id, ...d.data()}) as RoomMessage);
+        setChatMessages(messagesData);
+    });
 
     return () => {
         unsubRoom();
         unsubMembers();
+        unsubMessages();
     };
 
-  }, [firestore, roomId, router, toast, memberProfiles]);
+  }, [firestore, roomId, router, toast]);
+  
+  // Auto-scroll chat
+  useEffect(() => {
+    if(chatViewportRef.current) {
+        chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
   const handleLeaveRoom = async () => {
       if (!firestore || !authUser || !roomId) return;
@@ -212,6 +246,36 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
          errorEmitter.emit('permission-error', permissionError);
       }
   };
+  
+  const handleSendChatMessage = async () => {
+    if (!firestore || !authUser || !roomId || !chatInputValue.trim()) return;
+
+    const currentUserProfile = memberProfiles.get(authUser.uid);
+    
+    const messagesColRef = collection(firestore, 'rooms', roomId, 'messages');
+    const newMessage = {
+        senderId: authUser.uid,
+        senderName: currentUserProfile?.displayName || 'User',
+        senderPhotoURL: currentUserProfile?.photoURL || '',
+        content: chatInputValue.trim(),
+        timestamp: serverTimestamp(),
+    };
+    
+    try {
+        await addDoc(messagesColRef, newMessage);
+        setChatInputValue('');
+    } catch(error) {
+         const permissionError = new FirestorePermissionError({path: messagesColRef.path, operation: 'create', requestResourceData: newMessage});
+         errorEmitter.emit('permission-error', permissionError);
+    }
+  };
+
+  const handleChatKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault(); 
+        handleSendChatMessage();
+    }
+  };
 
   if (loading || !room) {
     return <div className="flex h-screen items-center justify-center">Loading Room...</div>;
@@ -219,7 +283,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   
   const ownerMember = members.find(m => m.micSlot === 0);
   const ownerProfile = ownerMember ? memberProfiles.get(ownerMember.userId) : null;
-  // Note: Super admin logic can be added here if needed
   const superAdminProfile = null; 
 
   return (
@@ -243,46 +306,54 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         </header>
         
         <div className="flex-1 flex flex-col overflow-hidden">
-            <ScrollArea className="flex-1">
-                <div className="p-4 md:p-6 space-y-8">
-                    {/* Owner & Super Admin Mics */}
-                    <div className="grid grid-cols-2 gap-4 md:gap-8">
-                        {ownerMember && ownerProfile ? (
-                            <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={isOwner} onKick={handleKickUser} onMuteToggle={handleMuteToggle}/>
-                        ) : <div/>}
-                        {superAdminProfile ? (
-                            <UserMic member={null} userProfile={superAdminProfile} role="super" isOwner={isOwner} onKick={handleKickUser} onMuteToggle={handleMuteToggle}/>
-                        ) : <div/>}
+            <div className="p-4 md:p-6 space-y-8">
+                {/* Owner & Super Admin Mics */}
+                <div className="grid grid-cols-2 gap-4 md:gap-8">
+                    {ownerMember && ownerProfile ? (
+                        <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={isOwner} onKick={handleKickUser} onMuteToggle={handleMuteToggle}/>
+                    ) : <div/>}
+                    {superAdminProfile ? (
+                        <UserMic member={null} userProfile={superAdminProfile} role="super" isOwner={isOwner} onKick={handleKickUser} onMuteToggle={handleMuteToggle}/>
+                    ) : <div/>}
+                </div>
+                
+                {/* Separator */}
+                <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
                     </div>
-                    
-                    {/* Separator */}
-                    <div className="relative">
-                        <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t" />
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-background px-2 text-muted-foreground">
-                            Audience
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* User Mics */}
-                    <div className="grid grid-cols-4 gap-x-4 gap-y-6">
-                        {Array.from({ length: 8 }).map((_, i) => {
-                            const slotNumber = i + 1;
-                            const memberInSlot = members.find(m => m.micSlot === slotNumber);
-                            const userProfileInSlot = memberInSlot ? memberProfiles.get(memberInSlot.userId) : null;
-                            
-                            if (memberInSlot && userProfileInSlot) {
-                                return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} onKick={handleKickUser} onMuteToggle={handleMuteToggle} />
-                            }
-                            
-                            return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber}/>
-                        })}
+                    <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-background px-2 text-muted-foreground">
+                        Audience
+                        </span>
                     </div>
                 </div>
+
+                {/* User Mics */}
+                <div className="grid grid-cols-4 gap-x-4 gap-y-6">
+                    {Array.from({ length: 8 }).map((_, i) => {
+                        const slotNumber = i + 1;
+                        const memberInSlot = members.find(m => m.micSlot === slotNumber);
+                        const userProfileInSlot = memberInSlot ? memberProfiles.get(memberInSlot.userId) : null;
+                        
+                        if (memberInSlot && userProfileInSlot) {
+                            return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} onKick={handleKickUser} onMuteToggle={handleMuteToggle} />
+                        }
+                        
+                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber}/>
+                    })}
+                </div>
+            </div>
+
+            {/* In-Room Chat */}
+            <ScrollArea className="flex-1 px-4" viewportRef={chatViewportRef}>
+                <div className="space-y-4 py-4">
+                    {chatMessages.map(msg => (
+                        <RoomChatMessage key={msg.id} message={msg} />
+                    ))}
+                </div>
             </ScrollArea>
+
              {/* In-Room Chat Input */}
             <footer className="shrink-0 border-t bg-muted/40 p-2 md:p-4">
                 <div className="relative flex items-center gap-2">
@@ -290,8 +361,11 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                         placeholder="Send a message to the room..."
                         className="min-h-[40px] max-h-[100px] resize-none pr-12"
                         rows={1}
+                        value={chatInputValue}
+                        onChange={(e) => setChatInputValue(e.target.value)}
+                        onKeyDown={handleChatKeyPress}
                     />
-                    <Button size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8">
+                    <Button size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSendChatMessage}>
                         <Send className="h-4 w-4" />
                     </Button>
                 </div>
@@ -300,3 +374,5 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     </div>
   );
 }
+
+    

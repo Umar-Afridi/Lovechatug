@@ -105,3 +105,14 @@ export type RoomMember = {
     micSlot: number; // 0 for owner, 1-8 for members, -1 for super admin
     isMuted: boolean;
 };
+
+export type RoomMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderPhotoURL: string;
+  content: string;
+  timestamp: any; // Firestore ServerTimestamp
+};
+
+    

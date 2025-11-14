@@ -336,6 +336,31 @@
             }
         },
         "required": ["userId", "micSlot", "isMuted"]
+    },
+    "RoomMessage": {
+      "title": "Room Message",
+      "description": "Represents a single message within a voice chat room.",
+      "type": "object",
+      "properties": {
+        "senderId": {
+          "type": "string"
+        },
+        "senderName": {
+          "type": "string"
+        },
+        "senderPhotoURL": {
+          "type": "string",
+          "format": "uri"
+        },
+        "content": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["senderId", "senderName", "content", "timestamp"]
     }
   },
   "auth": {
@@ -389,6 +414,14 @@
             "$ref": "#/entities/RoomMember"
         },
         "description": "Sub-collection for members within a specific room."
+    },
+    "/rooms/{roomId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/RoomMessage"
+      },
+      "description": "Sub-collection for messages within a specific room."
     }
   }
 }
+
+    
