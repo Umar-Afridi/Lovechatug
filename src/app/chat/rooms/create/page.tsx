@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Camera, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,18 +8,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/firebase/auth/use-user';
+import { useFirestore } from '@/firebase/provider';
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
+import { collection, addDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function CreateRoomPage() {
   const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const { user } = useUser();
+  const firestore = useFirestore();
 
   const [roomName, setRoomName] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   
-  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      if(file.size > 2 * 1024 * 1024) { // 2MB limit
+        toast({ title: 'Image too large', description: 'Please select an image smaller than 2MB.', variant: 'destructive'});
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
@@ -28,7 +42,7 @@ export default function CreateRoomPage() {
     }
   };
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     if (!roomName.trim()) {
       toast({
         title: 'Room name required',
@@ -37,16 +51,56 @@ export default function CreateRoomPage() {
       });
       return;
     }
+    if (!user || !firestore) {
+        toast({ title: 'Authentication Error', description: 'You must be logged in to create a room.', variant: 'destructive'});
+        return;
+    }
 
-    // In a real app, you would upload the image, create a Firestore document for the room,
-    // and then navigate to the new room's ID.
-    // For this UI-only step, we'll just navigate to a placeholder room ID.
-    const newRoomId = 'placeholder-room-123';
-    toast({
-      title: 'Room Created!',
-      description: `Your room "${roomName}" is ready.`,
-    });
-    router.push(`/chat/rooms/${newRoomId}`);
+    setIsCreating(true);
+
+    try {
+        let photoURL = '';
+        if (imagePreview) {
+            const storage = getStorage();
+            const imageRef = storageRef(storage, `room-avatars/${user.uid}_${Date.now()}`);
+            await uploadString(imageRef, imagePreview, 'data_url');
+            photoURL = await getDownloadURL(imageRef);
+        }
+
+        const roomsRef = collection(firestore, 'rooms');
+        const newRoomData = {
+            name: roomName,
+            ownerId: user.uid,
+            photoURL: photoURL,
+            createdAt: serverTimestamp(),
+            members: [user.uid], // Owner is the first member
+        };
+        const docRef = await addDoc(roomsRef, newRoomData);
+
+        // Also add the owner as the first member in the subcollection
+        const memberRef = doc(firestore, 'rooms', docRef.id, 'members', user.uid);
+        await setDoc(memberRef, {
+            userId: user.uid,
+            micSlot: 0, // 0 for owner
+            isMuted: false,
+        });
+
+        toast({
+            title: 'Room Created!',
+            description: `Your room "${roomName}" is ready.`,
+        });
+        router.push(`/chat/rooms/${docRef.id}`);
+
+    } catch (error: any) {
+        console.error("Error creating room: ", error);
+        if (error.code === 'permission-denied') {
+            const permissionError = new FirestorePermissionError({path: 'rooms', operation: 'create'});
+            errorEmitter.emit('permission-error', permissionError);
+        } else {
+             toast({ title: 'Error', description: 'Could not create the room. Please try again.', variant: 'destructive'});
+        }
+        setIsCreating(false);
+    }
   };
 
   return (
@@ -85,7 +139,7 @@ export default function CreateRoomPage() {
                 onChange={handleImageChange}
               />
             </div>
-            <p className="text-sm text-muted-foreground">Tap icon to add a room picture</p>
+            <p className="text-sm text-muted-foreground">Tap icon to add a room picture (optional)</p>
           </div>
           
           <div className="space-y-2">
@@ -96,11 +150,12 @@ export default function CreateRoomPage() {
               value={roomName}
               onChange={(e) => setRoomName(e.target.value)}
               className="h-12 text-lg"
+              maxLength={50}
             />
           </div>
 
-          <Button size="lg" className="w-full text-lg py-6" onClick={handleCreateRoom}>
-            Create Room
+          <Button size="lg" className="w-full text-lg py-6" onClick={handleCreateRoom} disabled={isCreating}>
+            {isCreating ? 'Creating...' : 'Create Room'}
           </Button>
         </div>
       </main>

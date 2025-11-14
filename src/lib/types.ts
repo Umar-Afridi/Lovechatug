@@ -71,14 +71,6 @@ export type Chat = {
   }
 };
 
-export type Group = {
-  id: string;
-  name: string;
-  members: string[]; // array of user ids
-  admins: string[]; // array of user ids
-  avatar: string;
-}
-
 export type FriendRequest = {
     id: string;
     senderId: string; // user id
@@ -97,4 +89,19 @@ export type Call = {
   direction: 'incoming' | 'outgoing';
   timestamp: any; // Firestore ServerTimestamp
   duration?: number; // in seconds
+};
+
+export type Room = {
+    id: string;
+    name: string;
+    ownerId: string;
+    photoURL?: string;
+    createdAt: any;
+    members: string[];
+};
+
+export type RoomMember = {
+    userId: string;
+    micSlot: number; // 0 for owner, 1-8 for members, -1 for super admin
+    isMuted: boolean;
 };

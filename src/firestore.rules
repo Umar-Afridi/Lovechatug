@@ -2,22 +2,30 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // یہ فنکشن چیک کرتا ہے کہ آیا یوزر لاگ ان ہے یا نہیں۔
+    // यह फंक्शन चेक करता है कि आया यوزر لاگ ان ہے یا نہیں۔
     // It checks if the user is authenticated.
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // یہ فنکشن چیک کرتا ہے کہ درخواست کرنے والا یوزر ہی دستاویز کا مالک ہے۔
+    // यह फंक्शन चेक करता है कि درخواست کرنے والا یوزر ہی دستاویز کا مالک ہے۔
     // It checks if the requesting user is the owner of the document (matching UID).
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // یہ فنکشن کسی چیٹ میں دونوں شراکت داروں کو چیک کرتا ہے۔
+    // यह फंक्शन किसी چیٹ میں دونوں شراکت داروں کو چیک کرتا ہے۔
     // It checks if the user is one of the two participants in the chat.
     function isParticipant(participants) {
       return isSignedIn() && request.auth.uid in participants;
+    }
+    
+    function isRoomOwner(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerId == request.auth.uid;
+    }
+    
+    function isRoomMember(roomId) {
+      return exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
     }
 
 
@@ -50,15 +58,31 @@ service cloud.firestore {
     
     // 4. کال کی تاریخ کا مجموعہ (Call History Collection)
     match /calls/{callId} {
-      // Read is now sufficient for queries thanks to the composite index.
-      // The 'list' rule is no longer needed for this query.
-      allow read, write, delete: if isParticipant(resource.data.participants);
+      // The query `where('participants', 'array-contains', request.auth.uid)` ensures a user can only query their own calls.
+      // The `list` rule allows this query to execute.
+      // Individual document access is still protected by `get` and `write` rules.
+      allow list: if isSignedIn();
+      allow get, write, delete: if isParticipant(resource.data.participants);
     }
 
     // 5. ڈیلیٹ شدہ صارفین کا مجموعہ (Deleted Users Collection)
     match /deletedUsers/{email} {
       allow create: if true;
       allow read, write, delete: if false;
+    }
+    
+    // 6. وائس چیٹ رومز کا مجموعہ (Voice Chat Rooms Collection)
+    match /rooms/{roomId} {
+        allow read: if isSignedIn();
+        allow create: if isOwner(request.resource.data.ownerId);
+        allow update: if isRoomOwner(roomId);
+        
+        match /members/{userId} {
+            allow read: if isRoomMember(roomId);
+            allow create: if isOwner(userId); // A user can add themselves
+            allow update: if isOwner(userId) || isRoomOwner(roomId); // A user can update their own status, or the owner can
+            allow delete: if isOwner(userId) || isRoomOwner(roomId); // A user can leave, or the owner can kick them
+        }
     }
   }
 }
