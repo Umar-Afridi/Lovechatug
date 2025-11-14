@@ -10,6 +10,7 @@ import {
   UserPlus,
   LogOut,
   GalleryHorizontal,
+  PlusSquare,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -375,9 +376,9 @@ const menuItems = [
     label: 'Chats',
   },
   {
-     href: '/chat/groups',
-     icon: Users,
-     label: 'Groups',
+     href: '/chat/rooms',
+     icon: PlusSquare,
+     label: 'Rooms',
   },
   {
      href: '/chat/friends',
@@ -391,3 +392,5 @@ const menuItems = [
      label: 'Call History',
   },
 ];
+
+    

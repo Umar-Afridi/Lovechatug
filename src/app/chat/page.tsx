@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { Search, MessageSquare, Users, UserPlus, Phone, Settings } from 'lucide-react';
+import { Search, MessageSquare, PlusSquare, UserPlus, Phone, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Chat, UserProfile, FriendRequest } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import GroupsPage from './groups/page';
+import RoomsPage from './rooms/page';
 import FriendsPage from './friends/page';
 import CallsPage from './calls/page';
 import StoriesPage from './stories/page';
@@ -198,7 +198,7 @@ export default function ChatPage() {
   
   const navigationItems = [
     { name: 'Inbox', icon: MessageSquare, content: 'inbox' },
-    { name: 'Groups', icon: Users, content: 'groups' },
+    { name: 'Rooms', icon: PlusSquare, content: 'rooms' },
     { name: 'Stories', icon: Users, content: 'stories' },
     { name: 'Requests', icon: UserPlus, content: 'requests', count: requestCount },
     { name: 'Calls', icon: Phone, content: 'calls' },
@@ -539,8 +539,8 @@ export default function ChatPage() {
     switch (activeTab) {
         case 'inbox':
             return (loadingChats || loadingProfile || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={filteredChats} currentUserId={user.uid} />);
-        case 'groups':
-            return <GroupsPage />;
+        case 'rooms':
+            return <RoomsPage />;
         case 'stories':
             return <StoriesPage />;
         case 'requests':
@@ -632,3 +632,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
