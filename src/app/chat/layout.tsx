@@ -45,7 +45,7 @@ import {
   AlertDialogTitle,
   AlertDialogFooter,
 } from '@/components/ui/alert-dialog';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -186,9 +186,9 @@ export default function ChatAppLayout({
   const [isAccountDisabled, setAccountDisabled] = useState(false);
   const { toast } = useToast();
   
-  const handleAccountDisabled = () => {
+  const handleAccountDisabled = useCallback(() => {
     setAccountDisabled(true);
-  };
+  }, []);
   
   const { profile, loading: profileLoading } = useUserProfile(handleAccountDisabled);
   usePresence(); // Initialize presence management
@@ -392,5 +392,3 @@ const menuItems = [
      label: 'Call History',
   },
 ];
-
-    
