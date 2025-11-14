@@ -343,6 +343,15 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
     }
   }, [chatMessages]);
+  
+  useEffect(() => {
+    // This effect handles leaving the room when the component unmounts
+    // which happens on navigation, browser close, or disconnect.
+    return () => {
+      handleLeaveRoom();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleLeaveRoom = async () => {
       if (!firestore || !authUser || !roomId || !room) return;
@@ -623,3 +632,5 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     </>
   );
 }
+
+    

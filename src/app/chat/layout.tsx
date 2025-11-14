@@ -218,7 +218,7 @@ export default function ChatAppLayout({
             path: requestsRef.path,
             operation: 'list',
         });
-        errorEmitter.emit('permission-error', permissionError);
+        errorEmitter.emit('permission-error', serverError);
         console.error("Error fetching friend request count:", serverError);
       }
     );
@@ -392,3 +392,5 @@ const menuItems = [
      label: 'Call History',
   },
 ];
+
+    
