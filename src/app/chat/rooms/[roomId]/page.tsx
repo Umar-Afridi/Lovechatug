@@ -43,14 +43,20 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 
 
-const MicPlaceholder = ({ onSit, slotNumber, disabled }: { onSit: (slot: number) => void; slotNumber: number; disabled?: boolean }) => (
+const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled }: { onSit: (slot: number) => void; slotNumber: number; slotType?: 'owner' | 'super'; disabled?: boolean }) => (
     <Popover>
       <PopoverTrigger asChild>
         <button className="flex flex-col items-center gap-2 text-center disabled:opacity-50" disabled={disabled}>
-            <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center border-2 border-dashed border-muted-foreground/30">
-                <span className="text-2xl font-bold text-muted-foreground/30">{slotNumber}</span>
+            <div className={cn("w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center border-2 border-dashed",
+                slotType === 'owner' && 'border-yellow-500/50',
+                slotType === 'super' && 'border-blue-500/50',
+                !slotType && 'border-muted-foreground/30'
+            )}>
+                {slotType === 'owner' && <Crown className="w-8 h-8 text-yellow-500/50" />}
+                {slotType === 'super' && <Shield className="w-8 h-8 text-blue-500/50" />}
+                {!slotType && <span className="text-2xl font-bold text-muted-foreground/30">{slotNumber}</span>}
             </div>
-            <p className="font-semibold text-sm text-muted-foreground/50">Empty</p>
+             <p className="font-semibold text-sm text-muted-foreground/50 capitalize">{slotType || 'Empty'}</p>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0">
@@ -181,7 +187,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   
   const chatViewportRef = useRef<HTMLDivElement>(null);
 
-
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserMemberInfo = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
 
@@ -207,7 +212,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         setMembers(membersData);
         
         // Auto-seat owner if they enter the room and are not seated
-        if(isOwner && authUser && !membersData.some(m => m.userId === authUser.uid)) {
+        const ownerIsSeated = membersData.some(m => m.userId === room?.ownerId);
+        if(isOwner && authUser && !ownerIsSeated) {
              const memberRef = doc(firestore, 'rooms', roomId as string, 'members', authUser.uid);
              setDoc(memberRef, {
                 userId: authUser.uid,
@@ -251,7 +257,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         unsubMessages();
     };
 
-  }, [firestore, roomId, router, toast, memberProfiles, isOwner, authUser]);
+  }, [firestore, roomId, router, toast, memberProfiles, isOwner, authUser, room?.ownerId]);
   
   // Auto-scroll chat
   useEffect(() => {
@@ -359,14 +365,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     return <div className="flex h-screen items-center justify-center">Loading Room...</div>;
   }
   
-  const ownerMember = members.find(m => m.userId === room.ownerId && m.micSlot === 0);
+  const ownerMember = members.find(m => m.micSlot === 0);
   const ownerProfile = ownerMember ? memberProfiles.get(ownerMember.userId) : null;
   
   const superAdminMember = members.find(m => m.micSlot === -1);
   const superAdminProfile = superAdminMember ? memberProfiles.get(superAdminMember.userId) : null;
 
-
-  const occupiedSlots = new Set(members.map(m => m.micSlot).filter(s => s !== null && s !== undefined));
+  const isUserAlreadySeated = currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined;
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -400,32 +405,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                      {ownerMember && ownerProfile ? (
                         <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
                     ) : (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button className="flex flex-col items-center gap-2 text-center disabled:opacity-50">
-                                <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center border-2 border-dashed border-yellow-500/50">
-                                    <Crown className="w-8 h-8 text-yellow-500/50" />
-                                </div>
-                                <p className="font-semibold text-sm text-muted-foreground/50">Owner</p>
-                            </button>
-                          </PopoverTrigger>
-                           <PopoverContent className="w-auto p-0">
-                                <Button variant="ghost" onClick={() => handleSit(0)} className="w-full justify-start px-4 py-2" disabled={!isOwner}>
-                                    Take Seat
-                                </Button>
-                          </PopoverContent>
-                        </Popover>
+                        <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={isUserAlreadySeated && !isOwner} />
                     )}
 
-                     {superAdminProfile && superAdminMember ? (
-                        <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember?.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => {}}/>
+                     {superAdminMember && superAdminProfile ? (
+                        <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                     ) : (
-                         <div className="flex flex-col items-center gap-2 text-center">
-                            <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center border-2 border-dashed border-blue-500/50">
-                                <Shield className="w-8 h-8 text-blue-500/50" />
-                            </div>
-                            <p className="font-semibold text-sm text-muted-foreground/50">Super</p>
-                        </div>
+                         <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={isUserAlreadySeated} />
                     )}
                 </div>
                 
@@ -451,8 +437,6 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                         if (memberInSlot && userProfileInSlot) {
                             return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
                         }
-                        
-                        const isUserAlreadySeated = currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined;
                         
                         return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserAlreadySeated} />
                     })}
