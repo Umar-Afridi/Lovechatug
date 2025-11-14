@@ -203,7 +203,7 @@ const RoomChatMessage = ({ message }: { message: RoomMessage }) => (
 
 
 export default function RoomPage({ params }: { params: { roomId: string } }) {
-  const { roomId } = React.use(params);
+  const { roomId } = params;
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -246,8 +246,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         setMembers(membersData);
         
         // Auto-seat owner if they enter the room and are not seated
-        const ownerIsSeated = membersData.some(m => m.userId === room?.ownerId);
-        if(isOwner && authUser && !ownerIsSeated) {
+        const ownerMember = membersData.find(m => m.userId === room?.ownerId);
+        if(isOwner && authUser && !ownerMember) {
              const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
              setDoc(memberRef, {
                 userId: authUser.uid,
@@ -304,7 +304,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       if (!firestore || !authUser || !roomId) return;
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       try {
-        await deleteDoc(memberRef);
+        await updateDoc(memberRef, { micSlot: null });
         router.push('/chat/rooms');
       } catch(error) {
         const permissionError = new FirestorePermissionError({path: memberRef.path, operation: 'delete'});
