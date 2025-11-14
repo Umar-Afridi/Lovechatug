@@ -73,8 +73,8 @@ const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLock
                     <Mic className="w-8 h-8 text-muted-foreground/30" />
                  )}
             </div>
-             <p className="font-semibold text-sm text-muted-foreground/50 capitalize">
-                {slotType ? slotType : slotNumber}
+             <p className="font-semibold text-sm text-muted-foreground capitalize">
+                 {slotType ? slotType : slotNumber}
              </p>
         </button>
       </PopoverTrigger>
@@ -156,7 +156,7 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                           "font-semibold text-sm truncate",
                           userProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
                         )}>
-                            {userProfile.displayName.split(' ')[0]}
+                            {userProfile.displayName}
                         </p>
                         {userProfile.verifiedBadge?.showBadge && (
                             <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-4 w-4 shrink-0" />
@@ -535,13 +535,13 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                       {ownerMember && ownerProfile && ownerMember.micSlot === 0 ? (
                           <UserMic member={ownerMember} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                       ) : (
-                          <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
+                          <MicPlaceholder onSit={handleSit} slotNumber={0} slotType="owner" disabled={!!currentUserMemberInfo} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(0)} onInvite={handleInvite} />
                       )}
 
                       {superAdminMember && superAdminProfile ? (
                           <UserMic member={superAdminMember} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                       ) : (
-                          <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
+                          <MicPlaceholder onSit={handleSit} slotNumber={-1} slotType="super" disabled={!!currentUserMemberInfo} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(-1)} onInvite={handleInvite} />
                       )}
                   </div>
                   
@@ -566,7 +566,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                               return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={handleStandUp}/>
                           }
                           
-                          return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(slotNumber)} onInvite={handleInvite} />
+                          return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={!!currentUserMemberInfo} isOwner={isOwner} onLockToggle={handleLockToggle} isLocked={lockedSlots.includes(slotNumber)} onInvite={handleInvite} />
                       })}
                   </div>
               </div>
@@ -580,36 +580,36 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
               </ScrollArea>
 
               <footer className="shrink-0 border-t bg-muted/40 p-2 md:px-4 md:py-2">
-                  <div className="flex items-center gap-2">
-                       <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleMuteToggle(authUser!.uid, !currentUserMemberInfo?.isMuted)}
-                            disabled={!isUserOnMic}
-                        >
-                           {currentUserMemberInfo?.isMuted ? <MicOff className="h-5 w-5"/> : <Mic className="h-5 w-5"/>}
-                        </Button>
-                        <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={() => setIsRoomMuted(!isRoomMuted)}
-                        >
-                            {isRoomMuted ? <VolumeX className="h-5 w-5"/> : <Volume2 className="h-5 w-5"/>}
-                        </Button>
-                      <div className="relative flex-1">
+                <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
                         <Textarea 
                             placeholder="Send a message..."
-                            className="min-h-[40px] max-h-[100px] resize-none pr-12 text-sm"
+                            className="min-h-[40px] max-h-[100px] resize-none pr-10 text-sm"
                             rows={1}
                             value={chatInputValue}
                             onChange={(e) => setChatInputValue(e.target.value)}
                             onKeyDown={handleChatKeyPress}
                         />
-                        <Button size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSendChatMessage}>
+                        <Button size="icon" variant="ghost" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSendChatMessage}>
                             <Send className="h-4 w-4" />
                         </Button>
-                      </div>
-                  </div>
+                    </div>
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleMuteToggle(authUser!.uid, !currentUserMemberInfo?.isMuted)}
+                        disabled={!isUserOnMic}
+                    >
+                        {currentUserMemberInfo?.isMuted ? <MicOff className="h-5 w-5"/> : <Mic className="h-5 w-5"/>}
+                    </Button>
+                    <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => setIsRoomMuted(!isRoomMuted)}
+                    >
+                        {isRoomMuted ? <VolumeX className="h-5 w-5"/> : <Volume2 className="h-5 w-5"/>}
+                    </Button>
+                </div>
               </footer>
           </div>
       </div>
