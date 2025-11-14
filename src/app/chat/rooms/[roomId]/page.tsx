@@ -21,6 +21,7 @@ import {
   User,
   ShieldAlert,
   Users,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -42,7 +43,7 @@ import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc, addDoc, serverTimestamp, query, orderBy, arrayUnion, arrayRemove, writeBatch, where, Timestamp, increment, getDocs } from 'firebase/firestore';
-import type { Room, RoomMember, UserProfile, RoomMessage, FriendRequest } from '@/lib/types';
+import type { Room, RoomMember, UserProfile, RoomMessage, FriendRequest, Chat } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { Textarea } from '@/components/ui/textarea';
@@ -282,6 +283,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const [selectedUserProfile, setSelectedUserProfile] = useState<UserProfile | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   
   const [isKicked, setIsKicked] = useState(false);
 
@@ -295,13 +297,16 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const isUserOnMic = useMemo(() => currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined, [currentUserMemberInfo]);
   const lockedSlots = useMemo(() => room?.lockedSlots || [], [room]);
 
-  // Fetch Current User Profile and Friend Requests
+  // Fetch Current User Profile, Friend Requests and Unread Counts
   useEffect(() => {
     if (!firestore || !authUser) return;
+
+    // Profile listener
     const unsubProfile = onSnapshot(doc(firestore, 'users', authUser.uid), (doc) => {
         if(doc.exists()) setCurrentUserProfile(doc.data() as UserProfile);
     });
 
+    // Friend requests listener
     const requestsRef = collection(firestore, 'friendRequests');
     const sentQuery = query(requestsRef, where('senderId', '==', authUser.uid));
     const receivedQuery = query(requestsRef, where('receiverId', '==', authUser.uid));
@@ -313,10 +318,23 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         setFriendRequests(prev => [...prev.filter(r => r.receiverId !== authUser.uid), ...snap.docs.map(d => d.data() as FriendRequest)]);
     });
 
+    // Unread messages listener
+    const chatsRef = collection(firestore, 'chats');
+    const chatsQuery = query(chatsRef, where('members', 'array-contains', authUser.uid));
+    const unsubChats = onSnapshot(chatsQuery, (snapshot) => {
+        let total = 0;
+        snapshot.forEach(doc => {
+            const chat = doc.data() as Chat;
+            total += chat.unreadCount?.[authUser.uid] ?? 0;
+        });
+        setTotalUnreadCount(total);
+    });
+
     return () => {
         unsubProfile();
         unsubSent();
         unsubReceived();
+        unsubChats();
     }
   }, [firestore, authUser]);
   
@@ -877,6 +895,14 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                             <Send className="h-4 w-4" />
                         </Button>
                     </div>
+                     <Button variant="ghost" size="icon" asChild className="relative">
+                        <Link href="/chat">
+                            <MessageSquare className="h-5 w-5"/>
+                            {totalUnreadCount > 0 && (
+                                <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{totalUnreadCount}</Badge>
+                            )}
+                        </Link>
+                    </Button>
                     <Button 
                         variant="ghost" 
                         size="icon" 
