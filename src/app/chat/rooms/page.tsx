@@ -60,23 +60,27 @@ export default function RoomsPage() {
             setLoading(true);
             return;
         }
-        if (!firestore || !user) {
+        if (!firestore) {
             setLoading(false);
             return;
         }
 
         const roomsCollectionRef = collection(firestore, 'rooms');
 
-        // Listener for all rooms to find the user's own room
-        const myRoomQuery = query(roomsCollectionRef, where('ownerId', '==', user.uid));
-        const unsubMyRoom = onSnapshot(myRoomQuery, (snapshot) => {
-            if (!snapshot.empty) {
-                const userRoom = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Room;
-                setMyRoom(userRoom);
-            } else {
-                setMyRoom(null);
-            }
-        });
+        let unsubMyRoom = () => {};
+        if (user) {
+            // Listener for all rooms to find the user's own room
+            const myRoomQuery = query(roomsCollectionRef, where('ownerId', '==', user.uid));
+            unsubMyRoom = onSnapshot(myRoomQuery, (snapshot) => {
+                if (!snapshot.empty) {
+                    const userRoom = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Room;
+                    setMyRoom(userRoom);
+                } else {
+                    setMyRoom(null);
+                }
+            });
+        }
+
 
         // Listener for popular rooms
         // This query requires a composite index on ownerIsOfficial (desc) and memberCount (desc)
@@ -91,7 +95,7 @@ export default function RoomsPage() {
                 const allPublicRooms = snapshot.docs
                     .map(doc => ({ id: doc.id, ...doc.data() } as Room))
                      // Also filter out empty rooms and own room on the client-side
-                    .filter(room => room.ownerId !== user.uid && room.memberCount > 0);
+                    .filter(room => (!user || room.ownerId !== user.uid) && room.memberCount > 0);
                 
                 setPublicRooms(allPublicRooms);
                 setLoading(false);
