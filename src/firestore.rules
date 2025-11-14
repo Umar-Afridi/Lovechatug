@@ -26,8 +26,10 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isOwner(userId);
       allow update: if isOwner(userId);
-      // Allow any user to query to check for username availability during signup
-      allow list: if true;
+      // Allow list for username search for any signed in user.
+      // The client-side query filters out disabled users for non-admins.
+      // Super admins can see all users in their dedicated panel.
+      allow list: if isSignedIn();
     }
     
     // 2. چیٹس اور میسجز کا مجموعہ (Chats Collection)
@@ -48,10 +50,9 @@ service cloud.firestore {
     
     // 4. کال کی تاریخ کا مجموعہ (Call History Collection)
     match /calls/{callId} {
+      // Read is now sufficient for queries thanks to the composite index.
+      // The 'list' rule is no longer needed for this query.
       allow read, write, delete: if isParticipant(resource.data.participants);
-      // FIX: Updated rule to exactly match the query being made by the app.
-      // The query filters by 'participants' and orders by 'timestamp'.
-      allow list: if isSignedIn() && request.query.where[0].field == 'participants' && request.query.where[0].op == 'array-contains' && request.query.where[0].value == request.auth.uid;
     }
 
     // 5. ڈیلیٹ شدہ صارفین کا مجموعہ (Deleted Users Collection)
