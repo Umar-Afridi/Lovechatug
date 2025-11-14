@@ -23,9 +23,11 @@ export function ForgotPasswordDialog() {
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   const handlePasswordReset = async () => {
-    if (!auth || !email) {
+    const trimmedEmail = email.trim();
+    if (!auth || !trimmedEmail) {
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -33,21 +35,25 @@ export function ForgotPasswordDialog() {
       });
       return;
     }
+    
+    setIsSending(true);
 
     try {
-      await sendPasswordResetEmail(auth, email);
-    } catch (error: any) {
-      console.error('Error sending password reset email:', error);
-      // For security, we don't tell the user if the email was not found.
-      // We just log it and show a generic message.
-    } finally {
-      // Always show a generic success message to prevent email enumeration attacks.
+      await sendPasswordResetEmail(auth, trimmedEmail);
       toast({
         title: 'Check your email',
-        description: `If an account exists for ${email}, a password reset link has been sent.`,
+        description: `If an account exists for ${trimmedEmail}, a password reset link has been sent.`,
       });
-      // Always close the dialog after the attempt.
       setIsOpen(false);
+    } catch (error: any) {
+      console.error('Error sending password reset email:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Request Failed',
+        description: 'Could not send password reset email. Please try again later.',
+      });
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -81,12 +87,12 @@ export function ForgotPasswordDialog() {
         </div>
         <DialogFooter>
           <DialogClose asChild>
-            <Button type="button" variant="secondary">
+            <Button type="button" variant="secondary" disabled={isSending}>
               Cancel
             </Button>
           </DialogClose>
-          <Button type="button" onClick={handlePasswordReset}>
-            Send Reset Link
+          <Button type="button" onClick={handlePasswordReset} disabled={isSending}>
+            {isSending ? 'Sending...' : 'Send Reset Link'}
           </Button>
         </DialogFooter>
       </DialogContent>
