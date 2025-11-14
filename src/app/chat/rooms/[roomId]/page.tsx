@@ -13,6 +13,7 @@ import {
   UserX,
   Send,
   Settings,
+  Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -24,6 +25,11 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase/auth/use-user';
@@ -35,13 +41,22 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { Textarea } from '@/components/ui/textarea';
 
 
-const MicPlaceholder = ({ onSit, slotNumber, disabled }: { onSit: (slot: number) => void; slotNumber: number; disabled?: boolean }) => (
-    <div className="flex flex-col items-center gap-2 text-center">
-        <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center">
-            <Mic className="w-8 h-8 text-muted-foreground/50" />
-        </div>
-        <Button size="sm" variant="outline" onClick={() => onSit(slotNumber)} disabled={disabled}>Sit</Button>
-    </div>
+const MicPlaceholder = ({ onSit, slotNumber, disabled, isOwner }: { onSit: (slot: number) => void; slotNumber: number; disabled?: boolean, isOwner: boolean }) => (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="flex flex-col items-center gap-2 text-center disabled:opacity-50" disabled={disabled}>
+            <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center border-2 border-dashed border-muted-foreground/30">
+                <span className="text-2xl font-bold text-muted-foreground/30">{slotNumber}</span>
+            </div>
+            <p className="font-semibold text-sm text-muted-foreground/50">Empty</p>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0">
+         <Button variant="ghost" onClick={() => onSit(slotNumber)} className="w-full justify-start px-4 py-2">
+            Take Seat
+        </Button>
+      </PopoverContent>
+    </Popover>
 );
 
 const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, onMuteToggle, onStandUp }: { 
@@ -63,7 +78,7 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
 
     return (
         <DropdownMenu>
-            <DropdownMenuTrigger asChild disabled={!canManage}>
+            <DropdownMenuTrigger asChild disabled={!canManage && !isCurrentUser}>
                  <div className="flex flex-col items-center gap-2 text-center cursor-pointer">
                     <div className="relative">
                         <Avatar className={cn("w-20 h-20 border-2", member.isMuted ? "border-muted" : "border-primary")}>
@@ -81,12 +96,12 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                             </div>
                         )}
                         {role === 'owner' && (
-                             <div className="absolute top-0 right-0 bg-yellow-500 text-white rounded-full p-1">
+                             <div className="absolute top-0 -right-2 bg-yellow-500 text-white rounded-full p-1">
                                 <Crown className="w-3 h-3" />
                             </div>
                         )}
                         {role === 'super' && (
-                             <div className="absolute top-0 right-0 bg-blue-500 text-white rounded-full p-1">
+                             <div className="absolute top-0 -right-2 bg-blue-500 text-white rounded-full p-1">
                                 <Shield className="w-3 h-3" />
                             </div>
                         )}
@@ -101,7 +116,7 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                         <span>Leave Mic</span>
                     </DropdownMenuItem>
                  )}
-                 {isCurrentUser && <DropdownMenuSeparator />}
+                 {(isCurrentUser && canManage) && <DropdownMenuSeparator />}
                 <DropdownMenuItem onClick={() => onMuteToggle(member.userId, !member.isMuted)} disabled={!canManage && !isCurrentUser}>
                     {member.isMuted ? <Volume2 className="mr-2 h-4 w-4" /> : <MicOff className="mr-2 h-4 w-4" />}
                     <span>{member.isMuted ? 'Unmute' : 'Mute'} {isCurrentUser ? "" : "User"}</span>
@@ -264,9 +279,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
       if (!isOwner || !firestore || !roomId) return;
       const memberRef = doc(firestore, 'rooms', roomId as string, 'members', userIdToKick);
       try {
-        await deleteDoc(memberRef);
+        // Instead of deleting, just move them out of the mic slot
+        await updateDoc(memberRef, { micSlot: null });
       } catch(error) {
-         const permissionError = new FirestorePermissionError({path: memberRef.path, operation: 'delete'});
+         const permissionError = new FirestorePermissionError({path: memberRef.path, operation: 'update'});
          errorEmitter.emit('permission-error', permissionError);
       }
   };
@@ -319,7 +335,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   const ownerOnOwnerSlot = members.find(m => m.userId === room.ownerId && m.micSlot === 0);
   const ownerProfile = ownerOnOwnerSlot ? memberProfiles.get(ownerOnOwnerSlot.userId) : null;
   
-  const superAdminProfile = null; // Placeholder for future super admin feature
+  // For now, super admin is a visual placeholder.
+  const superAdminMember = members.find(m => m.micSlot === -1);
+  const superAdminProfile = superAdminMember ? memberProfiles.get(superAdminMember.userId) : null;
+
 
   const occupiedSlots = new Set(members.map(m => m.micSlot).filter(s => s !== null && s !== undefined));
 
@@ -354,12 +373,35 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                 <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-sm mx-auto">
                      {ownerOnOwnerSlot && ownerProfile ? (
                         <UserMic member={ownerOnOwnerSlot} userProfile={ownerProfile} role="owner" isOwner={true} isCurrentUser={ownerOnOwnerSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
-                    ) : <MicPlaceholder onSit={handleSit} slotNumber={0} disabled={isOwner && occupiedSlots.has(0)} />}
+                    ) : (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button className="flex flex-col items-center gap-2 text-center disabled:opacity-50">
+                                <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center border-2 border-dashed border-yellow-500/50">
+                                    <Crown className="w-8 h-8 text-yellow-500/50" />
+                                </div>
+                                <p className="font-semibold text-sm text-muted-foreground/50">Owner</p>
+                            </button>
+                          </PopoverTrigger>
+                           <PopoverContent className="w-auto p-0">
+                                <Button variant="ghost" onClick={() => handleSit(0)} className="w-full justify-start px-4 py-2" disabled={!isOwner}>
+                                    Take Seat
+                                </Button>
+                          </PopoverContent>
+                        </Popover>
+                    )}
 
                     {/* Placeholder for Super Admin */}
                      {superAdminProfile ? (
-                        <UserMic member={null} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={false} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => {}}/>
-                    ) : <div/>}
+                        <UserMic member={superAdminMember!} userProfile={superAdminProfile} role="super" isOwner={isOwner} isCurrentUser={superAdminMember?.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => {}}/>
+                    ) : (
+                         <div className="flex flex-col items-center gap-2 text-center">
+                            <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center border-2 border-dashed border-blue-500/50">
+                                <Shield className="w-8 h-8 text-blue-500/50" />
+                            </div>
+                            <p className="font-semibold text-sm text-muted-foreground/50">Super</p>
+                        </div>
+                    )}
                 </div>
                 
                 {/* Separator */}
@@ -385,11 +427,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                             return <UserMic key={slotNumber} member={memberInSlot} userProfile={userProfileInSlot} role="member" isOwner={isOwner} isCurrentUser={memberInSlot.userId === authUser?.uid} onKick={handleKickUser} onMuteToggle={handleMuteToggle} onStandUp={() => handleStandUp()}/>
                         }
                         
-                        // Disable sitting if the user is already on a mic slot, or the slot is occupied.
                         const isUserAlreadySeated = currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined;
-                        const isSlotOccupied = occupiedSlots.has(slotNumber);
                         
-                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserAlreadySeated || isSlotOccupied}/>
+                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserAlreadySeated && !isOwner} isOwner={isOwner} />
                     })}
                 </div>
             </div>
