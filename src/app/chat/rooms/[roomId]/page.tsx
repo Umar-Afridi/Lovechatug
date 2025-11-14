@@ -27,7 +27,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, collection, updateDoc, deleteDoc, setDoc, getDoc } from 'firebase/firestore';
 import type { Room, RoomMember, UserProfile } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -101,6 +101,7 @@ const UserMic = ({ member, userProfile, role, isOwner, onKick, onMuteToggle }: {
 
 
 export default function RoomPage({ params }: { params: { roomId: string } }) {
+  const { roomId } = React.use(params);
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -116,11 +117,11 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   // Fetch Room and Member data
   useEffect(() => {
-    if (!firestore || !params.roomId) return;
+    if (!firestore || !roomId) return;
     setLoading(true);
 
-    const roomDocRef = doc(firestore, 'rooms', params.roomId);
-    const membersColRef = collection(firestore, 'rooms', params.roomId, 'members');
+    const roomDocRef = doc(firestore, 'rooms', roomId);
+    const membersColRef = collection(firestore, 'rooms', roomId, 'members');
 
     const unsubRoom = onSnapshot(roomDocRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -158,11 +159,11 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         unsubMembers();
     };
 
-  }, [firestore, params.roomId, router, toast]);
+  }, [firestore, roomId, router, toast, memberProfiles]);
 
   const handleLeaveRoom = async () => {
-      if (!firestore || !authUser || !params.roomId) return;
-      const memberRef = doc(firestore, 'rooms', params.roomId, 'members', authUser.uid);
+      if (!firestore || !authUser || !roomId) return;
+      const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       try {
         await deleteDoc(memberRef);
         router.push('/chat/rooms');
@@ -173,9 +174,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   };
 
   const handleSit = async (slotNumber: number) => {
-      if (!firestore || !authUser || !params.roomId || currentUserMicSlot !== undefined) return;
+      if (!firestore || !authUser || !roomId || currentUserMicSlot !== undefined) return;
       
-      const memberRef = doc(firestore, 'rooms', params.roomId, 'members', authUser.uid);
+      const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       const newMemberData = {
           userId: authUser.uid,
           micSlot: slotNumber,
@@ -191,8 +192,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   };
   
   const handleKickUser = async (userIdToKick: string) => {
-      if (!isOwner || !firestore || !params.roomId) return;
-      const memberRef = doc(firestore, 'rooms', params.roomId, 'members', userIdToKick);
+      if (!isOwner || !firestore || !roomId) return;
+      const memberRef = doc(firestore, 'rooms', roomId, 'members', userIdToKick);
       try {
         await deleteDoc(memberRef);
       } catch(error) {
@@ -202,8 +203,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
   };
   
   const handleMuteToggle = async (userIdToMute: string, shouldMute: boolean) => {
-      if (!isOwner || !firestore || !params.roomId) return;
-      const memberRef = doc(firestore, 'rooms', params.roomId, 'members', userIdToMute);
+      if (!isOwner || !firestore || !roomId) return;
+      const memberRef = doc(firestore, 'rooms', roomId, 'members', userIdToMute);
        try {
         await updateDoc(memberRef, { isMuted: shouldMute });
       } catch(error) {
