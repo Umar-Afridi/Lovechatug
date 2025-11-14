@@ -476,7 +476,7 @@ export default function ChatIdPage({
         }
     }, [firestore, chatId, authUser, otherUser, toast, currentUser]);
 
-    const stopRecording = useCallback(async (send: boolean) => {
+    const stopRecording = useCallback((send: boolean) => {
         if (recordingIntervalRef.current) {
             clearInterval(recordingIntervalRef.current);
             recordingIntervalRef.current = null;
@@ -545,16 +545,20 @@ export default function ChatIdPage({
         }
     }, [isRecording, toast]);
 
-    const handleMicButtonPress = (e: React.MouseEvent | React.TouchEvent) => {
-        e.preventDefault();
-        startRecording();
+    const handleMicButtonClick = () => {
+        if (isRecording) {
+            // This case should be handled by send/cancel buttons now
+        } else {
+            startRecording();
+        }
     };
 
-    const handleMicButtonRelease = (e: React.MouseEvent | React.TouchEvent) => {
-        e.preventDefault();
-        if (isRecording) {
-            stopRecording(true);
-        }
+    const handleCancelRecording = () => {
+        stopRecording(false); // a `false` means don't send
+    };
+    
+    const handleSendRecording = () => {
+        stopRecording(true); // `true` means send the recording
     };
     // --- End Voice Recording Logic ---
 
@@ -950,16 +954,31 @@ export default function ChatIdPage({
                     </p>
                 </div>
             ) : isRecording ? (
-                <div className="flex items-center gap-4 w-full h-[52px]">
-                    <div className="flex-1 text-center font-mono text-destructive">
-                         <div className="flex items-center justify-center gap-2">
-                             <span className="relative flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-                            </span>
-                            <span>{formatRecordingTime(recordingDuration)}</span>
-                        </div>
+                 <div className="flex items-center gap-2 w-full h-[48px]">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-12 w-12 text-destructive"
+                        onClick={handleCancelRecording}
+                    >
+                        <Trash2 className="h-6 w-6" />
+                    </Button>
+                    <div className="flex-1 flex items-center justify-center bg-destructive/10 rounded-full px-4">
+                        <span className="relative flex h-3 w-3 mr-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                        </span>
+                        <span className="font-mono text-destructive font-semibold">
+                            {formatRecordingTime(recordingDuration)}
+                        </span>
                     </div>
+                    <Button
+                        size="icon"
+                        className="rounded-full h-12 w-12"
+                        onClick={handleSendRecording}
+                    >
+                        <Send className="h-6 w-6" />
+                    </Button>
                 </div>
             ) : (
                 <div className="relative">
@@ -988,11 +1007,40 @@ export default function ChatIdPage({
                     </div>
                     )}
                     <div className="flex items-end gap-2">
-                         <div className="relative w-full">
+                         {inputValue.trim() === '' ? (
+                             <div className="relative w-full">
+                                <Textarea
+                                    ref={inputRef}
+                                    placeholder="Type a message..."
+                                    className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-12 shadow-sm focus:border-primary focus:ring-primary"
+                                    value={inputValue}
+                                    onChange={handleTyping}
+                                    onKeyDown={handleKeyPress}
+                                    rows={1}
+                                    onInput={(e) => {
+                                    const target = e.target as HTMLTextAreaElement;
+                                    target.style.height = 'auto';
+                                    target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+                                    }}
+                                />
+                                <div className="absolute left-1 top-1/2 -translate-y-1/2 flex items-center">
+                                    <Button variant="ghost" size="icon" className="shrink-0">
+                                        <Smile className="h-6 w-6" />
+                                        <span className="sr-only">Emoji</span>
+                                    </Button>
+                                </div>
+                                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
+                                    <Button variant="ghost" size="icon" className="shrink-0">
+                                        <Paperclip className="h-6 w-6" />
+                                        <span className="sr-only">Attach file</span>
+                                    </Button>
+                                </div>
+                            </div>
+                         ) : (
                              <Textarea
                                 ref={inputRef}
                                 placeholder="Type a message..."
-                                className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-12 shadow-sm focus:border-primary focus:ring-primary"
+                                className="min-h-[48px] max-h-[120px] resize-none rounded-2xl border-2 border-input bg-transparent py-3 px-4 shadow-sm focus:border-primary focus:ring-primary"
                                 value={inputValue}
                                 onChange={handleTyping}
                                 onKeyDown={handleKeyPress}
@@ -1003,33 +1051,29 @@ export default function ChatIdPage({
                                 target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
                                 }}
                             />
-                            <div className="absolute left-1 top-1/2 -translate-y-1/2 flex items-center">
-                                <Button variant="ghost" size="icon" className="shrink-0">
-                                    <Smile className="h-6 w-6" />
-                                    <span className="sr-only">Emoji</span>
-                                </Button>
-                            </div>
-                            <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
-                                <Button variant="ghost" size="icon" className="shrink-0">
-                                    <Paperclip className="h-6 w-6" />
-                                    <span className="sr-only">Attach file</span>
-                                </Button>
-                            </div>
-                        </div>
+                         )}
+
 
                         <div className="relative">
-                             <Button
-                                size="icon"
-                                className="rounded-full h-12 w-12 shrink-0 transition-transform duration-200"
-                                onClick={inputValue.trim() ? handleSendMessage : undefined}
-                                onMouseDown={!inputValue.trim() ? handleMicButtonPress : undefined}
-                                onMouseUp={!inputValue.trim() ? handleMicButtonRelease : undefined}
-                                onTouchStart={!inputValue.trim() ? handleMicButtonPress : undefined}
-                                onTouchEnd={!inputValue.trim() ? handleMicButtonRelease : undefined}
-                            >
-                                {inputValue.trim() ? <Send className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-                                <span className="sr-only">{inputValue.trim() ? "Send" : "Record voice message"}</span>
-                            </Button>
+                            {inputValue.trim() ? (
+                                <Button
+                                    size="icon"
+                                    className="rounded-full h-12 w-12 shrink-0"
+                                    onClick={handleSendMessage}
+                                >
+                                    <Send className="h-6 w-6" />
+                                    <span className="sr-only">Send</span>
+                                </Button>
+                            ) : (
+                                <Button
+                                    size="icon"
+                                    className="rounded-full h-12 w-12 shrink-0"
+                                    onClick={handleMicButtonClick}
+                                >
+                                    <Mic className="h-6 w-6" />
+                                    <span className="sr-only">Record voice message</span>
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>
