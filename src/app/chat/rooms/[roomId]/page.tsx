@@ -39,9 +39,11 @@ import type { Room, RoomMember, UserProfile, RoomMessage } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { Textarea } from '@/components/ui/textarea';
+import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { OfficialBadge } from '@/components/ui/official-badge';
 
 
-const MicPlaceholder = ({ onSit, slotNumber, disabled, isOwner }: { onSit: (slot: number) => void; slotNumber: number; disabled?: boolean, isOwner: boolean }) => (
+const MicPlaceholder = ({ onSit, slotNumber, disabled }: { onSit: (slot: number) => void; slotNumber: number; disabled?: boolean }) => (
     <Popover>
       <PopoverTrigger asChild>
         <button className="flex flex-col items-center gap-2 text-center disabled:opacity-50" disabled={disabled}>
@@ -105,8 +107,23 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                                 <Shield className="w-3 h-3" />
                             </div>
                         )}
+                        {userProfile.officialBadge?.isOfficial && (
+                             <div className="absolute top-0 -left-2">
+                                <OfficialBadge color={userProfile.officialBadge.badgeColor} size="icon" className="h-5 w-5" />
+                            </div>
+                        )}
+                         {userProfile.verifiedBadge?.showBadge && (
+                             <div className="absolute bottom-1 -right-1">
+                                <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-5 w-5"/>
+                            </div>
+                        )}
                     </div>
-                    <p className="font-semibold text-sm truncate w-24">{userProfile.displayName.split(' ')[0]}</p>
+                    <p className={cn(
+                        "font-semibold text-sm truncate w-24",
+                        userProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+                    )}>
+                        {userProfile.displayName.split(' ')[0]}
+                    </p>
                 </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
@@ -116,7 +133,7 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
                         <span>Leave Mic</span>
                     </DropdownMenuItem>
                  )}
-                 {(isCurrentUser && canManage) && <DropdownMenuSeparator />}
+                 {(isCurrentUser || canManage) && <DropdownMenuSeparator />}
                 <DropdownMenuItem onClick={() => onMuteToggle(member.userId, !member.isMuted)} disabled={!canManage && !isCurrentUser}>
                     {member.isMuted ? <Volume2 className="mr-2 h-4 w-4" /> : <MicOff className="mr-2 h-4 w-4" />}
                     <span>{member.isMuted ? 'Unmute' : 'Mute'} {isCurrentUser ? "" : "User"}</span>
@@ -429,7 +446,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                         
                         const isUserAlreadySeated = currentUserMemberInfo?.micSlot !== null && currentUserMemberInfo?.micSlot !== undefined;
                         
-                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserAlreadySeated && !isOwner} isOwner={isOwner} />
+                        return <MicPlaceholder key={slotNumber} onSit={handleSit} slotNumber={slotNumber} disabled={isUserAlreadySeated} />
                     })}
                 </div>
             </div>
