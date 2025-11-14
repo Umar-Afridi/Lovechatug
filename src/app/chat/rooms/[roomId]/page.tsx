@@ -359,6 +359,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             }, { merge: true });
         }
 
+        const currentMemberIds = new Set(membersData.map(m => m.userId));
         const newMemberIds = membersData
             .map(m => m.userId)
             .filter(id => !memberProfiles.has(id));
@@ -375,42 +376,45 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             setMemberProfiles(newProfiles);
         }
 
-        const currentMemberIds = new Set(membersData.map(m => m.userId));
         const prevMemberIds = prevMemberIdsRef.current;
 
-        // Check for new joins
+        // Check for new joins after fetching new profiles
         const joinedUserIds = [...currentMemberIds].filter(id => !prevMemberIds.has(id));
-        if (joinedUserIds.length > 0 && prevMemberIds.size > 0) { // Don't show for initial load
-             const joinedProfiles = joinedUserIds.map(id => memberProfiles.get(id) || { displayName: 'Someone' }).filter(Boolean);
+        if (joinedUserIds.length > 0) {
+            const joinedProfiles = joinedUserIds.map(id => memberProfiles.get(id) || new Map(memberProfiles).get(id)).filter(Boolean);
              for (const profile of joinedProfiles) {
-                const joinMessage: RoomMessage = {
-                    id: `notification-${Date.now()}-${profile!.uid}`,
-                    senderId: 'system',
-                    senderName: 'System',
-                    senderPhotoURL: '',
-                    content: `${profile.displayName} has joined the room`,
-                    timestamp: serverTimestamp(),
-                    type: 'notification',
-                };
-                setChatMessages(prev => [...prev, joinMessage]);
+                 if (profile) {
+                    const joinMessage: RoomMessage = {
+                        id: `notification-join-${Date.now()}-${profile.uid}`,
+                        senderId: 'system',
+                        senderName: 'System',
+                        senderPhotoURL: '',
+                        content: `${profile.displayName} has joined the room`,
+                        timestamp: serverTimestamp(),
+                        type: 'notification',
+                    };
+                    setChatMessages(prev => [...prev, joinMessage]);
+                 }
              }
         }
         
         // Check for leaves
         const leftUserIds = [...prevMemberIds].filter(id => !currentMemberIds.has(id));
         if (leftUserIds.length > 0) {
-            const leftProfiles = leftUserIds.map(id => memberProfiles.get(id) || { displayName: 'Someone' }).filter(Boolean);
+            const leftProfiles = leftUserIds.map(id => memberProfiles.get(id)).filter(Boolean);
              for (const profile of leftProfiles) {
-                const leaveMessage: RoomMessage = {
-                    id: `notification-${Date.now()}-${profile!.uid}`,
-                    senderId: 'system',
-                    senderName: 'System',
-                    senderPhotoURL: '',
-                    content: `${profile.displayName} has left the room`,
-                    timestamp: serverTimestamp(),
-                    type: 'notification',
-                };
-                setChatMessages(prev => [...prev, leaveMessage]);
+                 if (profile) {
+                    const leaveMessage: RoomMessage = {
+                        id: `notification-leave-${Date.now()}-${profile.uid}`,
+                        senderId: 'system',
+                        senderName: 'System',
+                        senderPhotoURL: '',
+                        content: `${profile.displayName} has left the room`,
+                        timestamp: serverTimestamp(),
+                        type: 'notification',
+                    };
+                    setChatMessages(prev => [...prev, leaveMessage]);
+                 }
              }
         }
 
