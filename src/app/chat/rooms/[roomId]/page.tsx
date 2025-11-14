@@ -72,7 +72,7 @@ const MicPlaceholder = ({ onSit, slotNumber, slotType, disabled, isOwner, onLock
                  ) : slotType === 'super' ? (
                     <Shield className="w-8 h-8 text-blue-500/50" />
                  ) : (
-                    <span className="text-2xl font-bold text-muted-foreground/30">{slotNumber}</span>
+                    <Mic className="w-8 h-8 text-muted-foreground/30" />
                  )}
             </div>
              <p className="font-semibold text-sm text-muted-foreground/50 capitalize">{slotType || (isLocked ? 'Locked' : 'Empty')}</p>
@@ -302,18 +302,17 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   const handleLeaveRoom = async () => {
       if (!firestore || !authUser || !roomId) return;
+      
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       try {
         await updateDoc(memberRef, { micSlot: null });
-        router.push('/chat/rooms');
       } catch(error) {
-        // If doc doesn't exist, it's fine, just go back.
-        if((error as any).code === 'not-found') {
-            router.push('/chat/rooms');
-            return;
+        // If doc doesn't exist, that's fine. It means they were just a listener.
+        if((error as any).code !== 'not-found') {
+          console.error("Error standing up:", error);
         }
-        const permissionError = new FirestorePermissionError({path: memberRef.path, operation: 'update'});
-        errorEmitter.emit('permission-error', permissionError);
+      } finally {
+        router.push('/chat/rooms');
       }
   };
 
@@ -326,7 +325,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
           return;
       }
       
-      const canSit = isOwner || !currentUserMemberInfo || currentUserMemberInfo.micSlot === null;
+      const canSit = !currentUserMemberInfo || currentUserMemberInfo.micSlot === null || isOwner;
       if (!canSit) {
         toast({ title: 'Already Seated', description: 'You must leave your current seat first.', variant: 'destructive'});
         return;
