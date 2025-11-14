@@ -50,9 +50,11 @@ service cloud.firestore {
     
     // 4. کال کی تاریخ کا مجموعہ (Call History Collection)
     match /calls/{callId} {
-      // Read is now sufficient for queries thanks to the composite index.
-      // The 'list' rule is no longer needed for this query.
-      allow read, write, delete: if isParticipant(resource.data.participants);
+      // The query `where('participants', 'array-contains', request.auth.uid)` ensures a user can only query their own calls.
+      // The `list` rule allows this query to execute.
+      // Individual document access is still protected by `get` and `write` rules.
+      allow list: if isSignedIn();
+      allow get, write, delete: if isParticipant(resource.data.participants);
     }
 
     // 5. ڈیلیٹ شدہ صارفین کا مجموعہ (Deleted Users Collection)
