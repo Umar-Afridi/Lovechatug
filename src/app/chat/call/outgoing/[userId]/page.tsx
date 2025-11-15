@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { doc, onSnapshot, deleteDoc, getDoc } from 'firebase/firestore';
@@ -18,12 +18,10 @@ export default function OutgoingCallPage() {
   const { outgoingCall, endCall } = useCallContext();
   const callId = outgoingCall?.callId;
 
-  const { user: authUser } = useUser();
   const firestore = useFirestore();
 
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [callData, setCallData] = useState<Call | null>(null);
-  const [callStatus, setCallStatus] = useState('Calling...');
   const [loading, setLoading] = useState(true);
 
   const { play, stop } = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e', { loop: true });
@@ -32,21 +30,17 @@ export default function OutgoingCallPage() {
   // Fetch receiver's profile
   useEffect(() => {
     if (!firestore || !otherUserId) return;
+    
+    setLoading(true);
     const userDocRef = doc(firestore, 'users', otherUserId);
     
-    // Use getDoc for initial load to prevent getting stuck in loading state
     getDoc(userDocRef).then(docSnap => {
         if (docSnap.exists()) {
             const userData = docSnap.data() as UserProfile;
             setOtherUser(userData);
-            if (userData.isOnline) {
-                setCallStatus('Ringing...');
-                play();
-            } else {
-                setCallStatus('Calling...');
-            }
+            play();
         } else {
-             // User not found, automatically hang up.
+            // User not found, automatically hang up.
             handleHangUp();
         }
         setLoading(false); // Set loading to false after initial fetch
@@ -55,7 +49,6 @@ export default function OutgoingCallPage() {
         handleHangUp();
     });
 
-    // Use onSnapshot for real-time updates after initial load
     const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const userData = docSnap.data() as UserProfile;
@@ -130,7 +123,7 @@ export default function OutgoingCallPage() {
       .join('');
   };
 
-  if (loading || !otherUser) {
+  if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-gray-900 text-white">
         <p>Preparing call...</p>
@@ -140,21 +133,25 @@ export default function OutgoingCallPage() {
 
   const getStatusText = () => {
     if (callData?.status === 'declined') return 'Call Declined';
-    if (callData?.status === 'missed' && !otherUser.isOnline) return 'Unavailable';
+    if (callData?.status === 'missed' && !otherUser?.isOnline) return 'Unavailable';
     if (callData?.status === 'missed') return 'Call Unanswered';
-    return callStatus;
+    return 'Ringing...';
   }
 
   return (
-    <div className="flex h-screen w-full flex-col items-center justify-between bg-gray-900 text-white p-8">
+    <div className="flex h-screen w-full flex-col items-center justify-between bg-gray-900 text-white p-8 animate-in fade-in-0">
       <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4">
-        <Avatar className="h-32 w-32 border-4 border-gray-600">
-          <AvatarImage src={otherUser.photoURL} />
-          <AvatarFallback className="text-5xl bg-gray-700">
-            {getInitials(otherUser.displayName)}
-          </AvatarFallback>
-        </Avatar>
-        <h1 className="text-4xl font-bold">{otherUser.displayName}</h1>
+        {otherUser && (
+            <>
+                <Avatar className="h-32 w-32 border-4 border-gray-600">
+                <AvatarImage src={otherUser.photoURL} />
+                <AvatarFallback className="text-5xl bg-gray-700">
+                    {getInitials(otherUser.displayName)}
+                </AvatarFallback>
+                </Avatar>
+                <h1 className="text-4xl font-bold">{otherUser.displayName}</h1>
+            </>
+        )}
         <p className="text-lg text-gray-400">{getStatusText()}</p>
       </div>
 

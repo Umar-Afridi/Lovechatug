@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFirestore } from '@/firebase/provider';
-import { doc, getDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Phone, PhoneOff } from 'lucide-react';
@@ -17,7 +17,6 @@ interface IncomingCallProps {
 }
 
 export function IncomingCall({ call, onHandled, onAccept }: IncomingCallProps) {
-  const router = useRouter();
   const firestore = useFirestore();
   const [caller, setCaller] = useState<UserProfile | null>(null);
 
@@ -39,8 +38,12 @@ export function IncomingCall({ call, onHandled, onAccept }: IncomingCallProps) {
       if (docSnap.exists()) {
         setCaller(docSnap.data() as UserProfile);
       } else {
+        // If caller doesn't exist, automatically decline.
         handleDecline();
       }
+    }).catch(() => {
+        // Also decline on error
+        handleDecline();
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, call.callerId]);
@@ -50,8 +53,9 @@ export function IncomingCall({ call, onHandled, onAccept }: IncomingCallProps) {
     if (!firestore || !call.id) return;
     const callDocRef = doc(firestore, 'calls', call.id);
     try {
+        const updatedCallData = { ...call, status: 'answered' as const, answeredAt: serverTimestamp() };
         await updateDoc(callDocRef, { status: 'answered', answeredAt: serverTimestamp() });
-        onAccept(call);
+        onAccept(updatedCallData as Call); // Pass updated data to context
     } catch(e) {
         console.error("Error accepting call: ", e);
         onHandled();
@@ -60,14 +64,14 @@ export function IncomingCall({ call, onHandled, onAccept }: IncomingCallProps) {
 
   const handleDecline = async () => {
     stopIncomingCallSound();
+    onHandled(); // Immediately remove from UI
     if (!firestore || !call.id) return;
     const callDocRef = doc(firestore, 'calls', call.id);
     try {
+        // Update status to declined, which signals the caller.
         await updateDoc(callDocRef, { status: 'declined' });
     } catch (e) {
         console.error("Error declining call: ", e);
-    } finally {
-        onHandled();
     }
   };
 
@@ -77,11 +81,11 @@ export function IncomingCall({ call, onHandled, onAccept }: IncomingCallProps) {
   };
 
   if (!caller) {
-    return null;
+    return null; // Don't render anything until we know who is calling
   }
 
   return (
-    <div className="fixed inset-0 z-[1000] flex flex-col items-center justify-between bg-gray-900/95 text-white p-8 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[1000] flex flex-col items-center justify-between bg-gray-900/95 text-white p-8 backdrop-blur-sm animate-in fade-in-0">
       <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4">
         <p className="text-lg text-gray-400">Incoming Call...</p>
         <Avatar className="h-32 w-32 border-4 border-gray-600">
