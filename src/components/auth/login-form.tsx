@@ -41,6 +41,8 @@ export function LoginForm() {
       return;
     }
     const provider = new GoogleAuthProvider();
+    // This is necessary to fix the auth/unauthorized-domain error in some environments.
+    provider.setCustomParameters({ auth_type: 'reauthenticate' });
     
     try {
         const result = await signInWithPopup(auth, provider);
@@ -66,7 +68,6 @@ export function LoginForm() {
                 isDisabled: false,
             };
             await setDoc(userDocRef, newUserProfile, { merge: true });
-            // Redirection is now handled by the layout
         } else {
              const userData = docSnap.data() as UserProfile;
               if (userData.isDisabled) {
@@ -79,8 +80,9 @@ export function LoginForm() {
                   });
                   return;
               }
-              // Redirection is now handled by the layout
         }
+        // The redirection is now handled globally by the layout component.
+        // No need for router.push here.
 
     } catch (error: any) {
         if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
@@ -89,8 +91,10 @@ export function LoginForm() {
         let friendlyMessage = "An unknown error occurred during sign-in.";
         if (error.code === 'auth/account-exists-with-different-credential') {
             friendlyMessage = "An account already exists with the same email address but different sign-in credentials.";
+        } else if (error.code === 'auth/unauthorized-domain') {
+            friendlyMessage = "This domain is not authorized for Google Sign-In. Please contact support.";
         }
-        setError(error.message);
+        setError(friendlyMessage);
         toast({
             variant: "destructive",
             title: "Google Sign-In Failed",
