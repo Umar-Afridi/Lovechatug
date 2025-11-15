@@ -82,7 +82,7 @@ export function LoginForm() {
               }
         }
         // The redirection is now handled globally by the layout component.
-        // No need for router.push here.
+        router.push('/chat');
 
     } catch (error: any) {
         if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
@@ -151,7 +151,7 @@ export function LoginForm() {
         await auth.signOut(); // Sign out the user until they verify
         return;
       }
-      // Redirection is now handled by the layout
+      router.push('/chat');
     } catch (err: any) {
       let friendlyMessage = "An unknown error occurred.";
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
