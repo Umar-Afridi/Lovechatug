@@ -68,6 +68,7 @@ import { cn } from '@/lib/utils';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { AnimatePresence, motion } from 'framer-motion';
 
 
 const MIC_SLOTS = 8;
@@ -101,7 +102,7 @@ export default function RoomPage() {
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
 
-  const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
+ const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
     if (!firestore || !authUser) return;
 
     setMessages([]); // Clear messages locally on leave
@@ -248,7 +249,7 @@ export default function RoomPage() {
       messagesRef,
       where('timestamp', '>', joinTimestamp),
       orderBy('timestamp', 'desc'),
-      limit(15)
+      limit(5) // Limit to 5 messages for display
     );
 
     const unsubMessages = onSnapshot(qMessages, (snapshot) => {
@@ -256,12 +257,7 @@ export default function RoomPage() {
         .map(d => ({ id: d.id, ...d.data() } as RoomMessage))
         .reverse();
 
-      setMessages(prevMsgs => {
-        const allMsgs = [...prevMsgs, ...newMsgs];
-        const uniqueMsgs = Array.from(new Map(allMsgs.map(m => [m.id, m])).values());
-        uniqueMsgs.sort((a, b) => (a.timestamp?.toMillis() ?? 0) - (b.timestamp?.toMillis() ?? 0));
-        return uniqueMsgs.slice(-15);
-      });
+      setMessages(newMsgs);
     });
 
     return () => {
@@ -269,13 +265,13 @@ export default function RoomPage() {
     };
   }, [firestore, roomId, joinTimestamp]);
 
-  useEffect(() => {
-      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-          handleLeaveRoom();
-      };
-      window.addEventListener('beforeunload', handleBeforeUnload);
-      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [handleLeaveRoom]);
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            handleLeaveRoom();
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [handleLeaveRoom]);
 
 
   const handleDeleteRoom = async () => {
@@ -504,24 +500,24 @@ export default function RoomPage() {
         const isNotification = msg.type === 'notification';
     
         const totalMessages = messages.length;
-        const opacity = Math.max(0, 1 - (totalMessages - index - 1) * 0.15); // Fade out older messages
+        const opacity = Math.max(0, 1 - (totalMessages - index - 1) * 0.2); // Fade out older messages
     
         return (
           <motion.div
             key={msg.id}
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, transition: { duration: 0.5 } }}
-            transition={{ duration: 0.3 }}
+            exit={{ opacity: 0, y: -10, transition: { duration: 0.3 } }}
+            transition={{ duration: 0.3, delay: index * 0.05 }}
             style={{ opacity: isNotification ? 1 : opacity }}
-            className={cn("transition-opacity duration-500", isNotification && "text-center")}
+            className={cn("transition-opacity duration-500 w-full", isNotification && "text-center")}
           >
             {isNotification ? (
               <p className="text-xs text-muted-foreground italic bg-black/20 rounded-full px-3 py-1 inline-block">
                 {msg.content}
               </p>
             ) : (
-              <div className="flex items-start gap-2 text-left">
+              <div className="flex items-start gap-2 text-left bg-black/20 text-white p-2 rounded-lg">
                 <Avatar
                   className="h-6 w-6 cursor-pointer"
                   onClick={() => handleViewProfile(msg.senderId)}
@@ -542,7 +538,7 @@ export default function RoomPage() {
                   >
                     {msg.senderName}:
                   </span>
-                  <span className="text-white break-words">{msg.content}</span>
+                  <span className="break-words">{msg.content}</span>
                 </div>
               </div>
             )}
@@ -613,28 +609,31 @@ export default function RoomPage() {
           </div>
         </header>
         
-        <div className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 space-y-4">
+        <main className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 space-y-4">
             <div className="flex justify-center gap-x-4">
                 {renderSlot(OWNER_SLOT, true, "OWNER")}
                 {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
             </div>
             
-            <div className="flex-grow flex flex-col justify-center space-y-4">
-                {/* Chat messages will appear here */}
-                <div className="flex-grow flex flex-col-reverse justify-start gap-2 overflow-hidden pb-4">
-                    {messages.slice().reverse().map((msg, index) => renderMessage(msg, messages.length - index - 1))}
-                </div>
-
-                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
-                </div>
-
-                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
-                </div>
+            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
             </div>
-        </div>
 
+             <div className="w-full max-w-lg mx-auto flex-grow flex flex-col justify-end pb-4">
+                <AnimatePresence>
+                    <motion.div
+                        layout
+                        className="flex flex-col-reverse justify-start gap-2 overflow-hidden"
+                    >
+                        {messages.map((msg, index) => renderMessage(msg, index))}
+                    </motion.div>
+                </AnimatePresence>
+            </div>
+
+            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+            </div>
+        </main>
 
          <footer className="shrink-0 border-t bg-background p-3">
             <div className="relative flex items-center gap-2">
