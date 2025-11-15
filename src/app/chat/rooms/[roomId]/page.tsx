@@ -180,16 +180,27 @@ export default function RoomPage() {
         }
 
         if (!memberDoc.exists()) {
-            const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
             const batch = writeBatch(firestore);
+            const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
             batch.set(memberRef, memberData);
             batch.update(roomRef, { memberCount: increment(1) });
+            
+            const notificationMessage = {
+                senderId: 'system',
+                senderName: 'System',
+                senderPhotoURL: '',
+                content: `${userProfile.displayName} joined the room.`,
+                timestamp: serverTimestamp(),
+                type: 'notification' as const,
+            };
+            const messageDocRef = doc(collection(firestore, 'rooms', roomId, 'messages'));
+            batch.set(messageDocRef, notificationMessage);
+            
             await batch.commit();
         } else {
-            // If user is already a member but not in a slot (e.g. owner rejoining), place them.
             const currentMemberData = memberDoc.data() as RoomMember;
-            if (currentMemberData.micSlot === null && initialMicSlot !== null) {
-                await updateDoc(memberRef, { micSlot: initialMicSlot });
+             if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
+                await updateDoc(memberRef, { micSlot: OWNER_SLOT });
             }
         }
     };
@@ -335,7 +346,6 @@ export default function RoomPage() {
                                   memberInSlot ? "ring-2 ring-offset-2 ring-offset-background" : "border-2 border-dashed border-muted-foreground/50",
                                   memberInSlot && memberInSlot.isMuted ? "ring-destructive" : "ring-primary",
                                   isSelf && !isMuted && "talking-indicator",
-                                  isSpecial && memberInSlot && "h-24 w-24",
                                   specialLabel === "OWNER" && "ring-yellow-500",
                                   specialLabel === "SUPER" && "ring-purple-500",
                                   isLocked && "bg-muted-foreground/20"
@@ -343,13 +353,13 @@ export default function RoomPage() {
                     {profile ? (
                         <Avatar className="h-full w-full">
                             <AvatarImage src={profile.photoURL} />
-                            <AvatarFallback className={cn("text-2xl", isSpecial && "text-4xl")}>{getInitials(profile.displayName)}</AvatarFallback>
+                            <AvatarFallback className="text-2xl">{getInitials(profile.displayName)}</AvatarFallback>
                         </Avatar>
                     ) : (
                          isLocked ? (
-                            <MicOff className="h-8 w-8 text-muted-foreground"/>
+                            <Lock className="h-8 w-8 text-muted-foreground"/>
                         ) : (
-                            <Mic className={cn("text-muted-foreground", isSpecial ? "h-10 w-10" : "h-8 w-8")}/>
+                            <Mic className={cn("text-muted-foreground h-8 w-8")}/>
                         )
                     )}
                     
@@ -481,39 +491,48 @@ export default function RoomPage() {
         </header>
         
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-            
-            {/* Special Member Slots */}
-            <div className="flex justify-center items-center gap-x-8">
-                 {renderSlot(OWNER_SLOT, true, "OWNER")}
-                 {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
+            <div className="flex justify-center items-center gap-x-4">
+                {renderSlot(OWNER_SLOT, true, "OWNER")}
+                {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
             </div>
 
-            {/* Regular Member Slots */}
             <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
                 {Array.from({ length: MIC_SLOTS }).map((_, i) => renderSlot(i + 1))}
             </div>
+
+             <ScrollArea className="h-48 mt-4 rounded-md border p-2">
+                 {messages.map((msg, index) => (
+                    <div key={index} className={cn("p-2 text-sm", msg.type === 'notification' && "text-center text-xs text-muted-foreground")}>
+                         {msg.type === 'notification' ? (
+                            <p>{msg.content}</p>
+                        ) : (
+                             <p><span className="font-bold">{msg.senderName}:</span> {msg.content}</p>
+                        )}
+                    </div>
+                ))}
+             </ScrollArea>
         </div>
 
-        <footer className="shrink-0 border-t bg-background p-3 space-y-3">
-             <div className="flex justify-center items-center gap-4">
-                 <Button variant={isMuted ? 'destructive' : 'secondary'} size="lg" className="rounded-full h-14 w-14" onClick={handleToggleMute} disabled={currentUserSlot.micSlot === null}>
-                    {isMuted ? <MicOff className="h-6 w-6"/> : <Mic className="h-6 w-6"/>}
-                </Button>
-                 <Button variant={isDeafened ? 'destructive' : 'secondary'} size="lg" className="rounded-full h-14 w-14" onClick={() => setIsDeafened(!isDeafened)}>
-                    {isDeafened ? <VolumeX className="h-6 w-6"/> : <Volume2 className="h-6 w-6"/>}
-                </Button>
-            </div>
+         <footer className="shrink-0 border-t bg-background p-3 space-y-2">
             <div className="relative">
-                <Input 
+                 <Input 
                     placeholder="Send a message..." 
-                    className="pr-10"
+                    className="pr-24"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                 />
-                <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={handleSendMessage}>
-                    <Send className="h-5 w-5"/>
-                </Button>
+                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
+                    <Button variant="ghost" size="icon" onClick={handleToggleMute} disabled={currentUserSlot.micSlot === null}>
+                        {isMuted ? <MicOff className="h-5 w-5"/> : <Mic className="h-5 w-5"/>}
+                    </Button>
+                     <Button variant="ghost" size="icon" onClick={() => setIsDeafened(!isDeafened)}>
+                        {isDeafened ? <VolumeX className="h-5 w-5"/> : <Volume2 className="h-5 w-5"/>}
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={handleSendMessage}>
+                        <Send className="h-5 w-5"/>
+                    </Button>
+                </div>
             </div>
         </footer>
       </div>
