@@ -34,6 +34,7 @@ import {
   MoreVertical,
   Paperclip,
   Send,
+  Shield,
   Trash2,
   Unlock,
   UserX,
@@ -84,7 +85,6 @@ export default function RoomPage() {
   const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [message, setMessage] = useState('');
 
-  const [isMuted, setIsMuted] = useState(false);
   const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | null }>({ isOpen: false, action: null });
   
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
@@ -104,7 +104,6 @@ export default function RoomPage() {
         const roomData = { id: docSnap.id, ...docSnap.data() } as Room;
         setRoom(roomData);
         setCurrentRoom(roomData); // Update context
-        // Check if user was kicked
         if (roomData.kickedUsers && roomData.kickedUsers[authUser.uid]) {
             toast({ title: "You've been kicked", description: "You have been removed from this room by the owner.", variant: 'destructive'});
             router.push('/chat/rooms');
@@ -122,7 +121,6 @@ export default function RoomPage() {
         const membersList = snapshot.docs.map(d => d.data() as RoomMember);
         setMembers(membersList);
 
-        // Fetch profiles for new members
         const newMemberIds = membersList
             .map(m => m.userId)
             .filter(id => !memberProfiles[id]);
@@ -151,7 +149,7 @@ export default function RoomPage() {
       unsubRoom();
       unsubMembers();
       unsubMessages();
-      contextLeaveRoom(); // Clear context on unmount
+      contextLeaveRoom();
     };
   }, [firestore, roomId, authUser, toast, router, setCurrentRoom, contextLeaveRoom]);
 
@@ -165,8 +163,16 @@ export default function RoomPage() {
     const joinRoom = async () => {
         const memberDoc = await getDoc(memberRef);
         if (!memberDoc.exists()) {
+             // Determine initial mic slot
+            let initialMicSlot = null;
+            const ownerProfile = memberProfiles[room.ownerId];
+            if (isOwner) {
+                initialMicSlot = 0;
+            } else if (ownerProfile?.officialBadge?.isOfficial) {
+                initialMicSlot = -1;
+            }
             await writeBatch(firestore)
-                .set(memberRef, { userId: authUser.uid, micSlot: null, isMuted: false })
+                .set(memberRef, { userId: authUser.uid, micSlot: initialMicSlot, isMuted: false })
                 .update(roomRef, { memberCount: increment(1) })
                 .commit();
         }
@@ -175,7 +181,6 @@ export default function RoomPage() {
     joinRoom();
 
     return () => {
-      // This is the cleanup function that runs when the component unmounts
       const leave = async () => {
         if (firestore && authUser && roomId) {
             const memberRefOnLeave = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
@@ -186,14 +191,13 @@ export default function RoomPage() {
                     .update(roomRefOnLeave, { memberCount: increment(-1) })
                     .commit();
              } catch(e) {
-                // This can fail if the room is deleted before the user leaves, which is fine.
                 console.warn("Could not update member count on leave, room might be deleted.", e);
              }
         }
       };
       leave();
     };
-  }, [firestore, authUser, roomId, room, isMounted]);
+  }, [firestore, authUser, roomId, room, isMounted, isOwner, memberProfiles]);
 
   // --- Handlers ---
   const handleLeaveRoom = async () => {
@@ -225,7 +229,6 @@ export default function RoomPage() {
     await updateDoc(roomRef, {
         [`kickedUsers.${targetMember.userId}`]: serverTimestamp()
     });
-    // The user will be automatically redirected by the useEffect listener
   };
 
   const handleMicSlotClick = async (slotNumber: number) => {
@@ -239,10 +242,8 @@ export default function RoomPage() {
       const currentMemberData = members.find(m => m.userId === authUser.uid);
 
       if (currentMemberData?.micSlot === slotNumber) {
-          // User is clicking their own slot, so leave it
           await updateDoc(memberRef, { micSlot: null });
       } else {
-          // User is taking a new slot
           await updateDoc(memberRef, { micSlot: slotNumber });
       }
   };
@@ -276,7 +277,11 @@ export default function RoomPage() {
     setMessage('');
   };
   
-  const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
+  const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : '?';
+  
+  const ownerMember = members.find(m => m.micSlot === 0);
+  const superAdminMember = members.find(m => m.micSlot === -1);
+
 
   if (!room || !authUser) {
     return (
@@ -285,6 +290,94 @@ export default function RoomPage() {
       </div>
     );
   }
+  
+  const renderSlot = (slotNumber: number | 'super' | 'owner') => {
+        let memberInSlot: RoomMember | undefined;
+        let slotType: 'owner' | 'super' | 'member' | 'empty' = 'empty';
+        let slotNumForClick: number | null = null;
+        let isClickable = true;
+
+        if (slotNumber === 'owner') {
+            memberInSlot = ownerMember;
+            slotType = 'owner';
+            isClickable = false;
+        } else if (slotNumber === 'super') {
+            memberInSlot = superAdminMember;
+            slotType = 'super';
+            isClickable = false;
+        } else {
+            slotNumForClick = slotNumber;
+            memberInSlot = members.find(m => m.micSlot === slotNumber);
+            slotType = memberInSlot ? 'member' : 'empty';
+        }
+
+        const profile = memberInSlot ? memberProfiles[memberInSlot.userId] : null;
+        const isLocked = typeof slotNumber === 'number' && room.lockedSlots?.includes(slotNumber);
+
+        const baseClasses = "relative flex flex-col items-center justify-center space-y-2 p-4 rounded-lg bg-background shadow-sm h-40 transition-all";
+        const typeClasses = {
+            owner: 'border-2 border-yellow-500',
+            super: 'border-2 border-purple-500',
+            member: 'border border-border',
+            empty: 'border border-dashed border-muted-foreground/50'
+        };
+
+        const handleClick = () => {
+           if (slotType === 'empty' && slotNumForClick !== null) {
+               handleMicSlotClick(slotNumForClick);
+           } else if (memberInSlot?.userId === authUser.uid && slotNumForClick !== null) {
+               handleMicSlotClick(slotNumForClick);
+           }
+        }
+        
+        return (
+            <div
+                className={cn(baseClasses, typeClasses[slotType])}
+                onClick={isClickable ? handleClick : undefined}
+            >
+                {slotType === 'owner' && <Crown className="absolute top-2 right-2 h-5 w-5 text-yellow-500"/>}
+                {slotType === 'super' && <Shield className="absolute top-2 right-2 h-5 w-5 text-purple-500"/>}
+
+                {memberInSlot && profile ? (
+                    <>
+                         <Avatar className={cn("h-16 w-16 md:h-20 md:w-20", memberInSlot.isMuted && "ring-2 ring-destructive ring-offset-2")}>
+                            <AvatarImage src={profile?.photoURL} />
+                            <AvatarFallback className="text-2xl">{getInitials(profile?.displayName || '?')}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex items-center gap-1 text-center">
+                            {profile?.officialBadge?.isOfficial && <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>}
+                            <p className="font-semibold truncate max-w-[100px]">{profile?.displayName}</p>
+                        </div>
+                         {isOwner && memberInSlot.userId !== authUser.uid && (
+                            <div className="absolute top-1 right-1 flex gap-1 bg-background/80 rounded-full">
+                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => {e.stopPropagation(); handleToggleMute(memberInSlot)}}>
+                                    {memberInSlot.isMuted ? <Volume2 className="h-4 w-4"/> : <VolumeX className="h-4 w-4"/>}
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={(e) => {e.stopPropagation(); handleKickUser(memberInSlot)}}>
+                                    <UserX className="h-4 w-4"/>
+                                </Button>
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <>
+                       {slotType === 'empty' && (
+                           <div className="flex flex-col items-center justify-center w-full h-full text-muted-foreground hover:bg-muted/50 rounded-lg cursor-pointer">
+                             {isLocked ? <Lock className="h-8 w-8"/> : <Mic className="h-8 w-8"/>}
+                             <span className="text-sm mt-2">{isLocked ? 'Locked' : `Slot ${slotNumber}`}</span>
+                           </div>
+                       )}
+                    </>
+                )}
+
+                {isOwner && typeof slotNumber === 'number' && (
+                    <Button size="icon" variant="ghost" className="absolute bottom-1 right-1 h-6 w-6" onClick={(e) => {e.stopPropagation(); handleToggleLockSlot(slotNumber)}}>
+                        {isLocked ? <Unlock className="h-4 w-4 text-primary"/> : <Lock className="h-4 w-4"/>}
+                    </Button>
+                )}
+            </div>
+        );
+    }
   
   return (
     <>
@@ -311,7 +404,7 @@ export default function RoomPage() {
         {/* Header */}
         <header className="flex items-center justify-between gap-4 border-b p-4 bg-background">
           <Button variant="ghost" size="icon" onClick={() => setDialogState({ isOpen: true, action: 'leave' })}>
-            <ArrowLeft className="h-5 w-5" />
+            <DoorOpen className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-3 overflow-hidden">
             <Avatar>
@@ -344,65 +437,22 @@ export default function RoomPage() {
         <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
             {/* Mic Slots */}
             <div className="flex-1 p-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {/* Owner Slot */}
-                    <div className="relative flex flex-col items-center justify-center space-y-2 p-4 rounded-lg bg-background shadow-sm border-2 border-yellow-500">
-                        <Crown className="absolute top-2 right-2 h-5 w-5 text-yellow-500"/>
-                        <Avatar className={cn("h-20 w-20", currentUserSlot?.isMuted && "ring-2 ring-destructive ring-offset-2")}>
-                            <AvatarImage src={memberProfiles[room.ownerId]?.photoURL} />
-                            <AvatarFallback className="text-2xl">{getInitials(memberProfiles[room.ownerId]?.displayName || '?')}</AvatarFallback>
-                        </Avatar>
-                        <p className="font-semibold text-center truncate w-full">{memberProfiles[room.ownerId]?.displayName}</p>
+                <div className="space-y-4">
+                    {/* Owner & Super Admin */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {renderSlot('owner')}
+                        {superAdminMember ? renderSlot('super') : <div className="hidden md:block"></div>}
                     </div>
-
+                    {/* Throne Separator */}
+                     <div className="flex items-center text-xs text-muted-foreground my-4">
+                        <div className="flex-grow border-t border-muted-foreground/30"></div>
+                        <span className="flex-shrink mx-4">THRONE</span>
+                        <div className="flex-grow border-t border-muted-foreground/30"></div>
+                    </div>
                     {/* Member Slots */}
-                    {Array.from({ length: MIC_SLOTS }).map((_, i) => {
-                        const slotNumber = i + 1;
-                        const memberInSlot = members.find(m => m.micSlot === slotNumber);
-                        const profile = memberInSlot ? memberProfiles[memberInSlot.userId] : null;
-                        const isLocked = room.lockedSlots?.includes(slotNumber);
-
-                        return (
-                            <div key={slotNumber} className="relative flex flex-col items-center justify-center space-y-2 p-4 rounded-lg bg-background shadow-sm h-40">
-                                {memberInSlot ? (
-                                    <>
-                                        <Avatar className={cn("h-16 w-16 md:h-20 md:w-20", memberInSlot.isMuted && "ring-2 ring-destructive ring-offset-2")}>
-                                            <AvatarImage src={profile?.photoURL} />
-                                            <AvatarFallback className="text-2xl">{getInitials(profile?.displayName || '?')}</AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex items-center gap-1">
-                                            {profile?.officialBadge?.isOfficial && <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>}
-                                            <p className="font-semibold text-center truncate max-w-[100px]">{profile?.displayName}</p>
-                                        </div>
-                                         {isOwner && memberInSlot.userId !== authUser.uid && (
-                                            <div className="absolute top-1 right-1 flex gap-1">
-                                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleToggleMute(memberInSlot)}>
-                                                    {memberInSlot.isMuted ? <Volume2 className="h-4 w-4"/> : <VolumeX className="h-4 w-4"/>}
-                                                </Button>
-                                                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleKickUser(memberInSlot)}>
-                                                    <UserX className="h-4 w-4"/>
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </>
-                                ) : (
-                                    <button 
-                                        className="flex flex-col items-center justify-center w-full h-full text-muted-foreground hover:bg-muted/50 rounded-lg disabled:cursor-not-allowed"
-                                        onClick={() => handleMicSlotClick(slotNumber)}
-                                        disabled={isLocked && !isOwner}
-                                    >
-                                        {isLocked ? <Lock className="h-8 w-8"/> : <Mic className="h-8 w-8"/>}
-                                        <span className="text-sm mt-2">{isLocked ? 'Locked' : `Slot ${slotNumber}`}</span>
-                                    </button>
-                                )}
-                                {isOwner && (
-                                    <Button size="icon" variant="ghost" className="absolute bottom-1 right-1 h-6 w-6" onClick={() => handleToggleLockSlot(slotNumber)}>
-                                        {isLocked ? <Unlock className="h-4 w-4 text-primary"/> : <Lock className="h-4 w-4"/>}
-                                    </Button>
-                                )}
-                            </div>
-                        );
-                    })}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {Array.from({ length: MIC_SLOTS }).map((_, i) => renderSlot(i + 1))}
+                    </div>
                 </div>
             </div>
 
