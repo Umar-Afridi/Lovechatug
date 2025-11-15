@@ -99,7 +99,7 @@ export default function RoomPage() {
   const [joinTimestamp, setJoinTimestamp] = useState<Timestamp | null>(null);
 
 
-  const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick' | null, targetMember?: RoomMember | null }>({ isOpen: false, action: null, targetMember: null });
+  const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick' | null, targetMember?: RoomMember | null }>({ isOpen: false, action: null });
   
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
@@ -123,7 +123,10 @@ export default function RoomPage() {
             // Do not decrement count if the user is a super admin (not a regular member)
             // or if the whole room is being deleted.
             if (!isKickOrDelete && currentUserSlot.micSlot !== SUPER_ADMIN_SLOT) { 
-                batch.update(roomRef, { memberCount: increment(-1) });
+                const roomDoc = await getDoc(roomRef);
+                if (roomDoc.exists() && roomDoc.data().memberCount > 0) {
+                  batch.update(roomRef, { memberCount: increment(-1) });
+                }
             }
             await batch.commit();
         }
@@ -206,14 +209,17 @@ export default function RoomPage() {
         if (!roomDoc.exists()) return;
         const currentRoomData = roomDoc.data() as Room;
         
+        // Determine the initial mic slot. Default to null (listener).
         let initialMicSlot: number | null = null;
         let isJoiningAsSuperAdmin = false;
 
+        // Only the owner gets a mic slot automatically.
         if (currentRoomData.ownerId === authUser.uid) {
             initialMicSlot = OWNER_SLOT;
         } else if (userProfile?.officialBadge?.isOfficial) {
-            initialMicSlot = SUPER_ADMIN_SLOT;
             isJoiningAsSuperAdmin = true;
+            // Super admins also join as listeners by default.
+            initialMicSlot = null;
         }
 
         if (!memberDoc.exists()) {
@@ -221,7 +227,9 @@ export default function RoomPage() {
             const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
             batch.set(memberRef, memberData);
             
-            if (!isJoiningAsSuperAdmin) {
+            // Only increment member count if it's not the owner joining their own room for the first time
+            // and not a super admin. Let's count super admins as regular members for simplicity unless specified otherwise.
+            if (currentRoomData.ownerId !== authUser.uid) {
               batch.update(roomRef, { memberCount: increment(1) });
             }
             
@@ -238,10 +246,9 @@ export default function RoomPage() {
             await batch.commit();
         } else {
             const currentMemberData = memberDoc.data() as RoomMember;
+             // If the owner rejoins and isn't in the owner slot, put them there.
             if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
                 await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
-            } else if (userProfile?.officialBadge?.isOfficial && currentMemberData.micSlot !== SUPER_ADMIN_SLOT) {
-                 await updateDoc(memberRef, { micSlot: SUPER_ADMIN_SLOT, isMuted: true });
             }
         }
     };
@@ -371,7 +378,7 @@ export default function RoomPage() {
     );
   }
   
-    const renderSlot = (slotNumber: number, isSpecial: boolean = false, specialLabel?: string) => {
+    const renderSlot = (slotNumber: number) => {
         const memberInSlot = members.find(m => m.micSlot === slotNumber);
         const profile = memberInSlot ? memberProfiles[memberInSlot.userId] : null;
         
@@ -395,8 +402,7 @@ export default function RoomPage() {
                 <div className={cn("relative h-20 w-20 rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
                                   memberInSlot ? "ring-2 ring-offset-2 ring-offset-background" : "border-2 border-dashed border-muted-foreground/50",
                                   memberInSlot && memberInSlot.isMuted ? "ring-destructive" : "ring-primary",
-                                  isSelf && !isMuted && "talking-indicator",
-                                  isLocked && !memberInSlot && "bg-muted-foreground/20"
+                                  isSelf && !isMuted && "talking-indicator"
                                   )}>
                     {profile ? (
                         <Avatar className="h-full w-full">
@@ -410,12 +416,15 @@ export default function RoomPage() {
                     )}
                     
                     {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
-                     {isSpecial && specialLabel && (
-                       <div className={cn("absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center",
-                         specialLabel === "OWNER" ? "border-yellow-500" : "border-purple-500"
-                       )}>
-                         {specialLabel === "OWNER" ? <Crown className="h-5 w-5 text-yellow-500"/> : <Shield className="h-5 w-5 text-purple-500"/> }
+                     {slotNumber === OWNER_SLOT && (
+                       <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-yellow-500">
+                         <Crown className="h-5 w-5 text-yellow-500"/>
                        </div>
+                    )}
+                    {slotNumber === SUPER_ADMIN_SLOT && (
+                         <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-purple-500">
+                            <Shield className="h-5 w-5 text-purple-500"/> 
+                         </div>
                     )}
                 </div>
                  <div className="h-5 flex items-center justify-center">
@@ -426,8 +435,10 @@ export default function RoomPage() {
                          )}>
                            {profile.displayName}
                          </p>
-                    ) : specialLabel ? (
-                        <p className={cn("text-sm font-semibold")}>{specialLabel}</p>
+                    ) : slotNumber === OWNER_SLOT ? (
+                        <p className={cn("text-sm font-semibold")}>OWNER</p>
+                    ) : slotNumber === SUPER_ADMIN_SLOT ? (
+                         <p className={cn("text-sm font-semibold")}>SUPER</p>
                     ) : (
                          !isLocked && <p className="text-sm text-muted-foreground">{slotNumber}</p>
                     )}
@@ -437,7 +448,7 @@ export default function RoomPage() {
         
         return (
             <DropdownMenu key={slotNumber}>
-                <DropdownMenuTrigger asChild disabled={!!memberInSlot && memberInSlot.userId !== authUser?.uid && !isOwner}>
+                <DropdownMenuTrigger asChild disabled={(!!memberInSlot && memberInSlot.userId !== authUser?.uid && !isOwner) || (slotNumber === OWNER_SLOT && !isOwner)}>
                     <div className="cursor-pointer">{content}</div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
@@ -455,7 +466,7 @@ export default function RoomPage() {
                         </>
                     )}
                     
-                    {isOwner && (!memberInSlot || slotNumber === SUPER_ADMIN_SLOT) && (
+                    {isOwner && (slotNumber >= SUPER_ADMIN_SLOT) && (
                         <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                             {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                             {isLocked ? 'Unlock Mic' : 'Lock Mic'}
@@ -533,7 +544,7 @@ export default function RoomPage() {
           onOpenChange={setContactSheetOpen}
           userProfile={viewedProfile}
       />
-      <AlertDialog open={dialogState.isOpen} onOpenChange={(isOpen) => !isOpen && setDialogState({ isOpen: false, action: null, targetMember: null })}>
+      <AlertDialog open={dialogState.isOpen} onOpenChange={(isOpen) => !isOpen && setDialogState({ isOpen: false, action: null })}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -590,28 +601,27 @@ export default function RoomPage() {
           </div>
         </header>
         
-        <main className="flex-1 flex flex-col overflow-hidden p-4 md:p-6">
-            <div className="flex flex-col items-center gap-6">
-                 {/* Top Row: Owner and Super */}
-                <div className="flex justify-center gap-x-4 md:gap-x-8">
-                    {renderSlot(OWNER_SLOT, true, "OWNER")}
-                    {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
-                </div>
-                
-                {/* Mic Slots */}
-                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
-                </div>
+        <main className="flex-1 flex flex-col items-center overflow-hidden p-4 md:p-6 space-y-6">
+             {/* Top Row: Owner and Super */}
+            <div className="flex justify-center gap-x-4 md:gap-x-8">
+                {renderSlot(OWNER_SLOT)}
+                {renderSlot(SUPER_ADMIN_SLOT)}
+            </div>
+            
+            {/* Mic Slots - First Row */}
+            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
+            </div>
 
-                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
-                </div>
+             {/* Mic Slots - Second Row */}
+            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
             </div>
 
             {/* Chat Area */}
-            <div className="mt-auto h-40 flex flex-col justify-end items-start gap-2 overflow-y-auto overflow-x-hidden p-2 rounded-lg bg-black/10">
+            <div className="w-full flex-1 flex flex-col-reverse items-start gap-2 overflow-y-auto overflow-x-hidden p-2 rounded-lg bg-black/10">
                 <AnimatePresence>
-                    {messages.slice(-5).map((msg, index) => renderMessage(msg, index))}
+                    {messages.slice().reverse().map((msg, index) => renderMessage(msg, index))}
                 </AnimatePresence>
             </div>
         </main>
