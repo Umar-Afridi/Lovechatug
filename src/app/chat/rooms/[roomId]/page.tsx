@@ -105,8 +105,8 @@ export default function RoomPage() {
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
 
-  const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
-    if (!firestore || !authUser) return;
+ const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
+    if (!firestore || !authUser || !currentUserSlot) return;
 
     setMessages([]); 
     contextLeaveRoom();
@@ -119,7 +119,10 @@ export default function RoomPage() {
         if (memberDoc.exists()) {
             const batch = writeBatch(firestore);
             batch.delete(memberRef);
-            if (!isKickOrDelete) { 
+
+            // Do not decrement count if the user is a super admin (not a regular member)
+            // or if the whole room is being deleted.
+            if (!isKickOrDelete && currentUserSlot.micSlot !== SUPER_ADMIN_SLOT) { 
                 batch.update(roomRef, { memberCount: increment(-1) });
             }
             await batch.commit();
@@ -128,7 +131,7 @@ export default function RoomPage() {
         console.warn("Could not leave room properly, room might be deleted.", e);
     }
     router.push('/chat/rooms');
-  }, [firestore, authUser, roomId, router, contextLeaveRoom]);
+  }, [firestore, authUser, roomId, router, contextLeaveRoom, currentUserSlot]);
   
   const handleBeforeUnload = useCallback((e: BeforeUnloadEvent) => {
       handleLeaveRoom();
@@ -204,17 +207,24 @@ export default function RoomPage() {
         const currentRoomData = roomDoc.data() as Room;
         
         let initialMicSlot: number | null = null;
+        let isJoiningAsSuperAdmin = false;
+
         if (currentRoomData.ownerId === authUser.uid) {
             initialMicSlot = OWNER_SLOT;
         } else if (userProfile?.officialBadge?.isOfficial) {
             initialMicSlot = SUPER_ADMIN_SLOT;
+            isJoiningAsSuperAdmin = true;
         }
 
         if (!memberDoc.exists()) {
             const batch = writeBatch(firestore);
             const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
             batch.set(memberRef, memberData);
-            batch.update(roomRef, { memberCount: increment(1) });
+            
+            // Only increment count if not joining as a super admin
+            if (!isJoiningAsSuperAdmin) {
+              batch.update(roomRef, { memberCount: increment(1) });
+            }
             
             const notificationMessage = {
                 senderId: 'system',
@@ -229,8 +239,11 @@ export default function RoomPage() {
             await batch.commit();
         } else {
             const currentMemberData = memberDoc.data() as RoomMember;
+             // Ensure owner/super-admin slots are correctly assigned if they re-join
             if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
                 await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
+            } else if (userProfile?.officialBadge?.isOfficial && currentMemberData.micSlot !== SUPER_ADMIN_SLOT) {
+                 await updateDoc(memberRef, { micSlot: SUPER_ADMIN_SLOT, isMuted: true });
             }
         }
     };
@@ -240,6 +253,7 @@ export default function RoomPage() {
     return () => {
       unsubRoom();
       unsubMembers();
+      setCurrentRoom(null); // Clear context on unmount
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, roomId, authUser?.uid]);
@@ -251,16 +265,22 @@ export default function RoomPage() {
     const messagesRef = collection(firestore, 'rooms', roomId, 'messages');
     const qMessages = query(
       messagesRef,
-      where('timestamp', '>', joinTimestamp),
-      orderBy('timestamp', 'desc'),
-      limit(10) // Increased limit slightly
+      where('timestamp', '>=', joinTimestamp),
+      orderBy('timestamp', 'asc')
     );
 
     const unsubMessages = onSnapshot(qMessages, (snapshot) => {
-      const newMsgs = snapshot.docs
-        .map(d => ({ id: d.id, ...d.data() } as RoomMessage))
-        .reverse();
-      setMessages(newMsgs);
+      setMessages(prevMessages => {
+          const newMsgs = snapshot.docs
+              .map(d => ({ id: d.id, ...d.data() } as RoomMessage))
+              // Filter out messages that are already in state to prevent duplicates
+              .filter(newMsg => !prevMessages.some(prevMsg => prevMsg.id === newMsg.id));
+          
+          if (newMsgs.length > 0) {
+              return [...prevMessages, ...newMsgs];
+          }
+          return prevMessages;
+      });
     });
 
     return () => {
@@ -272,9 +292,10 @@ export default function RoomPage() {
   const handleDeleteRoom = async () => {
      if (!firestore || !isOwner || !room) return;
     try {
-        await handleLeaveRoom(true); 
         await deleteDoc(doc(firestore, 'rooms', room.id));
         toast({ title: 'Room Deleted', description: 'The room has been successfully deleted.' });
+        // The handleLeaveRoom will be triggered by the component unmount, which is fine
+        router.push('/chat/rooms');
     } catch(e) {
         console.error("Error deleting room", e);
         toast({ title: 'Error', description: 'Failed to delete the room.', variant: 'destructive' });
@@ -363,17 +384,6 @@ export default function RoomPage() {
         
         const handleTakeSeat = async () => {
             if (!currentUserSlot) return;
-
-            if (slotNumber === OWNER_SLOT && authUser.uid !== room.ownerId) {
-                toast({ title: "Permission Denied", description: "Only the room owner can take this seat.", variant: "destructive"});
-                return;
-            }
-            // Super admin slot is also restricted
-            if (slotNumber === SUPER_ADMIN_SLOT && !profile?.officialBadge?.isOfficial) {
-                 toast({ title: "Permission Denied", description: "Only official users can take this seat.", variant: "destructive"});
-                return;
-            }
-
             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
             await updateDoc(memberRef, { micSlot: slotNumber });
         };
@@ -390,8 +400,6 @@ export default function RoomPage() {
                                   memberInSlot ? "ring-2 ring-offset-2 ring-offset-background" : "border-2 border-dashed border-muted-foreground/50",
                                   memberInSlot && memberInSlot.isMuted ? "ring-destructive" : "ring-primary",
                                   isSelf && !isMuted && "talking-indicator",
-                                  specialLabel === "OWNER" && "ring-yellow-500",
-                                  specialLabel === "SUPER" && "ring-purple-500",
                                   isLocked && !memberInSlot && "bg-muted-foreground/20"
                                   )}>
                     {profile ? (
@@ -402,7 +410,7 @@ export default function RoomPage() {
                     ) : isLocked ? (
                          <Lock className="text-muted-foreground h-8 w-8" />
                     ): (
-                         <Mic className={cn("text-muted-foreground h-8 w-8")}/>
+                         <Mic className={cn("text-muted-foreground h-8 w-8", isSpecial && "text-muted-foreground/50")}/>
                     )}
                     
                     {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
@@ -451,7 +459,7 @@ export default function RoomPage() {
                         </>
                     )}
                     
-                    {isOwner && !memberInSlot && (
+                    {isOwner && (!memberInSlot || slotNumber === SUPER_ADMIN_SLOT) && (
                         <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                             {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                             {isLocked ? 'Unlock Mic' : 'Lock Mic'}
@@ -459,7 +467,12 @@ export default function RoomPage() {
                     )}
 
                     {!memberInSlot && !isLocked && currentUserSlot?.micSlot === null && (
-                         <DropdownMenuItem onClick={handleTakeSeat}>
+                         <DropdownMenuItem 
+                            onClick={handleTakeSeat} 
+                            disabled={
+                                (slotNumber === OWNER_SLOT && authUser.uid !== room.ownerId)
+                            }
+                         >
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                          </DropdownMenuItem>
                     )}
@@ -483,8 +496,9 @@ export default function RoomPage() {
             key={msg.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
-            transition={{ duration: 0.3 }}
+            exit={{ opacity: 0, transition: { duration: 0.2 } }}
+            transition={{ duration: 0.3, delay: index * 0.05 }}
+            layout
             className={cn("transition-opacity duration-300 w-full", isNotification && "text-center")}
           >
             {isNotification ? (
@@ -545,6 +559,7 @@ export default function RoomPage() {
                 if (dialogState.action === 'delete') handleDeleteRoom();
                 else if (dialogState.action === 'leave') handleLeaveRoom();
                 else if (dialogState.action === 'kick') handleKickUser(dialogState.targetMember);
+                setDialogState({ isOpen: false, action: null, targetMember: null });
               }}
               className={dialogState.action !== 'leave' ? "bg-destructive hover:bg-destructive/90" : ""}>
                 Yes, {dialogState.action}
@@ -584,25 +599,26 @@ export default function RoomPage() {
           </div>
         </header>
         
-        <main className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 justify-between">
-            <div className="space-y-6">
-                <div className="flex justify-center gap-x-4">
-                    {renderSlot(OWNER_SLOT, true, "OWNER")}
-                    {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
-                </div>
-                
-                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
-                </div>
-
-                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
-                </div>
+        <main className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 justify-start gap-6">
+            {/* Top Row: Owner and Super */}
+            <div className="flex justify-center gap-x-4 md:gap-x-8">
+                {renderSlot(OWNER_SLOT, true, "OWNER")}
+                {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
+            </div>
+            
+            {/* Mic Slots */}
+            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
             </div>
 
-            <div className="h-40 flex flex-col-reverse items-start gap-2 overflow-hidden">
+            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+            </div>
+
+            {/* Chat Area */}
+             <div className="mt-auto h-40 flex flex-col-reverse items-start gap-2 overflow-y-auto overflow-x-hidden p-2 rounded-lg bg-black/10">
                 <AnimatePresence>
-                    {messages.map((msg, index) => renderMessage(msg, index))}
+                    {messages.slice(-5).map((msg, index) => renderMessage(msg, index))}
                 </AnimatePresence>
             </div>
         </main>
