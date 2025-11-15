@@ -13,9 +13,10 @@ import { useSound } from '@/hooks/use-sound';
 interface IncomingCallProps {
   call: Call;
   onHandled: () => void;
+  onAccept: (call: Call) => void;
 }
 
-export function IncomingCall({ call, onHandled }: IncomingCallProps) {
+export function IncomingCall({ call, onHandled, onAccept }: IncomingCallProps) {
   const router = useRouter();
   const firestore = useFirestore();
   const [caller, setCaller] = useState<UserProfile | null>(null);
@@ -50,8 +51,7 @@ export function IncomingCall({ call, onHandled }: IncomingCallProps) {
     const callDocRef = doc(firestore, 'calls', call.id);
     try {
         await updateDoc(callDocRef, { status: 'answered', answeredAt: serverTimestamp() });
-        onHandled();
-        // The layout will now handle displaying the active call screen
+        onAccept(call);
     } catch(e) {
         console.error("Error accepting call: ", e);
         onHandled();

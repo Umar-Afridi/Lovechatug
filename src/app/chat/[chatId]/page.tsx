@@ -63,6 +63,7 @@ import { useSound } from '@/hooks/use-sound';
 import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
+import { useCallContext } from '../layout';
 
 
 export default function ChatIdPage() {
@@ -72,6 +73,7 @@ export default function ChatIdPage() {
   const { user: authUser } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const { startCall } = useCallContext();
   
   const [chatId, setChatId] = useState<string | null>(null);
   const [chatData, setChatData] = useState<ChatType | null>(null);
@@ -729,34 +731,9 @@ export default function ChatIdPage() {
         isDraggingReply.current = false;
     };
     
-    const handleInitiateCall = async (type: 'audio' | 'video') => {
-        if (!firestore || !authUser || !otherUser) return;
-    
-        const callsRef = collection(firestore, 'calls');
-        const newCall = {
-            callerId: authUser.uid,
-            receiverId: otherUser.uid,
-            participants: [authUser.uid, otherUser.uid],
-            type: type,
-            status: 'outgoing', // Status from the caller's perspective
-            timestamp: serverTimestamp(),
-            direction: 'outgoing',
-        };
-    
-        try {
-            const docRef = await addDoc(callsRef, newCall);
-            // Navigate to the new calling screen
-            router.push(`/chat/call/outgoing/${otherUser.uid}?callId=${docRef.id}`);
-        } catch (error) {
-            console.error('Error initiating call:', error);
-            const permissionError = new FirestorePermissionError({ path: 'calls', operation: 'create', requestResourceData: newCall }, error as Error);
-            errorEmitter.emit('permission-error', permissionError);
-            toast({
-                title: 'Call Failed',
-                description: `Could not start ${type} call.`,
-                variant: 'destructive',
-            });
-        }
+    const handleInitiateCall = (type: 'audio' | 'video') => {
+        if (!otherUser) return;
+        startCall(otherUser.uid, type);
     };
   
   const MessageStatus = ({ status }: { status: MessageType['status'] }) => {

@@ -13,11 +13,9 @@ import type { UserProfile, Call } from '@/lib/types';
 import { useSound } from '@/hooks/use-sound';
 import { useCallContext } from '@/app/chat/layout';
 
-export default function OutgoingCallPage() {
-  const params = useParams();
-  const otherUserId = params.userId as string;
-  const searchParams = useSearchParams();
-  const callId = searchParams.get('callId');
+export default function OutgoingCallPage({ params }: { params: { userId: string, callId?: string }}) {
+  const otherUserId = params.userId;
+  const callId = params.callId;
   const { endCall } = useCallContext();
 
   const { user: authUser } = useUser();
@@ -106,8 +104,8 @@ export default function OutgoingCallPage() {
 
   const handleHangUp = useCallback(async () => {
     stop();
-    endCall(); // Immediately update UI state
     if (!firestore || !callId) {
+      endCall(); 
       return;
     }
     const callDocRef = doc(firestore, 'calls', callId);
@@ -115,6 +113,8 @@ export default function OutgoingCallPage() {
        await deleteDoc(callDocRef);
     } catch (error) {
       console.warn("Could not delete call doc, it might already be gone:", error);
+    } finally {
+       endCall(); // Immediately update UI state
     }
   }, [stop, endCall, firestore, callId]);
   

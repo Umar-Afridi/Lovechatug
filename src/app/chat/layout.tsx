@@ -49,7 +49,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useEffect, useState, useRef, useCallback, createContext, useContext } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit, addDoc } from 'firebase/firestore';
 import type { UserProfile, Room, Chat, Call } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -82,7 +82,7 @@ export const useRoomContext = () => {
 // Context for Call State
 interface CallContextType {
   activeCall: Call | null;
-  startCall: (userId: string, type: 'audio' | 'video') => void;
+  outgoingCall: Omit<Call, 'id' | 'timestamp' | 'participants' | 'status' | 'direction'> | null;
   endCall: () => void;
 }
 
@@ -189,52 +189,119 @@ function usePresence() {
   }, [user, firestore]);
 }
 
-// Custom hook for incoming calls
-function useIncomingCalls() {
-  const { user, loading: authLoading } = useUser();
-  const firestore = useFirestore();
-  const [incomingCall, setIncomingCall] = useState<Call | null>(null);
+function CallProvider({ children }: { children: React.ReactNode }) {
+    const { user, loading: authLoading } = useUser();
+    const firestore = useFirestore();
+    const router = useRouter();
 
-  useEffect(() => {
-    if (!user || !firestore || authLoading) return;
+    const [incomingCall, setIncomingCall] = useState<Call | null>(null);
+    const [activeCall, setActiveCall] = useState<Call | null>(null);
+    const [outgoingCall, setOutgoingCall] = useState<Omit<Call, 'id' | 'timestamp' | 'participants'| 'status' | 'direction' > & { callId?: string } | null>(null);
 
-    const callsRef = collection(firestore, 'calls');
-    const q = query(
-      callsRef,
-      where('receiverId', '==', user.uid),
-      where('status', '==', 'outgoing'),
-      limit(1)
-    );
+    // Listen for incoming calls
+    useEffect(() => {
+        if (!user || !firestore || authLoading) return;
+        const callsRef = collection(firestore, 'calls');
+        const q = query(callsRef, where('receiverId', '==', user.uid), where('status', '==', 'outgoing'), limit(1));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (!snapshot.empty) {
+                const callDoc = snapshot.docs[0];
+                const callData = { id: callDoc.id, ...callDoc.data() } as Call;
+                if (incomingCall?.id !== callData.id) {
+                    setIncomingCall(callData);
+                }
+            } else {
+                setIncomingCall(null);
+            }
+        });
+        return () => unsubscribe();
+    }, [user, firestore, authLoading, incomingCall?.id]);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const callDoc = snapshot.docs[0];
-        const callData = { id: callDoc.id, ...callDoc.data() } as Call;
-
-        // If the call is already being handled, don't set it again
-        if (incomingCall?.id !== callData.id) {
-           setIncomingCall(callData);
+    // Listen to active call status
+    useEffect(() => {
+        if (!activeCall?.id || !firestore) return;
+        const callDocRef = doc(firestore, 'calls', activeCall.id);
+        const unsubscribe = onSnapshot(callDocRef, (docSnap) => {
+            if (!docSnap.exists() || docSnap.data().status === 'ended') {
+                setActiveCall(null);
+            }
+        });
+        return () => unsubscribe();
+    }, [activeCall?.id, firestore]);
+    
+     // Listen to outgoing call status
+    useEffect(() => {
+      if (!outgoingCall?.callId || !firestore) return;
+      const callDocRef = doc(firestore, 'calls', outgoingCall.callId);
+      const unsubscribe = onSnapshot(callDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data() as Call;
+          if (data.status === 'answered') {
+              setActiveCall(data);
+              setOutgoingCall(null);
+          } else if (data.status === 'declined' || data.status === 'missed') {
+              // Let the outgoing call page handle this, just clear the state here
+               setTimeout(() => setOutgoingCall(null), 2000);
+          }
+        } else {
+           setOutgoingCall(null);
         }
-      } else {
+      });
+      return () => unsubscribe();
+    }, [outgoingCall?.callId, firestore]);
+
+
+    const handleCallRemotely = useCallback(() => {
         setIncomingCall(null);
-      }
-    }, (error) => {
-      console.error('Error listening for incoming calls:', error);
-    });
+    }, []);
 
-    return () => unsubscribe();
-  }, [user, firestore, authLoading, incomingCall?.id]);
+    const handleAcceptCall = (call: Call) => {
+        setActiveCall(call);
+        setIncomingCall(null);
+    };
 
+    const startCall = useCallback(async (userId: string, type: 'audio' | 'video') => {
+        if (!firestore || !user) return;
+        const newCallData = { callerId: user.uid, receiverId: userId, type };
+        setOutgoingCall(newCallData);
 
-  const handleCallRemotely = useCallback(() => {
-      setIncomingCall(null);
-  }, []);
-  
-  return { incomingCall, handleCallRemotely };
+        const callsRef = collection(firestore, 'calls');
+        const newCall = {
+            callerId: user.uid,
+            receiverId: userId,
+            participants: [user.uid, userId],
+            type: type,
+            status: 'outgoing', 
+            timestamp: serverTimestamp(),
+            direction: 'outgoing',
+        };
+    
+        try {
+            const docRef = await addDoc(callsRef, newCall);
+            setOutgoingCall(prev => prev ? { ...prev, callId: docRef.id } : null);
+        } catch (error) {
+            console.error('Error initiating call:', error);
+            setOutgoingCall(null);
+        }
+    }, [firestore, user]);
+
+    const endCall = useCallback(() => {
+        setActiveCall(null);
+        setOutgoingCall(null);
+        setIncomingCall(null);
+    }, []);
+
+    return (
+        <CallContext.Provider value={{ activeCall, outgoingCall, endCall }}>
+            {incomingCall && <IncomingCall call={incomingCall} onHandled={handleCallRemotely} onAccept={handleAcceptCall}/>}
+            {activeCall && <div className="fixed inset-0 z-[1001]"><ActiveCallPage /></div>}
+            {outgoingCall && !activeCall && <div className="fixed inset-0 z-[1001]"><OutgoingCallPage params={{ userId: outgoingCall.receiverId, callId: outgoingCall.callId }}/></div>}
+            {children}
+        </CallContext.Provider>
+    );
 }
 
-
-export default function ChatAppLayout({
+function ChatAppLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -252,8 +319,7 @@ export default function ChatAppLayout({
   const { toast } = useToast();
   
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
-  const { incomingCall, handleCallRemotely } = useIncomingCalls();
-
+  
   const handleAccountDisabled = useCallback(() => {
     setAccountDisabled(true);
   }, []);
@@ -441,12 +507,7 @@ export default function ChatAppLayout({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-
-        {incomingCall && (
-            <IncomingCall call={incomingCall} onHandled={handleCallRemotely} />
-        )}
-       
-
+      
       <div className="flex h-screen bg-background">
         <SidebarProvider>
           {showSidebar && (
@@ -525,4 +586,12 @@ export default function ChatAppLayout({
       </div>
     </RoomContext.Provider>
   );
+}
+
+export default function ChatAppLayoutWithProvider({ children }: { children: React.ReactNode }) {
+    return (
+        <CallProvider>
+            <ChatAppLayout>{children}</ChatAppLayout>
+        </CallProvider>
+    );
 }
