@@ -193,7 +193,7 @@ export default function RoomPage() {
         } else {
             const currentMemberData = memberDoc.data() as RoomMember;
              if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
-                await updateDoc(memberRef, { micSlot: OWNER_SLOT });
+                await updateDoc(memberRef, { isMuted: true, micSlot: OWNER_SLOT });
             }
         }
     };
@@ -228,16 +228,23 @@ export default function RoomPage() {
       setMessages(prevMsgs => {
         const allMsgs = [...prevMsgs, ...newMsgs];
         const uniqueMsgs = Array.from(new Map(allMsgs.map(m => [m.id, m])).values());
-        uniqueMsgs.sort((a, b) => a.timestamp?.toMillis() - b.timestamp?.toMillis());
+        uniqueMsgs.sort((a, b) => (a.timestamp?.toMillis() ?? 0) - (b.timestamp?.toMillis() ?? 0));
         return uniqueMsgs.slice(-15);
       });
     });
 
     return () => {
       unsubMessages();
-      setMessages([]); // Clear messages on leave
     };
   }, [firestore, roomId, joinTimestamp]);
+
+  useEffect(() => {
+      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+          handleLeaveRoom();
+      };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [handleLeaveRoom]);
 
 
   // --- User Actions ---
@@ -575,26 +582,25 @@ export default function RoomPage() {
           </div>
         </header>
         
-        <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 relative p-4 md:p-6">
-                
-                <div className="absolute inset-x-0 top-0 pt-4">
-                     <div className="flex justify-center gap-x-4 mb-6">
-                        {renderSlot(OWNER_SLOT, true, "OWNER")}
-                        {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
-                    </div>
-                     <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                        {Array.from({ length: MIC_SLOTS }).map((_, i) => renderSlot(i + 1))}
-                    </div>
-                </div>
+        <div className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 space-y-6">
+            <div className="flex justify-center gap-x-4">
+                {renderSlot(OWNER_SLOT, true, "OWNER")}
+                {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
+            </div>
+            
+            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
+            </div>
 
-                <div className="absolute inset-x-0 bottom-1/4 h-1/3 p-4 flex flex-col justify-end pointer-events-none">
-                    <div className="space-y-2 overflow-hidden [mask-image:linear-gradient(to_top,black_20%,transparent_100%)]">
-                        {messages.map(renderMessage)}
-                    </div>
-                </div>
+            <div className="h-24 md:h-32 flex flex-col-reverse gap-2 overflow-hidden [mask-image:linear-gradient(to_top,black_50%,transparent_100%)]">
+                {messages.slice().reverse().map(renderMessage)}
+            </div>
+
+            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
             </div>
         </div>
+
 
          <footer className="shrink-0 border-t bg-background p-3">
             <div className="relative flex items-center gap-2">
