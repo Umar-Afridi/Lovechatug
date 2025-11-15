@@ -61,7 +61,7 @@ export default function ManageUsersPage() {
   
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
-    action: 'disable' | 'delete' | 'enable';
+    action: 'disable' | 'delete' | 'enable' | null;
     targetUser: UserProfile | null;
   }>({ isOpen: false, action: null, targetUser: null });
 
@@ -138,7 +138,7 @@ export default function ManageUsersPage() {
       });
     } catch (error) {
       toast({ title: 'Error', description: 'Could not update user status.', variant: 'destructive'});
-      const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'update' });
+      const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'update' }, error as Error);
       errorEmitter.emit('permission-error', permissionError);
     }
   };
@@ -159,7 +159,7 @@ export default function ManageUsersPage() {
       });
     } catch (error) {
        toast({ title: 'Error', description: 'Could not delete user data.', variant: 'destructive'});
-       const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'delete' });
+       const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'delete' }, error as Error);
        errorEmitter.emit('permission-error', permissionError);
     }
   };
@@ -273,5 +273,3 @@ export default function ManageUsersPage() {
     </>
   );
 }
-
-    

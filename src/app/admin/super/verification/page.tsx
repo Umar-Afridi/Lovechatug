@@ -137,7 +137,7 @@ export default function ManageVerificationPage() {
       });
     } catch (error) {
        toast({ title: 'Error', description: 'Could not update verification status.', variant: 'destructive'});
-       const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: updatePayload });
+       const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: updatePayload }, error as Error);
        errorEmitter.emit('permission-error', permissionError);
     }
   };
@@ -269,5 +269,3 @@ export default function ManageVerificationPage() {
     </>
   );
 }
-
-    

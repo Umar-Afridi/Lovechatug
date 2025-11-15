@@ -103,7 +103,7 @@ export default function ManageColorfulNamePage() {
       });
     } catch (error) {
        toast({ title: 'Error', description: 'Could not update colorful name status.', variant: 'destructive'});
-       const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: { colorfulName: newState } });
+       const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: { colorfulName: newState } }, error as Error);
        errorEmitter.emit('permission-error', permissionError);
     }
   };
@@ -177,5 +177,3 @@ export default function ManageColorfulNamePage() {
     </>
   );
 }
-
-    

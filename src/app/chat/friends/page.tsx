@@ -230,5 +230,3 @@ export default function FriendsPage() {
     </ScrollArea>
   );
 }
-
-    

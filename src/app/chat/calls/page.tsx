@@ -135,7 +135,7 @@ export default function CallsPage() {
         });
     } catch(error) {
         console.error("Error clearing call history: ", error);
-        const permissionError = new FirestorePermissionError({ path: 'calls', operation: 'delete' });
+        const permissionError = new FirestorePermissionError({ path: 'calls', operation: 'delete' }, error as Error);
         errorEmitter.emit('permission-error', permissionError);
         toast({
             title: 'Error',
@@ -284,5 +284,3 @@ export default function CallsPage() {
     </>
   );
 }
-
-    
