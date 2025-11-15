@@ -12,7 +12,7 @@ import { PhoneOff } from 'lucide-react';
 import type { UserProfile, Call } from '@/lib/types';
 
 export default function OutgoingCallPage() {
-  const params = useParams();
+  const params = React.use(useParams());
   const otherUserId = params.userId;
   const router = useRouter();
   const searchParams = useSearchParams();

@@ -73,7 +73,7 @@ const SUPER_ADMIN_SLOT = -1;
 const OWNER_SLOT = 0;
 
 export default function RoomPage() {
-  const params = useParams();
+  const params = React.use(useParams());
   const roomId = params.roomId as string;
   const router = useRouter();
   const { user: authUser } = useUser();
