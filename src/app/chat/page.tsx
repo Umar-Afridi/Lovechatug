@@ -15,8 +15,6 @@ import RoomsPage from './rooms/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
 import { collection, onSnapshot, doc, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow, isToday, isYesterday, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -74,11 +72,6 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
                 }
             }, 
             (error) => {
-                const permissionError = new FirestorePermissionError({
-                    path: userDocRef.path,
-                    operation: 'get',
-                }, error);
-                errorEmitter.emit('permission-error', permissionError);
                 console.error(`Error fetching participant ${participantId}:`, error);
             }
         );
@@ -235,8 +228,6 @@ export default function ChatPage() {
             setProfile(docSnap.data() as UserProfile);
         }
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: `users/${user.uid}`, operation: 'get' }, error);
-        errorEmitter.emit('permission-error', permissionError);
         console.error("Error fetching profile:", error);
     });
 
@@ -251,8 +242,6 @@ export default function ChatPage() {
         setChats(chatsData);
         setLoading(false);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: 'chats', operation: 'list' }, error);
-        errorEmitter.emit('permission-error', permissionError);
         console.error("Error fetching chats:", error);
         setLoading(false);
     });
@@ -265,8 +254,7 @@ export default function ChatPage() {
         setRequestCount(snapshot.size);
       },
       (error) => {
-        const permissionError = new FirestorePermissionError({ path: 'friendRequests', operation: 'list' }, error);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching friend request count:", error);
       }
     );
     
@@ -277,8 +265,7 @@ export default function ChatPage() {
         const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequest));
         setSentRequests(requests);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: 'friendRequests', operation: 'list' }, error);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching sent requests:", error);
     });
 
     return () => {
@@ -320,11 +307,7 @@ export default function ChatPage() {
             
           setSearchResults(filteredUsers);
         } catch (serverError) {
-            const permissionError = new FirestorePermissionError({
-                path: 'users',
-                operation: 'list',
-            }, serverError as Error);
-            errorEmitter.emit('permission-error', permissionError);
+            console.error("Error searching users:", serverError);
         }
       }
     };
@@ -343,8 +326,7 @@ export default function ChatPage() {
           await addDoc(requestsRef, newRequest);
           toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
       } catch (error) {
-          const permissionError = new FirestorePermissionError({ path: 'friendRequests', operation: 'create', requestResourceData: newRequest }, error as Error);
-          errorEmitter.emit('permission-error', permissionError);
+          console.error("Error sending friend request:", error);
           toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive'});
       }
   };
@@ -361,8 +343,7 @@ export default function ChatPage() {
           await deleteDoc(requestRef);
           toast({ title: 'Request Cancelled' });
       } catch(error) {
-           const permissionError = new FirestorePermissionError({ path: requestRef.path, operation: 'delete' }, error as Error);
-           errorEmitter.emit('permission-error', permissionError);
+           console.error("Error cancelling friend request:", error);
            toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
       }
   }

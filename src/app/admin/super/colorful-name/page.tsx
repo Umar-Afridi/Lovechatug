@@ -22,8 +22,6 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/lib/types';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import Link from 'next/link';
@@ -55,8 +53,7 @@ export default function ManageColorfulNamePage() {
         router.push('/chat');
       }
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'get' }, error);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching admin profile:", error);
     });
     return () => unsubscribe();
   }, [authUser, firestore, router]);
@@ -75,8 +72,7 @@ export default function ManageColorfulNamePage() {
       setAllUsers(usersList);
       setLoading(false);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: 'users', operation: 'list'}, error);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching users:", error);
         setLoading(false);
     });
 
@@ -103,8 +99,7 @@ export default function ManageColorfulNamePage() {
       });
     } catch (error) {
        toast({ title: 'Error', description: 'Could not update colorful name status.', variant: 'destructive'});
-       const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: { colorfulName: newState } }, error as Error);
-       errorEmitter.emit('permission-error', permissionError);
+       console.error("Error updating colorful name:", error);
     }
   };
 

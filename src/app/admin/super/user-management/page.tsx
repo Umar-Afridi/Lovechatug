@@ -41,8 +41,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
@@ -85,8 +83,7 @@ export default function ManageUsersPage() {
         router.push('/chat');
       }
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'get' }, error);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching admin profile:", error);
     });
     return () => unsubscribe();
   }, [authUser, firestore, router, toast]);
@@ -106,8 +103,7 @@ export default function ManageUsersPage() {
       setAllUsers(usersList);
       setLoading(false);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: 'users', operation: 'list'}, error);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching users:", error);
         setLoading(false);
     });
 
@@ -138,8 +134,7 @@ export default function ManageUsersPage() {
       });
     } catch (error) {
       toast({ title: 'Error', description: 'Could not update user status.', variant: 'destructive'});
-      const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'update' }, error as Error);
-      errorEmitter.emit('permission-error', permissionError);
+      console.error("Error toggling disable user:", error);
     }
   };
 
@@ -148,9 +143,6 @@ export default function ManageUsersPage() {
     
     const userRef = doc(firestore, 'users', targetUser.uid);
      try {
-      // This is a hard delete, which we are avoiding now.
-      // The logic is kept here in case it's needed in the future,
-      // but the button now triggers soft delete (disable).
       await deleteDoc(userRef);
       toast({
         title: 'User Deleted',
@@ -159,8 +151,7 @@ export default function ManageUsersPage() {
       });
     } catch (error) {
        toast({ title: 'Error', description: 'Could not delete user data.', variant: 'destructive'});
-       const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'delete' }, error as Error);
-       errorEmitter.emit('permission-error', permissionError);
+       console.error("Error deleting user:", error);
     }
   };
   

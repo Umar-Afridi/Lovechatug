@@ -49,8 +49,6 @@ import {
 import { useEffect, useState, useRef, useCallback, createContext, useContext } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch } from 'firebase/firestore';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile, Room, Chat } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -117,11 +115,6 @@ function useUserProfile(onAccountDisabled: () => void) {
         setLoading(false);
       }, 
       (error) => {
-        const permissionError = new FirestorePermissionError({
-            path: userDocRef.path,
-            operation: 'get',
-        }, error);
-        errorEmitter.emit('permission-error', permissionError);
         console.error("Error fetching user profile:", error);
         setLoading(false);
       }
@@ -155,10 +148,7 @@ function usePresence() {
 
         const firestoreUpdateData = { isOnline: true, lastSeen: serverTimestamp() };
         updateDoc(userStatusFirestoreRef, firestoreUpdateData).catch(err => {
-          if (err.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({ path: userStatusFirestoreRef.path, operation: 'update', requestResourceData: firestoreUpdateData }, err);
-            errorEmitter.emit('permission-error', permissionError);
-          }
+            console.warn("Could not update online status in Firestore:", err);
         });
       }
     }, (error) => {
@@ -230,11 +220,6 @@ export default function ChatAppLayout({
         isFirstRequestLoad.current = false;
       },
       (serverError) => {
-        const permissionError = new FirestorePermissionError({
-            path: requestsRef.path,
-            operation: 'list',
-        }, serverError);
-        errorEmitter.emit('permission-error', permissionError);
         console.error("Error fetching friend request count:", serverError);
       }
     );

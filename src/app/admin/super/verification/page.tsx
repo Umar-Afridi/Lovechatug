@@ -38,8 +38,6 @@ import {
   DropdownMenuPortal,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import Link from 'next/link';
@@ -73,8 +71,7 @@ export default function ManageVerificationPage() {
         router.push('/chat');
       }
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'get' }, error);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching admin profile:", error);
     });
     return () => unsubscribe();
   }, [authUser, firestore, router]);
@@ -93,8 +90,7 @@ export default function ManageVerificationPage() {
       setAllUsers(usersList);
       setLoading(false);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: 'users', operation: 'list'}, error);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching users:", error);
         setLoading(false);
     });
 
@@ -137,8 +133,7 @@ export default function ManageVerificationPage() {
       });
     } catch (error) {
        toast({ title: 'Error', description: 'Could not update verification status.', variant: 'destructive'});
-       const permissionError = new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: updatePayload }, error as Error);
-       errorEmitter.emit('permission-error', permissionError);
+       console.error("Error updating verification status:", error);
     }
   };
 

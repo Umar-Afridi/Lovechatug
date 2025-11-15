@@ -34,8 +34,6 @@ import { Separator } from '@/components/ui/separator';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { collection, query, where, onSnapshot, doc, getDocs, writeBatch, orderBy } from 'firebase/firestore';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile, Call, Chat } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -135,8 +133,6 @@ export default function CallsPage() {
         });
     } catch(error) {
         console.error("Error clearing call history: ", error);
-        const permissionError = new FirestorePermissionError({ path: 'calls', operation: 'delete' }, error as Error);
-        errorEmitter.emit('permission-error', permissionError);
         toast({
             title: 'Error',
             description: 'Could not clear call history.',
@@ -156,7 +152,6 @@ export default function CallsPage() {
     setLoading(true);
     const callsRef = collection(firestore, 'calls');
     
-    // This query MUST exactly match the composite index defined in firestore.indexes.json
     const q = query(
         callsRef, 
         where('participants', 'array-contains', user.uid),
@@ -173,7 +168,6 @@ export default function CallsPage() {
         if (otherUserIds.length > 0 && firestore) {
              try {
                 const usersRef = collection(firestore, 'users');
-                // Firestore 'in' query can handle up to 30 items. Chunk if necessary.
                 const chunks = [];
                 for (let i = 0; i < otherUserIds.length; i += 30) {
                     chunks.push(otherUserIds.slice(i, i + 30));
@@ -188,8 +182,6 @@ export default function CallsPage() {
                 }
             } catch (e) {
                 console.error("Error pre-fetching user details for calls:", e);
-                const permissionError = new FirestorePermissionError({ path: 'users', operation: 'list' }, e as Error);
-                errorEmitter.emit('permission-error', permissionError);
             }
         }
         
@@ -207,8 +199,7 @@ export default function CallsPage() {
         setCalls(populatedCalls);
         setLoading(false);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: `calls query for user ${user.uid}`, operation: 'list' }, error);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error(`Error fetching calls for user ${user.uid}:`, error);
         setLoading(false);
     });
 

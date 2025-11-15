@@ -13,8 +13,6 @@ import { Shield, Lock, ArrowLeft, UserX, UserCog, HelpCircle } from 'lucide-reac
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/lib/types';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import { cn } from '@/lib/utils';
 
 
@@ -41,17 +39,12 @@ function BlockedUsersList() {
                 if (blockedIds.length > 0) {
                      try {
                         const usersRef = collection(firestore, 'users');
-                        // Firestore 'in' query is limited to 30 items. Chunk if necessary.
                         const q = query(usersRef, where('uid', 'in', blockedIds));
                         const querySnapshot = await getDocs(q);
                         const users = querySnapshot.docs.map(doc => doc.data() as UserProfile);
                         setBlockedUsers(users);
                     } catch (error) {
-                        const permissionError = new FirestorePermissionError({
-                            path: 'users',
-                            operation: 'list',
-                        }, error as Error);
-                        errorEmitter.emit('permission-error', permissionError);
+                        console.error("Error fetching blocked users:", error);
                     }
                 } else {
                     setBlockedUsers([]);
@@ -59,8 +52,7 @@ function BlockedUsersList() {
             }
              setLoading(false);
         }, (error) => {
-            const permissionError = new FirestorePermissionError({ path: `users/${user.uid}`, operation: 'get' }, error);
-            errorEmitter.emit('permission-error', permissionError);
+            console.error("Error fetching user data for block list:", error);
         });
 
         return () => unsubscribe();
@@ -76,12 +68,8 @@ function BlockedUsersList() {
             await updateDoc(userDocRef, payload);
             toast({ title: "User Unblocked", description: "You can now chat with this user again."});
         } catch (error) {
-             const permissionError = new FirestorePermissionError({
-                path: userDocRef.path,
-                operation: 'update',
-                requestResourceData: payload
-            }, error as Error);
-            errorEmitter.emit('permission-error', permissionError);
+            console.error("Error unblocking user:", error);
+            toast({ title: "Error", description: "Could not unblock user.", variant: "destructive"});
         }
     };
     
@@ -170,11 +158,7 @@ export default function SettingsPage() {
                 router.push(`/chat/${agent.uid}`);
             }
         } catch (error) {
-            const permissionError = new FirestorePermissionError({
-                path: 'users',
-                operation: 'list',
-            }, error as Error);
-            errorEmitter.emit('permission-error', permissionError);
+            console.error("Error finding help center:", error);
         } finally {
             setFindingHelp(false);
         }

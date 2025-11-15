@@ -8,8 +8,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import type { UserProfile, FriendRequest as FriendRequestType } from '@/lib/types';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
@@ -78,11 +76,7 @@ export default function FriendsPage() {
               
               setRequests(populatedRequests);
             } catch (userError) {
-              const permissionError = new FirestorePermissionError({
-                  path: 'users',
-                  operation: 'list',
-              }, userError as Error);
-              errorEmitter.emit('permission-error', permissionError);
+                console.error("Error fetching sender profiles: ", userError);
             }
 
         } else {
@@ -92,11 +86,7 @@ export default function FriendsPage() {
         setLoading(false);
 
     }, (error) => {
-        const permissionError = new FirestorePermissionError({
-            path: 'friendRequests',
-            operation: 'list',
-        }, error);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching friend requests:", error);
         setLoading(false);
     });
 
@@ -111,23 +101,20 @@ export default function FriendsPage() {
     const currentUserRef = doc(firestore, 'users', user.uid);
     const friendUserRef = doc(firestore, 'users', request.senderId);
     
-    // Create chatId based on the new rule: sorted UIDs joined by '_'
     const chatId = [user.uid, request.senderId].sort().join('_');
     const chatRef = doc(firestore, 'chats', chatId);
 
     try {
         const batch = writeBatch(firestore);
 
-        // Add each other to friends lists
         batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
         batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
         
-        // Check if chat already exists before creating
         const chatSnap = await getDocNonRealTime(chatRef);
         if (!chatSnap.exists()) {
             const currentUserProfile = (await getDocNonRealTime(currentUserRef)).data() as UserProfile;
             batch.set(chatRef, {
-              members: [user.uid, request.senderId].sort(),
+              members: [user.uid, request.senderId],
               createdAt: serverTimestamp(),
               participantDetails: {
                 [user.uid]: {
@@ -151,29 +138,21 @@ export default function FriendsPage() {
 
         toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
     } catch (error: any) {
-        const permissionError = new FirestorePermissionError({
-            path: `batch write for friend accept`,
-            operation: 'update',
-        }, error);
-        errorEmitter.emit('permission-error', permissionError);
         toast({ title: 'Error', description: 'Could not accept friend request.', variant: 'destructive'});
+        console.error("Error accepting friend request:", error);
     }
   };
 
   const handleDecline = async (requestId: string) => {
     if (!firestore) return;
     const requestRef = doc(firestore, 'friendRequests', requestId);
-    deleteDoc(requestRef)
-        .then(() => {
-            toast({ title: 'Request Declined' });
-        })
-        .catch((serverError) => {
-             const permissionError = new FirestorePermissionError({
-                path: requestRef.path,
-                operation: 'delete',
-            }, serverError);
-            errorEmitter.emit('permission-error', permissionError);
-        });
+    try {
+        await deleteDoc(requestRef);
+        toast({ title: 'Request Declined' });
+    } catch (error) {
+        console.error("Error declining friend request:", error);
+        toast({ title: 'Error', description: 'Could not decline friend request.', variant: 'destructive' });
+    }
   };
 
   if (loading) {
