@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, deleteDoc, collection, addDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, deleteDoc, getDoc } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { PhoneOff } from 'lucide-react';
@@ -33,22 +33,36 @@ export default function OutgoingCallPage() {
   useEffect(() => {
     if (!firestore || !otherUserId) return;
     const userDocRef = doc(firestore, 'users', otherUserId);
+    
+    // Use getDoc for initial load to prevent getting stuck in loading state
+    getDoc(userDocRef).then(docSnap => {
+        if (docSnap.exists()) {
+            const userData = docSnap.data() as UserProfile;
+            setOtherUser(userData);
+            if (userData.isOnline) {
+                setCallStatus('Ringing...');
+                play();
+            } else {
+                setCallStatus('Calling...');
+            }
+        } else {
+             // User not found, automatically hang up.
+            handleHangUp();
+        }
+        setLoading(false); // Set loading to false after initial fetch
+    }).catch(() => {
+        setLoading(false);
+        handleHangUp();
+    });
+
+    // Use onSnapshot for real-time updates after initial load
     const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const userData = docSnap.data() as UserProfile;
         setOtherUser(userData);
-        if (userData.isOnline) {
-            setCallStatus('Ringing...');
-            play();
-        } else {
-            setCallStatus('Calling...');
-        }
-      } else {
-        // User not found, automatically hang up.
-        handleHangUp();
       }
-      setLoading(false);
     });
+
     return () => {
       stop();
       unsubscribe();
