@@ -124,5 +124,5 @@ export type RoomMessage = {
   senderPhotoURL: string;
   content: string;
   timestamp: any; // Firestore ServerTimestamp
-  type?: 'text' | 'notification'; // Add type for notifications
+  type: 'text' | 'notification'; // Add type for notifications
 };

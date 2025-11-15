@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
@@ -70,6 +70,7 @@ import type { Room, RoomMember, UserProfile, RoomMessage } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
+import { VerifiedBadge } from '@/components/ui/verified-badge';
 
 
 const MIC_SLOTS = 8;
@@ -100,6 +101,8 @@ export default function RoomPage() {
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
+  const chatViewportRef = useRef<HTMLDivElement>(null);
+
 
   // --- Main Data Fetching and Room Joining Logic ---
   useEffect(() => {
@@ -154,9 +157,9 @@ export default function RoomPage() {
 
     // Listener for messages
     const messagesRef = collection(firestore, 'rooms', roomId, 'messages');
-    const qMessages = query(messagesRef, orderBy('timestamp', 'desc'), limit(50));
+    const qMessages = query(messagesRef, orderBy('timestamp', 'asc'), limit(50));
     const unsubMessages = onSnapshot(qMessages, (snapshot) => {
-        const msgs = snapshot.docs.map(d => ({id: d.id, ...d.data()} as RoomMessage)).reverse();
+        const msgs = snapshot.docs.map(d => ({id: d.id, ...d.data()} as RoomMessage));
         setMessages(msgs);
     });
 
@@ -188,7 +191,6 @@ export default function RoomPage() {
             const notificationMessage = {
                 senderId: 'system',
                 senderName: 'System',
-                senderPhotoURL: '',
                 content: `${userProfile.displayName} joined the room.`,
                 timestamp: serverTimestamp(),
                 type: 'notification' as const,
@@ -214,7 +216,13 @@ export default function RoomPage() {
       unsubMessages();
       contextLeaveRoom();
     };
-  }, [firestore, roomId, authUser?.uid]);
+  }, [firestore, roomId, authUser?.uid, setMemberProfiles, memberProfiles, setCurrentRoom, toast, router, contextLeaveRoom]);
+
+    useEffect(() => {
+        if (chatViewportRef.current) {
+            chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
+        }
+    }, [messages]);
 
   // --- User Actions ---
   
@@ -229,7 +237,6 @@ export default function RoomPage() {
         if (memberDoc.exists()) {
             const batch = writeBatch(firestore);
             batch.delete(memberRef);
-            // Only decrement count if not part of a room deletion
             if (!isKickOrDelete) { 
                 batch.update(roomRef, { memberCount: increment(-1) });
             }
@@ -244,11 +251,9 @@ export default function RoomPage() {
   const handleDeleteRoom = async () => {
      if (!firestore || !isOwner || !room) return;
     try {
-        // First, signal to handleLeave that this is part of a delete operation
         await handleLeaveRoom(true); 
         await deleteDoc(doc(firestore, 'rooms', room.id));
         toast({ title: 'Room Deleted', description: 'The room has been successfully deleted.' });
-        // router push is handled in handleLeaveRoom
     } catch(e) {
         console.error("Error deleting room", e);
         toast({ title: 'Error', description: 'Failed to delete the room.', variant: 'destructive' });
@@ -295,9 +300,12 @@ export default function RoomPage() {
   
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : '?';
   
-  const handleViewProfile = (profile: UserProfile) => {
-    setViewedProfile(profile);
-    setContactSheetOpen(true);
+  const handleViewProfile = (userId: string) => {
+    const profile = memberProfiles[userId];
+    if (profile) {
+      setViewedProfile(profile);
+      setContactSheetOpen(true);
+    }
   };
   
   const handleToggleLock = async (slotNumber: number) => {
@@ -374,7 +382,7 @@ export default function RoomPage() {
                 </div>
                  <div className="h-5 flex items-center justify-center">
                     {profile ? (
-                         <p className="text-sm font-medium truncate max-w-[80px] text-center">{profile.displayName}</p>
+                         <p className={cn("text-sm font-medium truncate max-w-[80px] text-center", profile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}>{profile.displayName}</p>
                     ) : specialLabel ? (
                         <p className={cn("text-sm font-semibold", specialLabel === "OWNER" ? "text-yellow-500" : "text-purple-500")}>{specialLabel}</p>
                     ) : (
@@ -384,7 +392,37 @@ export default function RoomPage() {
             </div>
         )
         
-        if (isSpecial) return <div key={specialLabel}>{content}</div>
+        if (isSpecial) {
+             const handleSitOnSpecial = async () => {
+                if (!isOwner || !currentUserSlot) return;
+                const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+                await updateDoc(memberRef, { micSlot: slotNumber });
+            };
+            return (
+                <DropdownMenu key={specialLabel}>
+                    <DropdownMenuTrigger asChild>
+                        <div className="cursor-pointer">{content}</div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                        {isOwner && !isSelf && (
+                            <DropdownMenuItem onClick={handleSitOnSpecial}>
+                                <Mic className="mr-2 h-4 w-4"/> Sit here
+                            </DropdownMenuItem>
+                        )}
+                        {isOwner && memberInSlot && !isSelf && (
+                            <>
+                               <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })}>
+                                    <UserX className="mr-2 h-4 w-4"/> Kick User
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
+                                    <View className="mr-2 h-4 w-4"/> View Profile
+                                </DropdownMenuItem>
+                            </>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )
+        }
         
         return (
             <DropdownMenu key={slotNumber}>
@@ -397,7 +435,7 @@ export default function RoomPage() {
                            <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })}>
                                 <UserX className="mr-2 h-4 w-4"/> Kick User
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => profile && handleViewProfile(profile)}>
+                            <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
                                 <View className="mr-2 h-4 w-4"/> View Profile
                             </DropdownMenuItem>
                         </>
@@ -425,6 +463,36 @@ export default function RoomPage() {
                 </DropdownMenuContent>
             </DropdownMenu>
         )
+    }
+    
+    const renderMessage = (msg: RoomMessage) => {
+        if (msg.type === 'notification') {
+            return <p className="text-center text-xs text-muted-foreground italic">{msg.content}</p>;
+        }
+        
+        const senderProfile = memberProfiles[msg.senderId];
+
+        return (
+            <div className="flex items-start gap-2">
+                <Avatar className="h-8 w-8 cursor-pointer" onClick={() => handleViewProfile(msg.senderId)}>
+                    <AvatarImage src={msg.senderPhotoURL} />
+                    <AvatarFallback>{getInitials(msg.senderName)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                         <span 
+                            className={cn("font-bold text-sm cursor-pointer", senderProfile?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}
+                            onClick={() => handleViewProfile(msg.senderId)}
+                         >
+                            {msg.senderName}
+                         </span>
+                         {senderProfile?.verifiedBadge?.showBadge && <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} />}
+                         {senderProfile?.officialBadge?.isOfficial && <OfficialBadge color={senderProfile.officialBadge.badgeColor} size="icon" className="h-4 w-4" />}
+                    </div>
+                    <p className="text-sm text-foreground/90">{msg.content}</p>
+                </div>
+            </div>
+        );
     }
 
   return (
@@ -500,16 +568,14 @@ export default function RoomPage() {
                 {Array.from({ length: MIC_SLOTS }).map((_, i) => renderSlot(i + 1))}
             </div>
 
-             <ScrollArea className="h-48 mt-4 rounded-md border p-2">
-                 {messages.map((msg, index) => (
-                    <div key={index} className={cn("p-2 text-sm", msg.type === 'notification' && "text-center text-xs text-muted-foreground")}>
-                         {msg.type === 'notification' ? (
-                            <p>{msg.content}</p>
-                        ) : (
-                             <p><span className="font-bold">{msg.senderName}:</span> {msg.content}</p>
-                        )}
-                    </div>
-                ))}
+             <ScrollArea className="h-48 mt-4 rounded-md border p-2 bg-background/50" viewportRef={chatViewportRef}>
+                 <div className="p-2 space-y-3">
+                    {messages.map((msg) => (
+                        <div key={msg.id}>
+                           {renderMessage(msg)}
+                        </div>
+                    ))}
+                 </div>
              </ScrollArea>
         </div>
 
@@ -517,12 +583,12 @@ export default function RoomPage() {
             <div className="relative flex items-center gap-2">
                  <Input 
                     placeholder="Send a message..." 
-                    className="flex-1 pr-12"
+                    className="h-10 flex-1 pr-12"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                 />
-                <Button variant="ghost" size="icon" onClick={handleSendMessage}>
+                <Button variant="ghost" size="icon" className="absolute right-0 top-1/2 -translate-y-1/2" onClick={handleSendMessage}>
                     <Send className="h-5 w-5"/>
                 </Button>
                 <Button variant="ghost" size="icon" onClick={handleToggleMute} disabled={currentUserSlot.micSlot === null}>
