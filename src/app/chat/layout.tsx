@@ -201,14 +201,16 @@ function CallProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for incoming calls
     useEffect(() => {
-        if (!user || !firestore || authLoading) return;
+        if (!user || !firestore || authLoading || activeCall || outgoingCall) return;
+        
         const callsRef = collection(firestore, 'calls');
         const q = query(callsRef, where('receiverId', '==', user.uid), where('status', '==', 'outgoing'), limit(1));
+        
         const unsubscribe = onSnapshot(q, (snapshot) => {
             if (!snapshot.empty) {
                 const callDoc = snapshot.docs[0];
                 const callData = { id: callDoc.id, ...callDoc.data() } as Call;
-                if (incomingCall?.id !== callData.id) {
+                if (!incomingCall) {
                     setIncomingCall(callData);
                 }
             } else {
@@ -216,11 +218,12 @@ function CallProvider({ children }: { children: React.ReactNode }) {
             }
         });
         return () => unsubscribe();
-    }, [user, firestore, authLoading, incomingCall?.id]);
+    }, [user, firestore, authLoading, incomingCall, activeCall, outgoingCall]);
 
     // Listen to active call status
     useEffect(() => {
         if (!activeCall?.id || !firestore) return;
+
         const callDocRef = doc(firestore, 'calls', activeCall.id);
         const unsubscribe = onSnapshot(callDocRef, (docSnap) => {
             if (!docSnap.exists() || docSnap.data().status === 'ended') {
@@ -233,42 +236,49 @@ function CallProvider({ children }: { children: React.ReactNode }) {
      // Listen to outgoing call status
     useEffect(() => {
       if (!outgoingCall?.callId || !firestore) return;
+      
       const callDocRef = doc(firestore, 'calls', outgoingCall.callId);
       const unsubscribe = onSnapshot(callDocRef, (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data() as Call;
           if (data.status === 'answered') {
               setActiveCall(data);
-              setOutgoingCall(null);
+              setOutgoingCall(null); // Clear outgoing call state
           } else if (data.status === 'declined' || data.status === 'missed') {
-              // Let the outgoing call page handle this, just clear the state here
-               setTimeout(() => setOutgoingCall(null), 2000);
+              // The outgoing call page will show the status, just clean up here after a delay
+              setTimeout(() => {
+                  if (outgoingCall?.callId === data.id) { // Ensure we are clearing the correct call
+                      setOutgoingCall(null);
+                  }
+              }, 2000);
           }
         } else {
+           // Document was deleted (caller cancelled, receiver declined/missed and cleaned up)
            setOutgoingCall(null);
         }
       });
       return () => unsubscribe();
-    }, [outgoingCall?.callId, firestore]);
+    }, [outgoingCall, firestore]);
 
-
-    const handleCallRemotely = useCallback(() => {
-        setIncomingCall(null);
-    }, []);
 
     const handleAcceptCall = (call: Call) => {
-        setActiveCall(call);
         setIncomingCall(null);
+        setActiveCall(call);
+    };
+    
+    const handleDeclineOrEnd = () => {
+        setIncomingCall(null);
+        setActiveCall(null);
+        setOutgoingCall(null);
     };
 
     const startCall = useCallback(async (userId: string, type: 'audio' | 'video') => {
-        if (!firestore || !user) return;
-        
-        // Prevent starting a new call if one is already active/outgoing
-        if (activeCall || outgoingCall) return;
+        if (!firestore || !user || activeCall || outgoingCall || incomingCall) {
+            console.warn("Cannot start call: existing call in progress or user not ready.");
+            return;
+        }
 
         const newCallData = { callerId: user.uid, receiverId: userId, type };
-        
         const callsRef = collection(firestore, 'calls');
         const newCall = {
             callerId: user.uid,
@@ -285,21 +295,37 @@ function CallProvider({ children }: { children: React.ReactNode }) {
             setOutgoingCall({ ...newCallData, callId: docRef.id });
         } catch (error) {
             console.error('Error initiating call:', error);
-            setOutgoingCall(null);
         }
-    }, [firestore, user, activeCall, outgoingCall]);
+    }, [firestore, user, activeCall, outgoingCall, incomingCall]);
 
     const endCall = useCallback(() => {
-        setActiveCall(null);
-        setOutgoingCall(null);
-        setIncomingCall(null);
+        handleDeclineOrEnd();
     }, []);
 
+    const contextValue = {
+        activeCall,
+        outgoingCall,
+        startCall,
+        endCall
+    };
+    
+    // Determine what to render based on the call state
+    const renderCallScreen = () => {
+        if (activeCall) {
+            return <div className="fixed inset-0 z-[1001]"><ActiveCallPage /></div>;
+        }
+        if (outgoingCall) {
+            return <div className="fixed inset-0 z-[1001]"><OutgoingCallPage /></div>;
+        }
+        if (incomingCall) {
+            return <IncomingCall call={incomingCall} onAccept={handleAcceptCall} onDecline={handleDeclineOrEnd} />;
+        }
+        return null;
+    }
+
     return (
-        <CallContext.Provider value={{ activeCall, outgoingCall, startCall, endCall }}>
-            {incomingCall && <IncomingCall call={incomingCall} onHandled={handleCallRemotely} onAccept={handleAcceptCall}/>}
-            {activeCall && !outgoingCall && <div className="fixed inset-0 z-[1001]"><ActiveCallPage /></div>}
-            {outgoingCall && !activeCall && <div className="fixed inset-0 z-[1001]"><OutgoingCallPage /></div>}
+        <CallContext.Provider value={contextValue}>
+            {renderCallScreen()}
             {children}
         </CallContext.Provider>
     );

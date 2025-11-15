@@ -43,10 +43,10 @@ export default function OutgoingCallPage() {
             // User not found, automatically hang up.
             handleHangUp();
         }
-        setLoading(false); // Set loading to false after initial fetch
     }).catch(() => {
-        setLoading(false);
         handleHangUp();
+    }).finally(() => {
+        setLoading(false); 
     });
 
     const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
@@ -65,7 +65,13 @@ export default function OutgoingCallPage() {
 
   // Listen to call document for status changes
   useEffect(() => {
-    if (!firestore || !callId) return;
+    if (!firestore || !callId) {
+        if(!loading) { // If not loading and no callId, something went wrong.
+            endCall();
+        }
+        return;
+    };
+    
     const callDocRef = doc(firestore, 'calls', callId);
     const unsubscribe = onSnapshot(callDocRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -78,9 +84,6 @@ export default function OutgoingCallPage() {
             setTimeout(() => {
                 endCall();
             }, 1500); // Give user time to see the status
-        } else if (data.status === 'answered') {
-          stop();
-          // The layout will now handle showing the active call screen
         }
       } else {
         // Call document deleted (e.g., cancelled by caller or declined)
@@ -90,16 +93,14 @@ export default function OutgoingCallPage() {
     });
 
     return () => {
-        stop();
         unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, callId]);
+  }, [firestore, callId, loading]);
 
 
   const handleHangUp = useCallback(async () => {
     stop();
-    // Use the callId from the context which should be reliable
     if (!firestore || !callId) {
       endCall(); 
       return;

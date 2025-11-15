@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFirestore } from '@/firebase/provider';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Phone, PhoneOff } from 'lucide-react';
@@ -12,11 +12,11 @@ import { useSound } from '@/hooks/use-sound';
 
 interface IncomingCallProps {
   call: Call;
-  onHandled: () => void;
   onAccept: (call: Call) => void;
+  onDecline: () => void;
 }
 
-export function IncomingCall({ call, onHandled, onAccept }: IncomingCallProps) {
+export function IncomingCall({ call, onAccept, onDecline }: IncomingCallProps) {
   const firestore = useFirestore();
   const [caller, setCaller] = useState<UserProfile | null>(null);
 
@@ -55,21 +55,21 @@ export function IncomingCall({ call, onHandled, onAccept }: IncomingCallProps) {
     try {
         const updatedCallData = { ...call, status: 'answered' as const, answeredAt: serverTimestamp() };
         await updateDoc(callDocRef, { status: 'answered', answeredAt: serverTimestamp() });
-        onAccept(updatedCallData as Call); // Pass updated data to context
+        onAccept(updatedCallData as Call); 
     } catch(e) {
         console.error("Error accepting call: ", e);
-        onHandled();
+        onDecline();
     }
   };
 
   const handleDecline = async () => {
     stopIncomingCallSound();
-    onHandled(); // Immediately remove from UI
+    onDecline(); 
     if (!firestore || !call.id) return;
     const callDocRef = doc(firestore, 'calls', call.id);
     try {
-        // Update status to declined, which signals the caller.
         await updateDoc(callDocRef, { status: 'declined' });
+        // The caller is responsible for deleting the doc after seeing the 'declined' status
     } catch (e) {
         console.error("Error declining call: ", e);
     }
