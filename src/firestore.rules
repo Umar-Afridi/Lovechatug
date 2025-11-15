@@ -32,12 +32,11 @@ service cloud.firestore {
     // 1. صارفین کا مجموعہ (Users Collection)
     match /users/{userId} {
       allow read: if isSignedIn();
-      // A new user can create their own profile document during signup.
       allow create: if isSignedIn();
       allow update: if isOwner(userId);
-      // Allow anyone to check for username uniqueness during signup.
-      // The client-side query only checks a single document, not listing all users.
-      // Super admins can still see all users in their dedicated panel.
+      // Allow list for username search for any signed in user.
+      // The client-side query filters out disabled users for non-admins.
+      // Super admins can see all users in their dedicated panel.
       allow list: if true;
     }
     
