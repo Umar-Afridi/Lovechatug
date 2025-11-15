@@ -57,8 +57,8 @@ export default function CreateRoomPage() {
             ownerIsOfficial: userProfile?.officialBadge?.isOfficial || false,
             photoURL: photoURL,
             createdAt: serverTimestamp(),
-            members: [user.uid],
-            memberCount: 1,
+            members: [],
+            memberCount: 0,
             kickedUsers: {},
             lockedSlots: [],
         };
@@ -71,8 +71,6 @@ export default function CreateRoomPage() {
 
     } catch (error) {
         console.error("Error creating room:", error);
-        const permissionError = new FirestorePermissionError({ path: 'rooms', operation: 'create' }, error as Error);
-        errorEmitter.emit('permission-error', permissionError);
         toast({ title: 'Error', description: 'Could not create the room. Please try again.', variant: 'destructive' });
         setIsCreating(false);
     }

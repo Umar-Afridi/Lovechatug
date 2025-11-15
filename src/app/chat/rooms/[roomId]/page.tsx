@@ -165,10 +165,11 @@ export default function RoomPage() {
         if (!memberDoc.exists()) {
              // Determine initial mic slot
             let initialMicSlot = null;
-            const ownerProfile = memberProfiles[room.ownerId];
+            const currentUserProfile = (await getDoc(doc(firestore, 'users', authUser.uid))).data() as UserProfile;
+
             if (isOwner) {
                 initialMicSlot = 0;
-            } else if (ownerProfile?.officialBadge?.isOfficial) {
+            } else if (currentUserProfile?.officialBadge?.isOfficial) {
                 initialMicSlot = -1;
             }
             await writeBatch(firestore)
@@ -197,7 +198,7 @@ export default function RoomPage() {
       };
       leave();
     };
-  }, [firestore, authUser, roomId, room, isMounted, isOwner, memberProfiles]);
+  }, [firestore, authUser, roomId, room, isMounted, isOwner]);
 
   // --- Handlers ---
   const handleLeaveRoom = async () => {

@@ -11,12 +11,8 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Users, Search as SearchIcon, Star, Tv } from 'lucide-react';
 import type { Room } from '@/lib/types';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
-import { cn } from '@/lib/utils';
 
 export default function RoomsPage() {
   const { user } = useUser();
@@ -39,8 +35,6 @@ export default function RoomsPage() {
       setMyRooms(userRooms);
     }, (error) => {
         console.error("Error fetching user's rooms: ", error);
-        const permissionError = new FirestorePermissionError({path: 'rooms', operation: 'list'}, error);
-        errorEmitter.emit('permission-error', permissionError);
     });
 
     return () => unsubMyRooms();
@@ -59,8 +53,6 @@ export default function RoomsPage() {
       setLoading(false);
     }, (error) => {
         console.error("Error fetching popular rooms: ", error);
-        const permissionError = new FirestorePermissionError({path: 'rooms', operation: 'list'}, error);
-        errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
 
