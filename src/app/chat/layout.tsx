@@ -82,7 +82,8 @@ export const useRoomContext = () => {
 // Context for Call State
 interface CallContextType {
   activeCall: Call | null;
-  outgoingCall: Omit<Call, 'id' | 'timestamp' | 'participants' | 'status' | 'direction'> | null;
+  outgoingCall: Omit<Call, 'id' | 'timestamp' | 'participants' | 'status' | 'direction'> & { callId?: string } | null;
+  startCall: (userId: string, type: 'audio' | 'video') => void;
   endCall: () => void;
 }
 
@@ -262,28 +263,31 @@ function CallProvider({ children }: { children: React.ReactNode }) {
 
     const startCall = useCallback(async (userId: string, type: 'audio' | 'video') => {
         if (!firestore || !user) return;
-        const newCallData = { callerId: user.uid, receiverId: userId, type };
-        setOutgoingCall(newCallData);
+        
+        // Prevent starting a new call if one is already active/outgoing
+        if (activeCall || outgoingCall) return;
 
+        const newCallData = { callerId: user.uid, receiverId: userId, type };
+        
         const callsRef = collection(firestore, 'calls');
         const newCall = {
             callerId: user.uid,
             receiverId: userId,
             participants: [user.uid, userId],
             type: type,
-            status: 'outgoing', 
+            status: 'outgoing' as const, 
             timestamp: serverTimestamp(),
-            direction: 'outgoing',
+            direction: 'outgoing' as const,
         };
     
         try {
             const docRef = await addDoc(callsRef, newCall);
-            setOutgoingCall(prev => prev ? { ...prev, callId: docRef.id } : null);
+            setOutgoingCall({ ...newCallData, callId: docRef.id });
         } catch (error) {
             console.error('Error initiating call:', error);
             setOutgoingCall(null);
         }
-    }, [firestore, user]);
+    }, [firestore, user, activeCall, outgoingCall]);
 
     const endCall = useCallback(() => {
         setActiveCall(null);
@@ -292,10 +296,10 @@ function CallProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     return (
-        <CallContext.Provider value={{ activeCall, outgoingCall, endCall }}>
+        <CallContext.Provider value={{ activeCall, outgoingCall, startCall, endCall }}>
             {incomingCall && <IncomingCall call={incomingCall} onHandled={handleCallRemotely} onAccept={handleAcceptCall}/>}
-            {activeCall && <div className="fixed inset-0 z-[1001]"><ActiveCallPage /></div>}
-            {outgoingCall && !activeCall && <div className="fixed inset-0 z-[1001]"><OutgoingCallPage params={{ userId: outgoingCall.receiverId, callId: outgoingCall.callId }}/></div>}
+            {activeCall && !outgoingCall && <div className="fixed inset-0 z-[1001]"><ActiveCallPage /></div>}
+            {outgoingCall && !activeCall && <div className="fixed inset-0 z-[1001]"><OutgoingCallPage /></div>}
             {children}
         </CallContext.Provider>
     );
@@ -367,7 +371,7 @@ function ChatAppLayout({
       (snapshot) => {
         const newSize = snapshot.size;
         if (!isFirstRequestLoad.current && newSize > requestCount) {
-          playRequestSound();
+          playRequestSound.play();
         }
         setRequestCount(newSize);
         isFirstRequestLoad.current = false;
@@ -595,3 +599,5 @@ export default function ChatAppLayoutWithProvider({ children }: { children: Reac
         </CallProvider>
     );
 }
+
+    
