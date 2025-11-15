@@ -24,6 +24,7 @@ import {
   getDocs,
   where,
   setDoc,
+  Timestamp,
 } from 'firebase/firestore';
 import {
   Crown,
@@ -91,6 +92,8 @@ export default function RoomPage() {
   const [isDeafened, setIsDeafened] = useState(false);
   const [isContactSheetOpen, setContactSheetOpen] = useState(false);
   const [viewedProfile, setViewedProfile] = useState<UserProfile | null>(null);
+  const [joinTimestamp, setJoinTimestamp] = useState<Timestamp | null>(null);
+
 
   const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick', targetMember?: RoomMember | null }>({ isOpen: false, action: null });
   
@@ -101,6 +104,8 @@ export default function RoomPage() {
   // --- Main Data Fetching and Room Joining Logic ---
   useEffect(() => {
     if (!firestore || !roomId || !authUser) return;
+    
+    setJoinTimestamp(Timestamp.now());
 
     // Listener for the main room document
     const roomRef = doc(firestore, 'rooms', roomId);
@@ -147,14 +152,6 @@ export default function RoomPage() {
             }
             setMemberProfiles(prev => ({...prev, ...newProfiles}));
         }
-    });
-
-    // Listener for messages
-    const messagesRef = collection(firestore, 'rooms', roomId, 'messages');
-    const qMessages = query(messagesRef, orderBy('timestamp', 'desc'), limit(15)); // Fetch latest 15
-    const unsubMessages = onSnapshot(qMessages, (snapshot) => {
-        const msgs = snapshot.docs.map(d => ({id: d.id, ...d.data()} as RoomMessage)).reverse(); // reverse to show oldest first
-        setMessages(msgs);
     });
 
     // Join room logic
@@ -207,11 +204,41 @@ export default function RoomPage() {
     return () => {
       unsubRoom();
       unsubMembers();
-      unsubMessages();
-      setMessages([]); // Clear messages on leave
       contextLeaveRoom();
     };
   }, [firestore, roomId, authUser?.uid, setMemberProfiles, memberProfiles, setCurrentRoom, toast, router, contextLeaveRoom]);
+
+  // Separate effect for messages to handle joinTimestamp
+  useEffect(() => {
+    if (!firestore || !roomId || !joinTimestamp) return;
+
+    const messagesRef = collection(firestore, 'rooms', roomId, 'messages');
+    const qMessages = query(
+      messagesRef,
+      where('timestamp', '>', joinTimestamp),
+      orderBy('timestamp', 'desc'),
+      limit(15)
+    );
+
+    const unsubMessages = onSnapshot(qMessages, (snapshot) => {
+      const newMsgs = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() } as RoomMessage))
+        .reverse();
+
+      setMessages(prevMsgs => {
+        const allMsgs = [...prevMsgs, ...newMsgs];
+        const uniqueMsgs = Array.from(new Map(allMsgs.map(m => [m.id, m])).values());
+        uniqueMsgs.sort((a, b) => a.timestamp?.toMillis() - b.timestamp?.toMillis());
+        return uniqueMsgs.slice(-15);
+      });
+    });
+
+    return () => {
+      unsubMessages();
+      setMessages([]); // Clear messages on leave
+    };
+  }, [firestore, roomId, joinTimestamp]);
+
 
   // --- User Actions ---
   
@@ -552,16 +579,16 @@ export default function RoomPage() {
             <div className="flex-1 relative p-4 md:p-6">
                 
                 <div className="absolute inset-x-0 top-0 pt-4">
-                     <div className="grid grid-cols-4 gap-x-4 gap-y-2 mb-6">
-                        <div className="col-start-2">{renderSlot(OWNER_SLOT, true, "OWNER")}</div>
-                        <div className="col-start-3">{renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}</div>
+                     <div className="flex justify-center gap-x-4 mb-6">
+                        {renderSlot(OWNER_SLOT, true, "OWNER")}
+                        {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
                     </div>
                      <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
                         {Array.from({ length: MIC_SLOTS }).map((_, i) => renderSlot(i + 1))}
                     </div>
                 </div>
 
-                <div className="absolute inset-x-0 bottom-0 h-1/3 p-4 flex flex-col justify-end pointer-events-none">
+                <div className="absolute inset-x-0 bottom-1/4 h-1/3 p-4 flex flex-col justify-end pointer-events-none">
                     <div className="space-y-2 overflow-hidden [mask-image:linear-gradient(to_top,black_20%,transparent_100%)]">
                         {messages.map(renderMessage)}
                     </div>
