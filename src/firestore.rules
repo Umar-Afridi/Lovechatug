@@ -17,6 +17,10 @@ service cloud.firestore {
     function isChatMember(chatId) {
         return isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
     }
+    
+    function isParticipant(participants) {
+      return request.auth.uid in participants;
+    }
 
     // This function checks if a user is a member of a given voice room.
     function isRoomMember(roomId) {
@@ -62,21 +66,17 @@ service cloud.firestore {
       
       // Only the sender or the receiver of a request can read, update, or delete it.
       allow read, update, delete: if isSignedIn() && (isOwner(resource.data.senderId) || isOwner(resource.data.receiverId));
-      
-      // Any signed-in user can query the list of requests.
-      // Client-side queries should filter this to only show relevant requests.
-      allow list: if isSignedIn();
     }
     
     // 4. Call History Collection (/calls/{callId})
     match /calls/{callId} {
       // A user can only access a call document if their UID is in the `participants` array.
-      allow get, write, delete: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow get, write, delete: if isParticipant(resource.data.participants);
       
       // A user is allowed to perform list queries (e.g., "get my call history"),
       // but the query itself MUST contain `where('participants', 'array-contains', request.auth.uid)`
       // to be successful. This rule enables that secure query.
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() && request.query.get('where')[0][2] == request.auth.uid;
     }
 
     // 5. Deleted Users Collection (/deletedUsers/{email}) - For preventing re-registration
