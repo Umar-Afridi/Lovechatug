@@ -188,7 +188,7 @@ export default function CallsPage() {
                 }
             } catch (e) {
                 console.error("Error pre-fetching user details for calls:", e);
-                const permissionError = new FirestorePermissionError({ path: 'users', operation: 'list' });
+                const permissionError = new FirestorePermissionError({ path: 'users', operation: 'list' }, e as Error);
                 errorEmitter.emit('permission-error', permissionError);
             }
         }
@@ -207,7 +207,7 @@ export default function CallsPage() {
         setCalls(populatedCalls);
         setLoading(false);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: `calls query for user ${user.uid}`, operation: 'list' });
+        const permissionError = new FirestorePermissionError({ path: `calls query for user ${user.uid}`, operation: 'list' }, error);
         errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
@@ -284,3 +284,5 @@ export default function CallsPage() {
     </>
   );
 }
+
+    

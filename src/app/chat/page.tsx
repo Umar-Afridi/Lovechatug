@@ -264,8 +264,8 @@ export default function ChatPage() {
       (snapshot) => {
         setRequestCount(snapshot.size);
       },
-      (serverError) => {
-        const permissionError = new FirestorePermissionError({ path: 'friendRequests', operation: 'list' }, serverError);
+      (error) => {
+        const permissionError = new FirestorePermissionError({ path: 'friendRequests', operation: 'list' }, error);
         errorEmitter.emit('permission-error', permissionError);
       }
     );
@@ -276,8 +276,8 @@ export default function ChatPage() {
     const unsubscribeSent = onSnapshot(qSent, (snapshot) => {
         const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequest));
         setSentRequests(requests);
-    }, (serverError) => {
-        const permissionError = new FirestorePermissionError({ path: 'friendRequests', operation: 'list' }, serverError);
+    }, (error) => {
+        const permissionError = new FirestorePermissionError({ path: 'friendRequests', operation: 'list' }, error);
         errorEmitter.emit('permission-error', permissionError);
     });
 
@@ -532,3 +532,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    

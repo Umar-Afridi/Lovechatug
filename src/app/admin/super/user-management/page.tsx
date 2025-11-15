@@ -84,6 +84,9 @@ export default function ManageUsersPage() {
       } else {
         router.push('/chat');
       }
+    }, (error) => {
+        const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'get' }, error);
+        errorEmitter.emit('permission-error', permissionError);
     });
     return () => unsubscribe();
   }, [authUser, firestore, router, toast]);
@@ -103,7 +106,7 @@ export default function ManageUsersPage() {
       setAllUsers(usersList);
       setLoading(false);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: 'users', operation: 'list'});
+        const permissionError = new FirestorePermissionError({ path: 'users', operation: 'list'}, error);
         errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
@@ -270,3 +273,5 @@ export default function ManageUsersPage() {
     </>
   );
 }
+
+    

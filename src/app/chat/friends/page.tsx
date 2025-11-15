@@ -91,11 +91,11 @@ export default function FriendsPage() {
 
         setLoading(false);
 
-    }, (serverError: any) => {
+    }, (error) => {
         const permissionError = new FirestorePermissionError({
             path: 'friendRequests',
             operation: 'list',
-        }, serverError);
+        }, error);
         errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
@@ -230,3 +230,5 @@ export default function FriendsPage() {
     </ScrollArea>
   );
 }
+
+    
