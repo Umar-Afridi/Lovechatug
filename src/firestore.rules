@@ -1,19 +1,81 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // --- Utility Functions (Rulon ko Aasan Banane Ke Liye) ---
-    // یہ چیک کرتا ہے کہ یوزر نے Firebase Authentication کے ذریعے لاگ ان کیا ہے یا نہیں
-    function isAuthenticated() {
+
+    // --- Utility Functions ---
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    // تمام کلیکشنز کے لیے رول
-    // Path: /databases/(default)/documents/{document=**}
-    match /{document=**} {
-      // Allow Read, Write, Create, Update, Delete (complete access) 
-      // sirf un users ko jo authenticated hain.
-      allow read, write: if isAuthenticated();
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function isChatMember(chatId) {
+        return isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+    }
+
+    function isRoomMember(roomId) {
+      return exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
+    }
+    
+    function isRoomOwner(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerId == request.auth.uid;
+    }
+
+
+    // 1. Users Collection (/users/{userId})
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isOwner(userId);
+      allow list: if isSignedIn();
+    }
+    
+    // 2. Chats and Messages Collection (/chats/{chatId})
+    match /chats/{chatId} {
+      allow read, write: if isChatMember(chatId);
+      
+      match /messages/{messageId} {
+        allow read, write: if isChatMember(chatId);
+      }
+    }
+    
+    // 3. Friend Requests Collection (/friendRequests/{requestId})
+    match /friendRequests/{requestId} {
+      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+      allow read, update, delete: if isSignedIn() && (isOwner(resource.data.senderId) || isOwner(resource.data.receiverId));
+      allow list: if isSignedIn();
+    }
+    
+    // 4. Call History Collection (/calls/{callId})
+    match /calls/{callId} {
+      allow get, write, delete: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow list: if isSignedIn();
+    }
+
+    // 5. Deleted Users Collection (/deletedUsers/{email}) - For preventing re-registration
+    match /deletedUsers/{email} {
+      allow create: if true;
+      allow read, write, delete: if false; 
+    }
+
+    // 6. Voice Chat Rooms Collection (/rooms/{roomId})
+    match /rooms/{roomId} {
+        allow get, list: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+        allow update, delete: if isRoomOwner(roomId);
+        
+        match /members/{userId} {
+            allow read: if isRoomMember(roomId);
+            allow create: if isOwner(userId);
+            allow update: if isOwner(userId) || isRoomOwner(roomId);
+            allow delete: if isOwner(userId) || isRoomOwner(roomId);
+        }
+        
+        match /messages/{messageId} {
+          allow read, create: if isRoomMember(roomId);
+          allow update, delete: if isOwner(request.resource.data.senderId) || isRoomOwner(roomId);
+        }
     }
   }
 }
