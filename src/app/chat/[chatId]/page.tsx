@@ -70,7 +70,7 @@ export default function ChatIdPage({
 }: {
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
-  const { chatId: otherUserIdFromParams } = React.use(params);
+  const { chatId: otherUserIdFromParams } = params;
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -164,82 +164,38 @@ export default function ChatIdPage({
   useEffect(() => {
     if (!firestore || !authUser || !otherUserIdFromParams) return;
 
-    const fetchProfilesAndSetupChat = async () => {
-        setLoading(true);
-        try {
-            const currentUserDocRef = doc(firestore, 'users', authUser.uid);
-            const otherUserDocRef = doc(firestore, 'users', otherUserIdFromParams);
+    setLoading(true);
+    const currentUserDocRef = doc(firestore, 'users', authUser.uid);
+    const otherUserDocRef = doc(firestore, 'users', otherUserIdFromParams);
 
-            const [currentUserSnap, otherUserSnap] = await Promise.all([
-                getDoc(currentUserDocRef),
-                getDoc(otherUserDocRef)
-            ]);
-
-            if (!currentUserSnap.exists() || !otherUserSnap.exists()) {
-                toast({ title: 'Error', description: 'User not found.', variant: 'destructive' });
-                router.push('/chat');
-                return;
-            }
-            
-            const currentUserData = currentUserSnap.data() as UserProfile;
-            const otherUserData = otherUserSnap.data() as UserProfile;
-
-            setCurrentUser(currentUserData);
-            setOtherUser(otherUserData);
-
-            // Check block status
-            setHaveIBlocked(currentUserData.blockedUsers?.includes(otherUserIdFromParams) ?? false);
-            setAmIBlocked(otherUserData.blockedUsers?.includes(authUser.uid) ?? false);
-
-            // Ensure chat document exists if it's a new chat (e.g. from friend request)
-            const chatId = [authUser.uid, otherUserIdFromParams].sort().join('_');
-            const chatRef = doc(firestore, 'chats', chatId);
-            const chatSnap = await getDoc(chatRef);
-            if (!chatSnap.exists()) {
-              const newChatData = {
-                members: [authUser.uid, otherUserData.uid],
-                createdAt: serverTimestamp(),
-                participantDetails: {
-                    [authUser.uid]: { displayName: currentUserData.displayName, photoURL: currentUserData.photoURL },
-                    [otherUserData.uid]: { displayName: otherUserData.displayName, photoURL: otherUserData.photoURL }
-                },
-                unreadCount: { [authUser.uid]: 0, [otherUserData.uid]: 0 },
-                typing: { [authUser.uid]: false, [otherUserData.uid]: false }
-              };
-              await setDoc(chatRef, newChatData);
-            }
-
-        } catch (error: any) {
-            console.error("Error setting up chat page:", error);
-            const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' }, error);
-            errorEmitter.emit('permission-error', permissionError);
-            toast({ title: 'Error', description: 'Could not initialize chat.', variant: 'destructive' });
-        }
-    };
-    
-    fetchProfilesAndSetupChat();
-    
-    // Real-time listener for user profile changes (like online status, block status)
-    const unsubCurrentUser = onSnapshot(doc(firestore, 'users', authUser.uid), (docSnap) => {
+    const unsubCurrentUser = onSnapshot(currentUserDocRef, (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data() as UserProfile;
             setCurrentUser(data);
             setHaveIBlocked(data.blockedUsers?.includes(otherUserIdFromParams) ?? false);
         }
     }, (error) => {
+      console.error("Error fetching current user profile:", error);
       const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' }, error);
       errorEmitter.emit('permission-error', permissionError);
     });
 
-    const unsubOtherUser = onSnapshot(doc(firestore, 'users', otherUserIdFromParams), (docSnap) => {
+    const unsubOtherUser = onSnapshot(otherUserDocRef, (docSnap) => {
         if (docSnap.exists()) {
             const otherUserData = docSnap.data() as UserProfile;
             setOtherUser(otherUserData);
             setAmIBlocked(otherUserData.blockedUsers?.includes(authUser.uid) ?? false);
+        } else {
+            toast({ title: 'Error', description: 'User not found.', variant: 'destructive' });
+            router.push('/chat');
         }
+        // Combined loading state check
+        setLoading(false);
     }, (error) => {
+        console.error("Error fetching other user profile:", error);
         const permissionError = new FirestorePermissionError({ path: `users/${otherUserIdFromParams}`, operation: 'get' }, error);
         errorEmitter.emit('permission-error', permissionError);
+        setLoading(false);
     });
 
     return () => {
@@ -274,7 +230,7 @@ export default function ChatIdPage({
   useEffect(() => {
     if (!firestore || !chatId || !currentUser || amIBlocked) return;
 
-    setLoading(true);
+    // We don't set loading to true here, loading is for initial page setup
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
     const chatClearedTimestamp = currentUser?.chatsCleared?.[chatId] ?? null;
     
@@ -303,7 +259,6 @@ export default function ChatIdPage({
       }
       
       setMessages(msgs);
-      setLoading(false);
       isFirstMessageLoad.current = false; // Mark initial load as complete
     }, (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -311,7 +266,6 @@ export default function ChatIdPage({
             operation: 'list',
         }, serverError);
         errorEmitter.emit('permission-error', permissionError);
-        setLoading(false);
     });
 
     return () => unsubscribe();
