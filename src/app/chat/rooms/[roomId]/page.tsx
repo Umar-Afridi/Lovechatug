@@ -132,7 +132,11 @@ const UserMic = ({ member, userProfile, role, isOwner, isCurrentUser, onKick, on
             <DropdownMenuTrigger asChild>
                  <div className="flex flex-col items-center gap-2 text-center cursor-pointer">
                     <div className="relative">
-                        <Avatar className={cn("w-20 h-20 border-2", member.isMuted ? "border-muted" : "border-primary")}>
+                        <Avatar className={cn(
+                          "w-20 h-20 border-2", 
+                          member.isMuted ? "border-muted" : "border-primary",
+                          !member.isMuted && "talking-indicator"
+                        )}>
                             <AvatarImage src={userProfile.photoURL} />
                             <AvatarFallback className="text-2xl">{getInitials(userProfile.displayName)}</AvatarFallback>
                         </Avatar>
