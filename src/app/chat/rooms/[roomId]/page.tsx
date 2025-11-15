@@ -482,8 +482,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         prevMemberIdsRef.current = memberIds;
 
     }, (error) => {
-        const permissionError = new FirestorePermissionError({path: membersColRef.path, operation: 'list'});
-        errorEmitter.emit('permission-error', error);
+        const permissionError = new FirestorePermissionError({path: membersColRef.path, operation: 'list'}, error);
+        errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
     
