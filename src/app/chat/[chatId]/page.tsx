@@ -106,8 +106,8 @@ export default function ChatIdPage() {
   const touchMoveX = useRef(0);
   const isDraggingReply = useRef(false);
 
-  const playReceiveMessageSound = useSound('https://codeskulptor-demos.commondatastorage.googleapis.com/descent/gotitem.mp3');
-  const playSendMessageSound = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/sound/short_click.mp3');
+  const { play: playReceiveMessageSound } = useSound('https://codeskulptor-demos.commondatastorage.googleapis.com/descent/gotitem.mp3');
+  const { play: playSendMessageSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/sound/short_click.mp3');
   const isFirstMessageLoad = useRef(true);
   
   const isTyping = useMemo(() => chatData?.typing?.[otherUser?.uid ?? ''] === true, [chatData, otherUser]);
