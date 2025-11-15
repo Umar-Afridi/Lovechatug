@@ -314,6 +314,13 @@
           "items": {
             "type": "string"
           }
+        },
+        "lockedSlots": {
+            "type": "array",
+            "description": "An array of mic slot numbers that are locked by the owner.",
+            "items": {
+                "type": "number"
+            }
         }
       },
       "required": ["name", "ownerId", "createdAt"]
@@ -423,5 +430,3 @@
     }
   }
 }
-
-    
