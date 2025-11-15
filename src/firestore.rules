@@ -63,9 +63,6 @@ service cloud.firestore {
       // Only the sender or the receiver of a request can read, update, or delete it.
       allow read, update, delete: if isSignedIn() && (isOwner(resource.data.senderId) || isOwner(resource.data.receiverId));
       
-      // Any signed-in user can query the list of requests.
-      // Client-side queries should filter this to only show relevant requests.
-      allow list: if isSignedIn();
     }
     
     // 4. Call History Collection (/calls/{callId})
