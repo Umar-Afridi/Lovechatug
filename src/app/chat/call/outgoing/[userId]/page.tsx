@@ -12,8 +12,8 @@ import { PhoneOff } from 'lucide-react';
 import type { UserProfile, Call } from '@/lib/types';
 
 export default function OutgoingCallPage() {
-  const params = React.use(useParams());
-  const otherUserId = params.userId;
+  const params = useParams();
+  const otherUserId = params.userId as string;
   const router = useRouter();
   const searchParams = useSearchParams();
   const callId = searchParams.get('callId');
@@ -29,7 +29,7 @@ export default function OutgoingCallPage() {
   // Fetch receiver's profile
   useEffect(() => {
     if (!firestore || !otherUserId) return;
-    const userDocRef = doc(firestore, 'users', otherUserId as string);
+    const userDocRef = doc(firestore, 'users', otherUserId);
     const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const userData = docSnap.data() as UserProfile;

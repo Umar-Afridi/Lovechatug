@@ -73,7 +73,7 @@ const SUPER_ADMIN_SLOT = -1;
 const OWNER_SLOT = 0;
 
 export default function RoomPage() {
-  const params = React.use(useParams());
+  const params = useParams();
   const roomId = params.roomId as string;
   const router = useRouter();
   const { user: authUser } = useUser();
@@ -274,7 +274,9 @@ export default function RoomPage() {
         
         const isLocked = room?.lockedSlots?.includes(slotNumber);
         const isSelf = memberInSlot?.userId === authUser.uid;
-        const isClickable = !memberInSlot || isOwner || isSelf;
+        
+        // A slot is clickable if you are the owner, or if it's your own slot, or if it's an empty, unlocked slot.
+        const isClickable = isOwner || isSelf || (!memberInSlot && !isLocked);
 
         const handleClick = async () => {
             if (!isClickable) return;
@@ -286,12 +288,8 @@ export default function RoomPage() {
                 } else if (isOwner) { // Owner clicks on another member
                     setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot });
                 }
-            } else { // Empty slot
-                if (isLocked && !isOwner) {
-                    toast({ title: 'Slot Locked', description: 'The owner has locked this slot.' });
-                } else {
-                    await updateDoc(memberRef, { micSlot: slotNumber });
-                }
+            } else { // Empty slot, and it must be unlocked or user is owner
+                 await updateDoc(memberRef, { micSlot: slotNumber });
             }
         };
         
@@ -311,14 +309,14 @@ export default function RoomPage() {
         const typeClasses = {
             occupied: 'cursor-pointer',
             locked: isOwner ? 'cursor-pointer' : 'cursor-not-allowed',
-            empty: isOwner || !isLocked ? 'cursor-pointer' : 'cursor-not-allowed'
+            empty: 'cursor-pointer'
         };
 
         return (
             <div
                 key={slotNumber}
                 className={cn(baseClasses, typeClasses[slotType])}
-                onClick={isClickable ? handleClick : undefined}
+                onClick={handleClick}
             >
                 <div className={cn("relative h-20 w-20 rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
                                   memberInSlot ? "ring-2 ring-offset-2 ring-offset-background" : "border-2 border-dashed border-muted-foreground/50",
@@ -366,7 +364,7 @@ export default function RoomPage() {
                 <div className="relative">
                     <button className={cn(
                         "relative h-32 w-32 rounded-full bg-muted flex items-center justify-center transition-all duration-200 ring-4 ring-offset-4 ring-offset-background",
-                         isSelf && "talking-indicator",
+                         isSelf && !member.isMuted && "talking-indicator",
                          member?.isMuted ? "ring-destructive" : (isOwnerSlot ? "ring-yellow-500" : "ring-purple-500")
                     )}>
                         <Avatar className="h-full w-full">
@@ -375,7 +373,7 @@ export default function RoomPage() {
                         </Avatar>
                         
                          <div className="absolute -top-3 -right-3 h-10 w-10 bg-background rounded-full p-1 border-4 flex items-center justify-center"
-                            style={{ borderColor: isOwnerSlot ? 'hsl(var(--ring-yellow-500))' : 'hsl(var(--ring-purple-500))' }}
+                            style={{ borderColor: isOwnerSlot ? 'hsl(48, 95%, 52%)' : 'hsl(262, 77%, 60%)' }}
                          >
                             {isOwnerSlot ? <Crown className="h-6 w-6 text-yellow-500"/> : <Shield className="h-6 w-6 text-purple-500"/> }
                          </div>

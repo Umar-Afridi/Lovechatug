@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import {
@@ -22,12 +22,9 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import { ClearChatDialog } from '@/components/chat/clear-chat-dialog';
 
-export default function ChatSettingsPage({
-  params,
-}: {
-  params: { chatId: string };
-}) {
-  const { chatId: otherUserId } = React.use(params);
+export default function ChatSettingsPage() {
+  const params = useParams();
+  const otherUserId = params.chatId as string;
   const router = useRouter();
   const { user } = useUser();
   const firestore = useFirestore();
