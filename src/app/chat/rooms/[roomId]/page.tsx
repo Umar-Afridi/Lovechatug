@@ -218,6 +218,7 @@ export default function RoomPage() {
   const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
     if (!firestore || !authUser) return;
 
+    setMessages([]); // Clear messages locally on leave
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
     const roomRef = doc(firestore, 'rooms', roomId);
 
@@ -352,7 +353,7 @@ export default function RoomPage() {
                         </Avatar>
                     ) : (
                          isLocked ? (
-                            <Lock className="h-8 w-8 text-muted-foreground"/>
+                            null
                         ) : (
                             !isSpecial && <Mic className={cn("text-muted-foreground h-8 w-8")}/>
                         )
@@ -550,20 +551,17 @@ export default function RoomPage() {
         <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-1 relative p-4 md:p-6">
                 
-                 <div className="absolute inset-x-0 top-0 pt-6">
-                     <div className="grid grid-cols-4 gap-x-4 gap-y-2">
+                <div className="absolute inset-x-0 top-0 pt-4">
+                     <div className="grid grid-cols-4 gap-x-4 gap-y-2 mb-6">
                         <div className="col-start-2">{renderSlot(OWNER_SLOT, true, "OWNER")}</div>
                         <div className="col-start-3">{renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}</div>
                     </div>
-                </div>
-            
-                <div className="absolute inset-x-0 top-1/3 pt-6">
-                    <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                     <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
                         {Array.from({ length: MIC_SLOTS }).map((_, i) => renderSlot(i + 1))}
                     </div>
                 </div>
-            
-                <div className="absolute bottom-0 left-0 right-0 h-1/3 p-4 flex flex-col justify-end pointer-events-none">
+
+                <div className="absolute inset-x-0 bottom-0 h-1/3 p-4 flex flex-col justify-end pointer-events-none">
                     <div className="space-y-2 overflow-hidden [mask-image:linear-gradient(to_top,black_20%,transparent_100%)]">
                         {messages.map(renderMessage)}
                     </div>
