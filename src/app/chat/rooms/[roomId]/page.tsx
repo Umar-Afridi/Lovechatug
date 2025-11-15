@@ -208,6 +208,7 @@ export default function RoomPage() {
       unsubRoom();
       unsubMembers();
       unsubMessages();
+      setMessages([]); // Clear messages on leave
       contextLeaveRoom();
     };
   }, [firestore, roomId, authUser?.uid, setMemberProfiles, memberProfiles, setCurrentRoom, toast, router, contextLeaveRoom]);
@@ -547,19 +548,22 @@ export default function RoomPage() {
         </header>
         
         <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 relative">
-                 <div className="absolute inset-0 overflow-y-auto p-4 md:p-6 space-y-6">
-                    <div className="grid grid-cols-4 gap-x-4 gap-y-2">
+            <div className="flex-1 relative p-4 md:p-6">
+                
+                 <div className="absolute inset-x-0 top-0 pt-6">
+                     <div className="grid grid-cols-4 gap-x-4 gap-y-2">
                         <div className="col-start-2">{renderSlot(OWNER_SLOT, true, "OWNER")}</div>
                         <div className="col-start-3">{renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}</div>
                     </div>
-
+                </div>
+            
+                <div className="absolute inset-x-0 top-1/3 pt-6">
                     <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
                         {Array.from({ length: MIC_SLOTS }).map((_, i) => renderSlot(i + 1))}
                     </div>
                 </div>
             
-                <div className="absolute bottom-0 left-0 right-0 h-1/2 p-4 flex flex-col justify-end pointer-events-none">
+                <div className="absolute bottom-0 left-0 right-0 h-1/3 p-4 flex flex-col justify-end pointer-events-none">
                     <div className="space-y-2 overflow-hidden [mask-image:linear-gradient(to_top,black_20%,transparent_100%)]">
                         {messages.map(renderMessage)}
                     </div>
@@ -571,18 +575,18 @@ export default function RoomPage() {
             <div className="relative flex items-center gap-2">
                  <Input 
                     placeholder="Send a message..." 
-                    className="h-10 flex-1 pr-12"
+                    className="h-10 flex-1"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                 />
-                <Button variant="ghost" size="icon" className="absolute right-12 top-1/2 -translate-y-1/2" onClick={handleSendMessage}>
+                 <Button variant="ghost" size="icon" className="h-10 w-10" onClick={handleSendMessage}>
                     <Send className="h-5 w-5"/>
                 </Button>
-                <Button variant="ghost" size="icon" onClick={handleToggleMute} disabled={currentUserSlot.micSlot === null}>
+                <Button variant="ghost" size="icon" className="h-10 w-10" onClick={handleToggleMute} disabled={currentUserSlot.micSlot === null}>
                     {isMuted ? <MicOff className="h-5 w-5"/> : <Mic className="h-5 w-5"/>}
                 </Button>
-                 <Button variant="ghost" size="icon" onClick={() => setIsDeafened(!isDeafened)}>
+                 <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => setIsDeafened(!isDeafened)}>
                     {isDeafened ? <VolumeX className="h-5 w-5"/> : <Volume2 className="h-5 w-5"/>}
                 </Button>
             </div>
