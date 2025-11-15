@@ -13,7 +13,7 @@ import FriendsPage from './friends/page';
 import CallsPage from './calls/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, onSnapshot, doc, query, where, getDocs, getDoc, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
@@ -146,15 +146,8 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
 
 
 const ChatList = ({ chats, currentUserId }: { chats: Chat[], currentUserId: string }) => {
-    const sortedChats = useMemo(() => {
-        return [...chats].sort((a, b) => {
-            const aTime = a.lastMessage?.timestamp?.toDate?.()?.getTime() || a.createdAt?.toDate?.()?.getTime() || 0;
-            const bTime = b.lastMessage?.timestamp?.toDate?.()?.getTime() || b.createdAt?.toDate?.()?.getTime() || 0;
-            return bTime - aTime;
-        });
-    }, [chats]);
-
-    if (sortedChats.length === 0) {
+    
+    if (chats.length === 0) {
       return (
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
            <p>No chats yet. Find friends and start a conversation!</p>
@@ -165,7 +158,7 @@ const ChatList = ({ chats, currentUserId }: { chats: Chat[], currentUserId: stri
     return (
         <ScrollArea className="flex-1">
           <div className="flex flex-col">
-            {sortedChats.map(chat => (
+            {chats.map(chat => (
               <ChatListItem key={chat.id} chat={chat} currentUserId={currentUserId} />
             ))}
           </div>
@@ -179,11 +172,10 @@ export default function ChatPage() {
   const firestore = useFirestore();
   const { user } = useUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
-  const [loadingChats, setLoadingChats] = useState(true);
   const [requestCount, setRequestCount] = useState(0);
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
   const { toast } = useToast();
@@ -228,70 +220,52 @@ export default function ChatPage() {
     }
   };
 
-  // Fetch user profile
+  // Combined effect to fetch all necessary data
   useEffect(() => {
     if (!user || !firestore) {
-      setLoadingProfile(false);
-      return;
-    }
-    const userDocRef = doc(firestore, 'users', user.uid);
-    const unsubProfile = onSnapshot(userDocRef, async (docSnap) => {
-        if (docSnap.exists()) {
-            const userProfile = docSnap.data() as UserProfile;
-            setProfile(userProfile);
-            setLoadingProfile(false);
-        } else {
-            setLoadingProfile(false);
-        }
-    }, (error) => {
-        const permissionError = new FirestorePermissionError({
-            path: userDocRef.path,
-            operation: 'get',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-        setLoadingProfile(false);
-    });
-
-    return () => { 
-        unsubProfile();
-    };
-  }, [user, firestore]);
-
-  // Fetch chats for the current user
-  useEffect(() => {
-    if (!firestore || !user?.uid) {
-        setLoadingChats(false);
+        setLoading(false);
         return;
     }
-    
-    setLoadingChats(true);
-    const chatsRef = collection(firestore, 'chats');
-    const q = query(chatsRef, where('members', 'array-contains', user.uid));
-    
-    const unsubscribe = onSnapshot(q, 
-      (querySnapshot) => {
-        const chatsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
-        setChats(chatsData);
-        setLoadingChats(false);
-      },
-      (error) => {
-        console.error("Error fetching chats: ", error);
-        const permissionError = new FirestorePermissionError({
-            path: 'chats', // path of the collection
-            operation: 'list' // operation being performed
-        });
+    setLoading(true);
+
+    const userDocRef = doc(firestore, 'users', user.uid);
+    const unsubProfile = onSnapshot(userDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+            setProfile(docSnap.data() as UserProfile);
+        }
+    }, (error) => {
+        const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'get' });
         errorEmitter.emit('permission-error', permissionError);
-        setLoadingChats(false);
-      }
+        console.error("Error fetching profile:", error);
+    });
+
+    const chatsRef = collection(firestore, 'chats');
+    const chatsQuery = query(
+        chatsRef,
+        where('members', 'array-contains', user.uid),
+        orderBy('lastMessage.timestamp', 'desc')
     );
+    const unsubChats = onSnapshot(chatsQuery, (snapshot) => {
+        const chatsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
+        
+        const myBlockedList = profile?.blockedUsers || [];
+        const whoBlockedMe = profile?.blockedBy || [];
+        
+        const filtered = chatsData.filter(chat => {
+            const otherMemberId = chat.members.find(id => id !== user.uid);
+            if (!otherMemberId) return false;
+            return !myBlockedList.includes(otherMemberId) && !whoBlockedMe.includes(otherMemberId);
+        });
 
-    return () => unsubscribe();
-  }, [firestore, user?.uid]);
-
-
-   useEffect(() => {
-    if (!firestore || !user?.uid) return;
-
+        setChats(filtered);
+        setLoading(false);
+    }, (error) => {
+        const permissionError = new FirestorePermissionError({ path: 'chats', operation: 'list' });
+        errorEmitter.emit('permission-error', permissionError);
+        console.error("Error fetching chats:", error);
+        setLoading(false);
+    });
+    
     const incomingRequestsRef = collection(firestore, 'friendRequests');
     const qIncoming = query(incomingRequestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
 
@@ -317,22 +291,12 @@ export default function ChatPage() {
     });
 
     return () => {
-      unsubscribeIncoming();
-      unsubscribeSent();
+        unsubProfile();
+        unsubChats();
+        unsubscribeIncoming();
+        unsubscribeSent();
     };
-  }, [firestore, user]);
-
-  const filteredChats = useMemo(() => {
-    if (!profile || !user) return [];
-    const blockedByMe = profile.blockedUsers || [];
-    const whoBlockedMe = profile.blockedBy || [];
-    
-    return chats.filter(chat => {
-        const otherMemberId = chat.members.find(id => id !== user.uid);
-        if (!otherMemberId) return false;
-        return !blockedByMe.includes(otherMemberId) && !whoBlockedMe.includes(otherMemberId);
-    });
-  }, [chats, profile, user]);
+  }, [user, firestore, profile?.blockedBy, profile?.blockedUsers]);
 
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -487,7 +451,7 @@ export default function ChatPage() {
     
     switch (activeTab) {
         case 'inbox':
-            return (loadingChats || loadingProfile || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={filteredChats} currentUserId={user.uid} />);
+            return (loading || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} currentUserId={user.uid} />);
         case 'requests':
             return <FriendsPage />;
         case 'calls':
