@@ -333,7 +333,7 @@ export default function ChatPage() {
                 path: usersRef.path,
                 operation: 'list',
             });
-            errorEmitter.emit('permission-error', serverError);
+            errorEmitter.emit('permission-error', permissionError);
         }
       }
     };
@@ -352,10 +352,8 @@ export default function ChatPage() {
           await addDoc(requestsRef, newRequest);
           toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
       } catch (error) {
-          console.error("Error sending friend request:", error);
           const permissionError = new FirestorePermissionError({ path: requestsRef.path, operation: 'create', requestResourceData: newRequest });
           errorEmitter.emit('permission-error', permissionError);
-          toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive'});
       }
   };
   
@@ -371,10 +369,8 @@ export default function ChatPage() {
           await deleteDoc(requestRef);
           toast({ title: 'Request Cancelled' });
       } catch(error) {
-           console.error("Error cancelling friend request:", error);
            const permissionError = new FirestorePermissionError({ path: requestRef.path, operation: 'delete' });
            errorEmitter.emit('permission-error', permissionError);
-           toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
       }
   }
 

@@ -54,14 +54,12 @@ export default function ChatSettingsPage({
         router.back();
       }
     }).catch(error => {
-      if (error.code === 'permission-denied') {
-         toast({
-          title: 'Access Denied',
-          description: "You don't have permission to view this user's details.",
-          variant: 'destructive',
+        const permissionError = new FirestorePermissionError({
+          path: userDocRef.path,
+          operation: 'get',
         });
+        errorEmitter.emit('permission-error', permissionError);
         router.back();
-      }
     });
 
   }, [firestore, otherUserId, user, router, toast]);
@@ -94,20 +92,11 @@ export default function ChatSettingsPage({
       });
       router.push('/chat'); // Redirect to chat list after blocking
     } catch (error: any) {
-      if (error.code === 'permission-denied') {
         const permissionError = new FirestorePermissionError({
-          path: `batch operation for block`,
+          path: `batch write for user block`,
           operation: 'update',
         });
         errorEmitter.emit('permission-error', permissionError);
-      } else {
-        console.error('Error blocking user:', error);
-        toast({
-          title: 'Error',
-          description: 'Could not block user.',
-          variant: 'destructive',
-        });
-      }
     }
   };
 
@@ -147,20 +136,11 @@ export default function ChatSettingsPage({
       });
       router.push('/chat');
     } catch (error: any) {
-      if (error.code === 'permission-denied') {
         const permissionError = new FirestorePermissionError({
-          path: `batch operation for unfriend`,
+          path: `batch write for unfriend`,
           operation: 'update', // This is a simplification
         });
         errorEmitter.emit('permission-error', permissionError);
-      } else {
-        console.error('Error unfriending user:', error);
-        toast({
-          title: 'Error',
-          description: 'Could not unfriend user.',
-          variant: 'destructive',
-        });
-      }
     }
   };
 
@@ -178,17 +158,12 @@ export default function ChatSettingsPage({
         await updateDoc(currentUserRef, payload);
         toast({ title: "Chat Cleared", description: "Your view of this chat has been cleared."});
     } catch(error: any) {
-         if (error.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-                path: currentUserRef.path,
-                operation: 'update',
-                requestResourceData: payload,
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        } else {
-            console.error("Error clearing chat:", error);
-            toast({ title: "Error", description: "Could not clear your chat view.", variant: "destructive" });
-        }
+         const permissionError = new FirestorePermissionError({
+            path: currentUserRef.path,
+            operation: 'update',
+            requestResourceData: payload,
+        });
+        errorEmitter.emit('permission-error', permissionError);
     } finally {
         setClearChatDialogOpen(false);
         router.back(); // Go back to chat screen which will now be empty

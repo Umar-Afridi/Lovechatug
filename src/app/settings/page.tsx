@@ -76,7 +76,7 @@ function BlockedUsersList() {
              const permissionError = new FirestorePermissionError({
                 path: userDocRef.path,
                 operation: 'update',
-                requestResourceData: { blockedUsers: arrayRemove(blockedUserId) }
+                requestResourceData: payload
             });
             errorEmitter.emit('permission-error', permissionError);
         }
@@ -167,17 +167,11 @@ export default function SettingsPage() {
                 router.push(`/chat/${agent.uid}`);
             }
         } catch (error) {
-            console.error("Error finding help agent:", error);
             const permissionError = new FirestorePermissionError({
                 path: 'users',
                 operation: 'list',
             });
             errorEmitter.emit('permission-error', permissionError);
-            toast({
-                variant: 'destructive',
-                title: 'Error',
-                description: 'Could not connect to the help center. Please try again.',
-            });
         } finally {
             setFindingHelp(false);
         }

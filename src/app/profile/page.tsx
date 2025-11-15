@@ -70,7 +70,6 @@ export default function ProfilePage() {
               setPhotoURL(data.photoURL ?? user.photoURL ?? null);
           }
       }, (error) => {
-          console.error("Error fetching user profile:", error);
           const permissionError = new FirestorePermissionError({
               path: `users/${user.uid}`,
               operation: 'get'
@@ -303,13 +302,11 @@ export default function ProfilePage() {
         setIsRemovingPhoto(false);
         setPhotoURL(finalPhotoURL); // Update local state to reflect change immediately
     } catch (error: any) {
-        console.error("Error saving changes to Firestore: ", error);
         const permissionError = new FirestorePermissionError({
             path: 'Batch write for profile update',
             operation: 'update',
         });
         errorEmitter.emit('permission-error', permissionError);
-        toast({ variant: "destructive", title: "Update Failed", description: "Could not save all changes to the database." });
     }
 };
 
@@ -336,14 +333,8 @@ export default function ProfilePage() {
       router.push('/');
 
     } catch (error: any) {
-      console.error("Error deactivating account:", error);
-      if (error.code === 'permission-denied') {
-          const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'update', requestResourceData: { isDisabled: true } });
-          errorEmitter.emit('permission-error', permissionError);
-      }
-      else {
-        toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Could not deactivate your account. Please try again." });
-      }
+      const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'update', requestResourceData: { isDisabled: true } });
+      errorEmitter.emit('permission-error', permissionError);
     } finally {
         setDeleteDialogOpen(false);
     }

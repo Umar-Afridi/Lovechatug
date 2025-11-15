@@ -136,7 +136,6 @@ export default function FriendsPage() {
 
         batch.set(chatRef, {
           members: [user.uid, request.senderId],
-          participants: [user.uid, request.senderId], // For security rules
           createdAt: serverTimestamp(),
           participantDetails: {
             [user.uid]: {
@@ -158,20 +157,11 @@ export default function FriendsPage() {
 
         toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
     } catch (error: any) {
-        console.error("Error accepting friend request: ", error);
-        if (error.code === 'permission-denied') {
-             const permissionError = new FirestorePermissionError({
-                path: `batch write operation for friend accept`,
-                operation: 'update',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        } else {
-            toast({
-                title: 'Error',
-                description: 'Could not accept friend request. Please try again later.',
-                variant: 'destructive',
-            });
-        }
+        const permissionError = new FirestorePermissionError({
+            path: `batch write for friend accept`,
+            operation: 'update',
+        });
+        errorEmitter.emit('permission-error', permissionError);
     }
   };
 
