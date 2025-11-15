@@ -96,7 +96,7 @@ export default function RoomPage() {
   const [joinTimestamp, setJoinTimestamp] = useState<Timestamp | null>(null);
 
 
-  const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick' | null, targetMember?: RoomMember | null }>({ isOpen: false, action: null });
+  const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick' | null, targetMember?: RoomMember | null }>({ isOpen: false, action: null, targetMember: null });
   
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
@@ -124,7 +124,7 @@ export default function RoomPage() {
     }
     router.push('/chat/rooms');
   }, [firestore, authUser, roomId, router]);
-
+  
   const handleBeforeUnload = useCallback((e: BeforeUnloadEvent) => {
       handleLeaveRoom();
   }, [handleLeaveRoom]);
@@ -139,9 +139,7 @@ export default function RoomPage() {
     if (!firestore || !roomId || !authUser) return;
     
     // Set join timestamp only once when component mounts
-    if (!joinTimestamp) {
-      setJoinTimestamp(Timestamp.now());
-    }
+    setJoinTimestamp(Timestamp.now());
 
     // Listener for the main room document
     const roomRef = doc(firestore, 'rooms', roomId);
@@ -300,7 +298,7 @@ export default function RoomPage() {
 
     await batch.commit();
     toast({title: "User Kicked", description: `${memberProfiles[targetMember.userId]?.displayName} has been removed.`})
-    setDialogState({ isOpen: false, action: null });
+    setDialogState({ isOpen: false, action: null, targetMember: null });
   };
   
   const handleToggleMute = async () => {
@@ -343,7 +341,13 @@ export default function RoomPage() {
         await updateDoc(roomRef, { lockedSlots: arrayUnion(slotNumber) });
     }
   };
-
+  
+  const handleForceLeaveMic = async (targetMember: RoomMember) => {
+    if (!isOwner || !targetMember) return;
+    const memberRef = doc(firestore, 'rooms', roomId, 'members', targetMember.userId);
+    await updateDoc(memberRef, { micSlot: null });
+    toast({ title: 'User Moved', description: 'The user has been moved from the mic.' });
+  };
 
   if (!room || !authUser || !currentUserSlot) {
     return (
@@ -357,11 +361,18 @@ export default function RoomPage() {
         const memberInSlot = members.find(m => m.micSlot === slotNumber);
         const profile = memberInSlot ? memberProfiles[memberInSlot.userId] : null;
         
-        const isLocked = !isSpecial && room?.lockedSlots?.includes(slotNumber) || (specialLabel === "SUPER" && room?.lockedSlots?.includes(slotNumber));
+        const isLocked = room?.lockedSlots?.includes(slotNumber) || false;
         const isSelf = memberInSlot?.userId === authUser.uid;
         
         const handleTakeSeat = async () => {
             if (!currentUserSlot) return;
+
+            // Enforce owner-only rule for owner slot
+            if (slotNumber === OWNER_SLOT && authUser.uid !== room.ownerId) {
+                toast({ title: "Permission Denied", description: "Only the room owner can take this seat.", variant: "destructive"});
+                return;
+            }
+
             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
             await updateDoc(memberRef, { micSlot: slotNumber });
         };
@@ -380,15 +391,17 @@ export default function RoomPage() {
                                   isSelf && !isMuted && "talking-indicator",
                                   specialLabel === "OWNER" && "ring-yellow-500",
                                   specialLabel === "SUPER" && "ring-purple-500",
-                                  isLocked && "bg-muted-foreground/20"
+                                  isLocked && !memberInSlot && "bg-muted-foreground/20"
                                   )}>
                     {profile ? (
                         <Avatar className="h-full w-full">
                             <AvatarImage src={profile.photoURL} />
                             <AvatarFallback className="text-2xl">{getInitials(profile.displayName)}</AvatarFallback>
                         </Avatar>
-                    ) : (
-                        <Mic className={cn("text-muted-foreground h-8 w-8", isLocked && "hidden", isSpecial && "text-muted-foreground/50")}/>
+                    ) : isLocked ? (
+                        <Lock className="text-muted-foreground h-8 w-8" />
+                    ): (
+                         <Mic className={cn("text-muted-foreground h-8 w-8")}/>
                     )}
                     
                     {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
@@ -402,7 +415,7 @@ export default function RoomPage() {
                 </div>
                  <div className="h-5 flex items-center justify-center">
                     {profile ? (
-                         <p className={cn("text-sm font-medium truncate max-w-[80px] text-center", profile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}>{profile.displayName}</p>
+                         <p className={cn("text-sm font-medium truncate max-w-[80px] text-center", specialLabel && "font-semibold", profile.colorfulName && specialLabel !== 'OWNER' && specialLabel !== 'SUPER' && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}>{profile.displayName}</p>
                     ) : specialLabel ? (
                         <p className={cn("text-sm font-semibold")}>{specialLabel}</p>
                     ) : (
@@ -411,44 +424,6 @@ export default function RoomPage() {
                 </div>
             </div>
         )
-        
-        if (isSpecial) {
-             const handleSitOnSpecial = async () => {
-                if (!currentUserSlot) return;
-                const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-                await updateDoc(memberRef, { micSlot: slotNumber });
-            };
-            return (
-                <DropdownMenu key={specialLabel}>
-                    <DropdownMenuTrigger asChild>
-                        <div className="cursor-pointer">{content}</div>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                        {isOwner && currentUserSlot?.micSlot !== slotNumber && (
-                            <DropdownMenuItem onClick={handleSitOnSpecial}>
-                                <Mic className="mr-2 h-4 w-4"/> Sit here
-                            </DropdownMenuItem>
-                        )}
-                        {isOwner && memberInSlot && !isSelf && (
-                            <>
-                               <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })}>
-                                    <UserX className="mr-2 h-4 w-4"/> Kick User
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
-                                    <View className="mr-2 h-4 w-4"/> View Profile
-                                </DropdownMenuItem>
-                            </>
-                        )}
-                        {isOwner && specialLabel === "SUPER" && (
-                             <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
-                                {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
-                                {isLocked ? 'Unlock Mic' : 'Lock Mic'}
-                            </DropdownMenuItem>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            )
-        }
         
         return (
             <DropdownMenu key={slotNumber}>
@@ -464,6 +439,9 @@ export default function RoomPage() {
                             <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
                                 <View className="mr-2 h-4 w-4"/> View Profile
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleForceLeaveMic(memberInSlot)}>
+                                <MicOff className="mr-2 h-4 w-4" /> Leave Mic
+                            </DropdownMenuItem>
                         </>
                     )}
                     
@@ -474,7 +452,7 @@ export default function RoomPage() {
                         </DropdownMenuItem>
                     )}
 
-                    {!memberInSlot && !isLocked && currentUserSlot?.micSlot !== null && (
+                    {!memberInSlot && !isLocked && currentUserSlot?.micSlot === null && (
                          <DropdownMenuItem onClick={handleTakeSeat}>
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                          </DropdownMenuItem>
@@ -485,7 +463,6 @@ export default function RoomPage() {
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
                          </DropdownMenuItem>
                     )}
-
                 </DropdownMenuContent>
             </DropdownMenu>
         )
@@ -601,7 +578,7 @@ export default function RoomPage() {
           </div>
         </header>
         
-        <main className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 space-y-4">
+        <main className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 space-y-6">
              {/* Mic Slots Section */}
             <div className="space-y-4">
                 <div className="flex justify-center gap-x-4">
