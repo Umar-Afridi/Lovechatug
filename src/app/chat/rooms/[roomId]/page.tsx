@@ -171,21 +171,26 @@ export default function RoomPage() {
         
         const memberDoc = await getDoc(memberRef);
         const currentRoomData = (await getDoc(roomRef)).data() as Room;
+        
+        let initialMicSlot: number | null = null;
+        if (currentRoomData.ownerId === authUser.uid) {
+            initialMicSlot = OWNER_SLOT;
+        } else if (userProfile?.officialBadge?.isOfficial) {
+            initialMicSlot = SUPER_ADMIN_SLOT;
+        }
 
         if (!memberDoc.exists()) {
-            let initialMicSlot: number | null = null;
-            if (currentRoomData.ownerId === authUser.uid) {
-                initialMicSlot = OWNER_SLOT;
-            } else if (userProfile?.officialBadge?.isOfficial) {
-                initialMicSlot = SUPER_ADMIN_SLOT;
-            }
-            
             const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
-
             const batch = writeBatch(firestore);
             batch.set(memberRef, memberData);
             batch.update(roomRef, { memberCount: increment(1) });
             await batch.commit();
+        } else {
+            // If user is already a member but not in a slot (e.g. owner rejoining), place them.
+            const currentMemberData = memberDoc.data() as RoomMember;
+            if (currentMemberData.micSlot === null && initialMicSlot !== null) {
+                await updateDoc(memberRef, { micSlot: initialMicSlot });
+            }
         }
     };
     
@@ -342,7 +347,7 @@ export default function RoomPage() {
                         </Avatar>
                     ) : (
                          isLocked ? (
-                            <div className="absolute inset-0 flex items-center justify-center"><Lock className="h-8 w-8 text-muted-foreground"/></div>
+                            <MicOff className="h-8 w-8 text-muted-foreground"/>
                         ) : (
                             <Mic className={cn("text-muted-foreground", isSpecial ? "h-10 w-10" : "h-8 w-8")}/>
                         )
@@ -363,7 +368,7 @@ export default function RoomPage() {
                     ) : specialLabel ? (
                         <p className={cn("text-sm font-semibold", specialLabel === "OWNER" ? "text-yellow-500" : "text-purple-500")}>{specialLabel}</p>
                     ) : (
-                        <p className="text-sm text-muted-foreground">{slotNumber}</p>
+                         !isLocked && <p className="text-sm text-muted-foreground">{slotNumber}</p>
                     )}
                 </div>
             </div>
@@ -477,37 +482,15 @@ export default function RoomPage() {
         
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
             
-            {/* Member Slots */}
-             <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: MIC_SLOTS }).map((_, i) => {
-                    const slotNumber = i + 1;
-                    if (slotNumber === 2) {
-                        return (
-                            <React.Fragment key="owner-slot-fragment">
-                                <div></div>
-                                <div className="col-start-2">{renderSlot(OWNER_SLOT, true, "OWNER")}</div>
-                                {renderSlot(slotNumber)}
-                            </React.Fragment>
-                        );
-                    }
-                     if (slotNumber === 3) {
-                         return (
-                            <React.Fragment key="super-slot-fragment">
-                                {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
-                                {renderSlot(slotNumber)}
-                            </React.Fragment>
-                         )
-                     }
-                    if (slotNumber === 1) {
-                         return (
-                            <React.Fragment key="slot-1-fragment">
-                                {renderSlot(slotNumber)}
-                                <div></div>
-                            </React.Fragment>
-                         )
-                    }
-                    return renderSlot(slotNumber);
-                })}
+            {/* Special Member Slots */}
+            <div className="flex justify-center items-center gap-x-8">
+                 {renderSlot(OWNER_SLOT, true, "OWNER")}
+                 {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
+            </div>
+
+            {/* Regular Member Slots */}
+            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                {Array.from({ length: MIC_SLOTS }).map((_, i) => renderSlot(i + 1))}
             </div>
         </div>
 
