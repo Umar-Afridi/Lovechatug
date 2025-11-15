@@ -11,8 +11,7 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
     
-    function isChatMember() {
-      let chatId = request.path[4]; // e.g., /databases/{db}/documents/chats/{chatId}
+    function isChatMember(chatId) {
       return isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
     }
     
@@ -27,56 +26,39 @@ service cloud.firestore {
 
     // 1. Users Collection (/users/{userId})
     match /users/{userId} {
-      // Any signed-in user can read any other user's profile (needed for chat lists, profiles, etc.)
       allow read: if isSignedIn();
-      
-      // A user can only create their own profile document.
       allow create: if isOwner(userId);
-
-      // A user can only update or delete their own profile.
       allow update, delete: if isOwner(userId);
-
-      // Allow username uniqueness checks during signup (even for unauthenticated users).
-      // This is safe because it only allows checking for existence, not reading data.
       allow list: if true;
     }
     
     // 2. Chats and Messages (/chats/{chatId})
     match /chats/{chatId} {
-      // Only members of the chat can read or write to the chat document and its subcollections.
+      // Only members of the chat can read or write to the chat document.
       allow read, write: if isSignedIn() && request.auth.uid in resource.data.members;
       
       match /messages/{messageId} {
-        allow read, write: if isChatMember();
+        allow read, write: if isChatMember(chatId);
       }
     }
     
     // 3. Friend Requests (/friendRequests/{requestId})
     match /friendRequests/{requestId} {
-      // A user can only create a request where they are the sender.
       allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
-
-      // Only the sender or receiver of a request can read, update, or delete it.
       allow read, update, delete: if isSignedIn() && (isOwner(resource.data.senderId) || isOwner(resource.data.receiverId));
-
-      // Allow querying for requests sent to the current user.
       allow list: if isSignedIn();
     }
     
     // 4. Call History (/calls/{callId})
     match /calls/{callId} {
-      // A user can only access a call record if they were a participant.
       allow get, write, delete: if isSignedIn() && request.auth.uid in resource.data.participants;
-      
-      // Allow querying for call history where the user is a participant.
-      // This rule requires a composite index on `participants` and `timestamp`.
       allow list: if isSignedIn();
     }
 
-    // 5. Deleted Users (/deletedUsers/{email}) - For preventing re-registration
+    // 5. Deleted Users (/deletedUsers/{email}) 
     match /deletedUsers/{email} {
-      allow create: if true; // Allows recording a deleted user's email
-      allow read, write, delete: if false; // No one can read or modify this list
+      allow create: if true;
+      allow read, write, delete: if false; 
     }
 
     // 6. Voice Chat Rooms (/rooms/{roomId})

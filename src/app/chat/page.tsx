@@ -13,7 +13,7 @@ import FriendsPage from './friends/page';
 import CallsPage from './calls/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, onSnapshot, doc, query, where, getDocs, getDoc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, query, where, getDocs, getDoc, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
@@ -252,80 +252,42 @@ export default function ChatPage() {
         setLoadingProfile(false);
     });
 
-    // Setup chat listeners based on profile's chatIds
-    let unsubChats: (() => void)[] = [];
-    const unsubProfileAndChats = onSnapshot(userDocRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const userProfile = docSnap.data() as UserProfile;
-            setProfile(userProfile); // also update profile state here
-
-            // Unsubscribe from old chat listeners
-            unsubChats.forEach(unsub => unsub());
-            unsubChats = [];
-
-            if (userProfile.chatIds && userProfile.chatIds.length > 0 && firestore) {
-                setLoadingChats(true);
-                
-                const chatIdsToListen = userProfile.chatIds;
-                
-                if (chatIdsToListen.length > 0) {
-                  const chatRefs = chatIdsToListen.map(id => doc(firestore, 'chats', id));
-
-                  unsubChats = chatRefs.map(chatRef => onSnapshot(chatRef,
-                      (chatDoc) => {
-                          if (chatDoc.exists()) {
-                              const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
-                              
-                              const otherMemberId = chatData.members.find(id => id !== user.uid);
-                              const myBlockedBy = userProfile.blockedBy || [];
-
-                              if (otherMemberId && !myBlockedBy.includes(otherMemberId)) {
-                                  setChats(prevChats => {
-                                      const chatIndex = prevChats.findIndex(c => c.id === chatDoc.id);
-                                      if (chatIndex > -1) {
-                                          const newChats = [...prevChats];
-                                          newChats[chatIndex] = chatData;
-                                          return newChats;
-                                      } else {
-                                          return [...prevChats, chatData];
-                                      }
-                                  });
-                              } else {
-                                setChats(prevChats => prevChats.filter(c => c.id !== chatDoc.id));
-                              }
-
-                          } else {
-                             setChats(prevChats => prevChats.filter(c => c.id !== chatRef.id));
-                          }
-                      },
-                      (error) => {
-                           const permissionError = new FirestorePermissionError({
-                              path: chatRef.path,
-                              operation: 'get',
-                          });
-                          errorEmitter.emit('permission-error', permissionError);
-                          console.error(`Error listening to chat ${chatRef.id}:`, error);
-                      }
-                  ));
-                }
-                setLoadingChats(false);
-            } else {
-                setChats([]);
-                setLoadingChats(false);
-            }
-        }
-    }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'get' });
-        errorEmitter.emit('permission-error', error);
-        console.error("Error setting up combined profile and chat listener:", error);
-    });
-
     return () => { 
         unsubProfile();
-        unsubProfileAndChats();
-        unsubChats.forEach(unsub => unsub());
     };
   }, [user, firestore]);
+
+  // Fetch chats for the current user
+  useEffect(() => {
+    if (!firestore || !user?.uid) {
+        setLoadingChats(false);
+        return;
+    }
+    
+    setLoadingChats(true);
+    const chatsRef = collection(firestore, 'chats');
+    const q = query(chatsRef, where('members', 'array-contains', user.uid));
+    
+    const unsubscribe = onSnapshot(q, 
+      (querySnapshot) => {
+        const chatsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
+        setChats(chatsData);
+        setLoadingChats(false);
+      },
+      (error) => {
+        console.error("Error fetching chats: ", error);
+        const permissionError = new FirestorePermissionError({
+            path: 'chats', // path of the collection
+            operation: 'list' // operation being performed
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        setLoadingChats(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [firestore, user?.uid]);
+
 
    useEffect(() => {
     if (!firestore || !user?.uid) return;
