@@ -154,7 +154,8 @@ export function LoginForm() {
       router.push('/chat');
     } catch (err: any) {
       let friendlyMessage = "An unknown error occurred.";
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+      // Specific error handling for invalid credentials
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
         friendlyMessage = "Invalid email or password. Please try again.";
       }
       setError(friendlyMessage);
