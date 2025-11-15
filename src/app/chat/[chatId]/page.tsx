@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -65,12 +65,9 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 
 
-export default function ChatIdPage({
-  params,
-}: {
-  params: { chatId: string }; // chatId is the OTHER user's ID
-}) {
-  const { chatId: otherUserIdFromParams } = params;
+export default function ChatIdPage() {
+  const params = useParams();
+  const otherUserIdFromParams = params.chatId as string;
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -168,39 +165,62 @@ export default function ChatIdPage({
     const currentUserDocRef = doc(firestore, 'users', authUser.uid);
     const otherUserDocRef = doc(firestore, 'users', otherUserIdFromParams);
 
-    const unsubCurrentUser = onSnapshot(currentUserDocRef, (docSnap) => {
+    let unsubCurrentUser: (() => void) | null = null;
+    let unsubOtherUser: (() => void) | null = null;
+
+    const fetchProfiles = async () => {
+        try {
+            const currentUserSnap = await getDoc(currentUserDocRef);
+            if (currentUserSnap.exists()) {
+                const data = currentUserSnap.data() as UserProfile;
+                setCurrentUser(data);
+                setHaveIBlocked(data.blockedUsers?.includes(otherUserIdFromParams) ?? false);
+            }
+
+            const otherUserSnap = await getDoc(otherUserDocRef);
+            if (otherUserSnap.exists()) {
+                const otherUserData = otherUserSnap.data() as UserProfile;
+                setOtherUser(otherUserData);
+                setAmIBlocked(otherUserData.blockedUsers?.includes(authUser.uid) ?? false);
+            } else {
+                toast({ title: 'Error', description: 'User not found.', variant: 'destructive' });
+                router.push('/chat');
+                return;
+            }
+
+        } catch (error) {
+            console.error("Error fetching user profiles:", error);
+            const permissionError = new FirestorePermissionError({ path: `users`, operation: 'get' }, error as Error);
+            errorEmitter.emit('permission-error', permissionError);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    fetchProfiles();
+
+
+    // Real-time listeners
+    unsubCurrentUser = onSnapshot(currentUserDocRef, (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data() as UserProfile;
             setCurrentUser(data);
             setHaveIBlocked(data.blockedUsers?.includes(otherUserIdFromParams) ?? false);
         }
-    }, (error) => {
-      console.error("Error fetching current user profile:", error);
-      const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' }, error);
-      errorEmitter.emit('permission-error', permissionError);
-    });
+    }, (error) => console.error("Current user listener error:", error));
 
-    const unsubOtherUser = onSnapshot(otherUserDocRef, (docSnap) => {
+    unsubOtherUser = onSnapshot(otherUserDocRef, (docSnap) => {
         if (docSnap.exists()) {
             const otherUserData = docSnap.data() as UserProfile;
             setOtherUser(otherUserData);
             setAmIBlocked(otherUserData.blockedUsers?.includes(authUser.uid) ?? false);
-        } else {
-            toast({ title: 'Error', description: 'User not found.', variant: 'destructive' });
-            router.push('/chat');
         }
-        // Combined loading state check
-        setLoading(false);
-    }, (error) => {
-        console.error("Error fetching other user profile:", error);
-        const permissionError = new FirestorePermissionError({ path: `users/${otherUserIdFromParams}`, operation: 'get' }, error);
-        errorEmitter.emit('permission-error', permissionError);
-        setLoading(false);
-    });
+    }, (error) => console.error("Other user listener error:", error));
+
 
     return () => {
-      unsubCurrentUser();
-      unsubOtherUser();
+      if (unsubCurrentUser) unsubCurrentUser();
+      if (unsubOtherUser) unsubOtherUser();
     };
 
   }, [firestore, authUser, otherUserIdFromParams, router, toast]);
