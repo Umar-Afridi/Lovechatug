@@ -101,8 +101,6 @@ export default function RoomPage() {
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
 
-  // --- User Actions ---
-  
   const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
     if (!firestore || !authUser) return;
 
@@ -130,7 +128,10 @@ export default function RoomPage() {
   useEffect(() => {
     if (!firestore || !roomId || !authUser) return;
     
-    setJoinTimestamp(Timestamp.now());
+    // Set join timestamp only once when component mounts
+    if (!joinTimestamp) {
+      setJoinTimestamp(Timestamp.now());
+    }
 
     // Listener for the main room document
     const roomRef = doc(firestore, 'rooms', roomId);
@@ -189,7 +190,9 @@ export default function RoomPage() {
         const roomRef = doc(firestore, 'rooms', roomId);
         
         const memberDoc = await getDoc(memberRef);
-        const currentRoomData = (await getDoc(roomRef)).data() as Room;
+        const roomDoc = await getDoc(roomRef);
+        if (!roomDoc.exists()) return; // Room might be deleted
+        const currentRoomData = roomDoc.data() as Room;
         
         let initialMicSlot: number | null = null;
         if (currentRoomData.ownerId === authUser.uid) {
@@ -216,9 +219,10 @@ export default function RoomPage() {
             
             await batch.commit();
         } else {
+             // If user is owner and not in owner slot, move them there
             const currentMemberData = memberDoc.data() as RoomMember;
-             if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
-                await updateDoc(memberRef, { isMuted: true, micSlot: OWNER_SLOT });
+            if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
+                await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
             }
         }
     };
@@ -230,8 +234,10 @@ export default function RoomPage() {
       unsubRoom();
       unsubMembers();
       contextLeaveRoom();
+      setMessages([]);
     };
-  }, [firestore, roomId, authUser?.uid, setMemberProfiles, memberProfiles, setCurrentRoom, toast, router, contextLeaveRoom]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestore, roomId, authUser?.uid]);
 
   // Separate effect for messages to handle joinTimestamp
   useEffect(() => {
@@ -355,7 +361,7 @@ export default function RoomPage() {
         const memberInSlot = members.find(m => m.micSlot === slotNumber);
         const profile = memberInSlot ? memberProfiles[memberInSlot.userId] : null;
         
-        const isLocked = !isSpecial && room?.lockedSlots?.includes(slotNumber);
+        const isLocked = !isSpecial && room?.lockedSlots?.includes(slotNumber) || (specialLabel === "SUPER" && room?.lockedSlots?.includes(slotNumber));
         const isSelf = memberInSlot?.userId === authUser.uid;
         
         const handleTakeSeat = async () => {
@@ -389,7 +395,7 @@ export default function RoomPage() {
                          isLocked ? (
                             null
                         ) : (
-                            !isSpecial && <Mic className={cn("text-muted-foreground h-8 w-8")}/>
+                           <Mic className={cn("text-muted-foreground h-8 w-8")}/>
                         )
                     )}
                     
@@ -406,7 +412,7 @@ export default function RoomPage() {
                     {profile ? (
                          <p className={cn("text-sm font-medium truncate max-w-[80px] text-center", profile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}>{profile.displayName}</p>
                     ) : specialLabel ? (
-                        <p className={cn("text-sm font-semibold", specialLabel === "OWNER" ? "text-yellow-500" : "text-purple-500")}>{specialLabel}</p>
+                        <p className={cn("text-sm font-semibold")}>{specialLabel}</p>
                     ) : (
                          !isLocked && <p className="text-sm text-muted-foreground">{slotNumber}</p>
                     )}
@@ -416,7 +422,7 @@ export default function RoomPage() {
         
         if (isSpecial) {
              const handleSitOnSpecial = async () => {
-                if (!isOwner || !currentUserSlot) return;
+                if (!currentUserSlot) return;
                 const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
                 await updateDoc(memberRef, { micSlot: slotNumber });
             };
@@ -426,7 +432,7 @@ export default function RoomPage() {
                         <div className="cursor-pointer">{content}</div>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                        {isOwner && !isSelf && (
+                        {isOwner && currentUserSlot?.micSlot !== slotNumber && (
                             <DropdownMenuItem onClick={handleSitOnSpecial}>
                                 <Mic className="mr-2 h-4 w-4"/> Sit here
                             </DropdownMenuItem>
@@ -440,6 +446,12 @@ export default function RoomPage() {
                                     <View className="mr-2 h-4 w-4"/> View Profile
                                 </DropdownMenuItem>
                             </>
+                        )}
+                        {isOwner && specialLabel === "SUPER" && (
+                             <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
+                                {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
+                                {isLocked ? 'Unlock Mic' : 'Lock Mic'}
+                            </DropdownMenuItem>
                         )}
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -470,7 +482,7 @@ export default function RoomPage() {
                         </DropdownMenuItem>
                     )}
 
-                    {!memberInSlot && !isLocked && (
+                    {!memberInSlot && !isLocked && currentUserSlot?.micSlot !== null && (
                          <DropdownMenuItem onClick={handleTakeSeat}>
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                          </DropdownMenuItem>
@@ -487,37 +499,56 @@ export default function RoomPage() {
         )
     }
     
-    const renderMessage = (msg: RoomMessage) => {
+    const renderMessage = (msg: RoomMessage, index: number) => {
         const senderProfile = memberProfiles[msg.senderId];
         const isNotification = msg.type === 'notification';
-
+    
+        const totalMessages = messages.length;
+        const opacity = Math.max(0, 1 - (totalMessages - index - 1) * 0.15); // Fade out older messages
+    
         return (
-            <div 
-                key={msg.id}
-                className={cn("animate-in fade-in slide-in-from-bottom-2 duration-300", isNotification && "text-center")}
-            >
-                {isNotification ? (
-                    <p className="text-xs text-muted-foreground italic bg-black/20 rounded-full px-3 py-1 inline-block">{msg.content}</p>
-                ) : (
-                    <div className="flex items-start gap-2 text-left">
-                        <Avatar className="h-6 w-6 cursor-pointer" onClick={() => handleViewProfile(msg.senderId)}>
-                            <AvatarImage src={msg.senderPhotoURL} />
-                            <AvatarFallback className="text-xs">{getInitials(msg.senderName)}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 text-sm">
-                           <span 
-                                className={cn("font-bold cursor-pointer pr-2", senderProfile?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}
-                                onClick={() => handleViewProfile(msg.senderId)}
-                            >
-                                {msg.senderName}:
-                           </span>
-                           <span className="text-white break-words">{msg.content}</span>
-                        </div>
-                    </div>
-                )}
-            </div>
+          <motion.div
+            key={msg.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, transition: { duration: 0.5 } }}
+            transition={{ duration: 0.3 }}
+            style={{ opacity: isNotification ? 1 : opacity }}
+            className={cn("transition-opacity duration-500", isNotification && "text-center")}
+          >
+            {isNotification ? (
+              <p className="text-xs text-muted-foreground italic bg-black/20 rounded-full px-3 py-1 inline-block">
+                {msg.content}
+              </p>
+            ) : (
+              <div className="flex items-start gap-2 text-left">
+                <Avatar
+                  className="h-6 w-6 cursor-pointer"
+                  onClick={() => handleViewProfile(msg.senderId)}
+                >
+                  <AvatarImage src={msg.senderPhotoURL} />
+                  <AvatarFallback className="text-xs">
+                    {getInitials(msg.senderName)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 text-sm">
+                  <span
+                    className={cn(
+                      "font-bold cursor-pointer pr-2",
+                      senderProfile?.colorfulName &&
+                        "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+                    )}
+                    onClick={() => handleViewProfile(msg.senderId)}
+                  >
+                    {msg.senderName}:
+                  </span>
+                  <span className="text-white break-words">{msg.content}</span>
+                </div>
+              </div>
+            )}
+          </motion.div>
         );
-    }
+      };
 
   return (
     <>
@@ -582,23 +613,25 @@ export default function RoomPage() {
           </div>
         </header>
         
-        <div className="relative flex-1 flex flex-col overflow-hidden p-4 md:p-6 space-y-4">
-             <div className="flex justify-center gap-x-4">
+        <div className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 space-y-4">
+            <div className="flex justify-center gap-x-4">
                 {renderSlot(OWNER_SLOT, true, "OWNER")}
                 {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
             </div>
             
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
-            </div>
+            <div className="flex-grow flex flex-col justify-center space-y-4">
+                {/* Chat messages will appear here */}
+                <div className="flex-grow flex flex-col-reverse justify-start gap-2 overflow-hidden pb-4">
+                    {messages.slice().reverse().map((msg, index) => renderMessage(msg, messages.length - index - 1))}
+                </div>
 
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
-            </div>
+                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
+                </div>
 
-            {/* Chat Overlay */}
-            <div className="absolute bottom-0 left-0 right-0 h-1/3 flex flex-col-reverse gap-2 p-4 overflow-hidden pointer-events-none [mask-image:linear-gradient(to_top,black_60%,transparent_100%)]">
-                {messages.slice().reverse().map(renderMessage)}
+                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+                </div>
             </div>
         </div>
 
@@ -627,3 +660,20 @@ export default function RoomPage() {
     </>
   );
 }
+
+const style = document.createElement('style');
+style.innerHTML = `
+.talking-indicator {
+    animation: talking 1.5s ease-out infinite;
+}
+
+@keyframes talking {
+    0%, 100% {
+        box-shadow: 0 0 0 2px hsl(var(--primary) / 0.8), 0 0 0 4px hsl(var(--primary) / 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 4px hsl(var(--primary) / 0.8), 0 0 0 8px hsl(var(--primary) / 0.2);
+    }
+}
+`;
+document.head.appendChild(style);
