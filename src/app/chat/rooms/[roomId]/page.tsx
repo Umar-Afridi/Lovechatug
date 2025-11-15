@@ -369,9 +369,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
              }
              
              const memberDoc = await getDoc(memberRef);
-             const batch = writeBatch(firestore);
-
-            if (!memberDoc.exists()) {
+             // Only create a new member document if one doesn't already exist.
+             // This prevents kicking the user off their mic slot when they re-enter the room.
+             if (!memberDoc.exists()) {
+                const batch = writeBatch(firestore);
                 batch.set(memberRef, {
                     userId: authUser.uid,
                     micSlot: roomData.ownerId === authUser.uid ? 0 : null,
