@@ -8,7 +8,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // यह फंक्शन चेक करता है कि درخواست کرنے वाला یوزر ہی دستاویز کا مالک ہے۔
+    // यह फंक्शन चेक करता है कि درخواست करने वाला यوزر ہی دستاویز کا مالک ہے۔
     // It checks if the requesting user is the owner of the document (matching UID).
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
@@ -34,9 +34,6 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
       allow update: if isOwner(userId);
-      // Allow list for username search for any signed in user.
-      // The client-side query filters out disabled users for non-admins.
-      // Super admins can see all users in their dedicated panel.
       allow list: if true;
     }
     
@@ -58,9 +55,6 @@ service cloud.firestore {
     
     // 4. کال کی تاریخ کا مجموعہ (Call History Collection)
     match /calls/{callId} {
-      // The query `where('participants', 'array-contains', request.auth.uid)` ensures a user can only query their own calls.
-      // The `list` rule allows this query to execute.
-      // Individual document access is still protected by `get` and `write` rules.
       allow list: if isSignedIn();
       allow get, write, delete: if isParticipant(resource.data.participants);
     }
@@ -73,8 +67,7 @@ service cloud.firestore {
     
     // 6. وائس چیٹ رومز کا مجموعہ (Voice Chat Rooms Collection)
     match /rooms/{roomId} {
-        allow get: if isSignedIn();
-        allow list: if isSignedIn(); // This rule allows any signed-in user to list all rooms.
+        allow read: if isSignedIn(); 
         allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
         allow update: if isRoomOwner(roomId);
         allow delete: if isRoomOwner(roomId);
