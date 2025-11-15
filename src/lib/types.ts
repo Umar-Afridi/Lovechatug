@@ -94,7 +94,7 @@ export type Call = {
   receiverId: string;
   participants: string[]; // [callerId, receiverId]
   type: 'audio' | 'video';
-  status: 'answered' | 'missed' | 'declined' | 'outgoing';
+  status: 'answered' | 'missed' | 'declined' | 'outgoing' | 'ended';
   direction: 'incoming' | 'outgoing';
   timestamp: any; // Firestore ServerTimestamp
   duration?: number; // in seconds

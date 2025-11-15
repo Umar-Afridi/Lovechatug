@@ -34,7 +34,6 @@ export function IncomingCall({ call, onHandled }: IncomingCallProps) {
       if (docSnap.exists()) {
         setCaller(docSnap.data() as UserProfile);
       } else {
-        // Caller not found, maybe decline call automatically
         handleDecline();
       }
     });
@@ -57,7 +56,6 @@ export function IncomingCall({ call, onHandled }: IncomingCallProps) {
     if (!firestore || !call.id) return;
     const callDocRef = doc(firestore, 'calls', call.id);
     try {
-        // Instead of deleting, update the status so caller knows it was declined.
         await updateDoc(callDocRef, { status: 'declined' });
     } catch (e) {
         console.error("Error declining call: ", e);
@@ -72,7 +70,7 @@ export function IncomingCall({ call, onHandled }: IncomingCallProps) {
   };
 
   if (!caller) {
-    return null; // Or a loading state
+    return null;
   }
 
   return (

@@ -61,7 +61,6 @@ export default function OutgoingCallPage() {
         const data = docSnap.data() as Call;
         setCallData(data);
         if (data.status === 'declined' || data.status === 'missed') {
-          // Add a message to the chat for missed/declined calls
             const chatId = [data.callerId, data.receiverId].sort().join('_');
             const messagesRef = collection(firestore, `chats/${chatId}/messages`);
             addDoc(messagesRef, {
@@ -75,13 +74,13 @@ export default function OutgoingCallPage() {
                     duration: '0s',
                     status: 'missed'
                 }
-            }).then(() => {
-                // End call if receiver declined or it was missed
-                setTimeout(() => router.back(), 2000); // Go back after 2 seconds
+            }).finally(() => {
+                 setTimeout(() => {
+                    deleteDoc(callDocRef).finally(() => router.back());
+                 }, 2000);
             });
         } else if (data.status === 'answered') {
-          // Navigate to active call screen
-          router.push(`/chat/call/active/${callId}`);
+          router.replace(`/chat/call/active/${callId}`);
         }
       } else {
         // Call document deleted (e.g., cancelled by caller)
@@ -100,13 +99,11 @@ export default function OutgoingCallPage() {
     }
     const callDocRef = doc(firestore, 'calls', callId);
     try {
-      // If the call was outgoing or ringing, we can just delete it
-      // as the other user hasn't interacted yet.
       await deleteDoc(callDocRef);
     } catch (error) {
       console.error("Error hanging up call:", error);
     } finally {
-      router.back(); // Always go back
+      router.back();
     }
   };
   
