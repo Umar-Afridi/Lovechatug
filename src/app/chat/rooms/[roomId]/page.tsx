@@ -359,7 +359,7 @@ export default function RoomPage() {
                          isLocked ? (
                             <Lock className="h-8 w-8 text-muted-foreground"/>
                         ) : (
-                            <Mic className={cn("text-muted-foreground h-8 w-8")}/>
+                            !isSpecial && <Mic className={cn("text-muted-foreground h-8 w-8")}/>
                         )
                     )}
                     
@@ -513,26 +513,24 @@ export default function RoomPage() {
              </ScrollArea>
         </div>
 
-         <footer className="shrink-0 border-t bg-background p-3 space-y-2">
-            <div className="relative">
+         <footer className="shrink-0 border-t bg-background p-3">
+            <div className="relative flex items-center gap-2">
                  <Input 
                     placeholder="Send a message..." 
-                    className="pr-24"
+                    className="flex-1 pr-12"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                 />
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
-                    <Button variant="ghost" size="icon" onClick={handleToggleMute} disabled={currentUserSlot.micSlot === null}>
-                        {isMuted ? <MicOff className="h-5 w-5"/> : <Mic className="h-5 w-5"/>}
-                    </Button>
-                     <Button variant="ghost" size="icon" onClick={() => setIsDeafened(!isDeafened)}>
-                        {isDeafened ? <VolumeX className="h-5 w-5"/> : <Volume2 className="h-5 w-5"/>}
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={handleSendMessage}>
-                        <Send className="h-5 w-5"/>
-                    </Button>
-                </div>
+                <Button variant="ghost" size="icon" onClick={handleSendMessage}>
+                    <Send className="h-5 w-5"/>
+                </Button>
+                <Button variant="ghost" size="icon" onClick={handleToggleMute} disabled={currentUserSlot.micSlot === null}>
+                    {isMuted ? <MicOff className="h-5 w-5"/> : <Mic className="h-5 w-5"/>}
+                </Button>
+                 <Button variant="ghost" size="icon" onClick={() => setIsDeafened(!isDeafened)}>
+                    {isDeafened ? <VolumeX className="h-5 w-5"/> : <Volume2 className="h-5 w-5"/>}
+                </Button>
             </div>
         </footer>
       </div>
