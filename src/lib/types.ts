@@ -96,7 +96,8 @@ export type Call = {
   type: 'audio' | 'video';
   status: 'answered' | 'missed' | 'declined' | 'outgoing' | 'ended';
   direction: 'incoming' | 'outgoing';
-  timestamp: any; // Firestore ServerTimestamp
+  timestamp: any; // Firestore ServerTimestamp for when the call was initiated
+  answeredAt?: any; // Firestore ServerTimestamp for when the call was answered
   duration?: number; // in seconds
 };
 

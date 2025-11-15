@@ -41,6 +41,7 @@ export function IncomingCall({ call, onHandled }: IncomingCallProps) {
         handleDecline();
       }
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, call.callerId]);
 
   const handleAccept = async () => {
@@ -48,9 +49,9 @@ export function IncomingCall({ call, onHandled }: IncomingCallProps) {
     if (!firestore || !call.id) return;
     const callDocRef = doc(firestore, 'calls', call.id);
     try {
-        await updateDoc(callDocRef, { status: 'answered' });
+        await updateDoc(callDocRef, { status: 'answered', answeredAt: serverTimestamp() });
         onHandled();
-        router.push(`/chat/call/active/${call.id}`);
+        // The layout will now handle displaying the active call screen
     } catch(e) {
         console.error("Error accepting call: ", e);
         onHandled();

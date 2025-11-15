@@ -45,12 +45,14 @@ export default function OutgoingCallPage() {
             setCallStatus('Calling...');
         }
       } else {
-        router.push('/chat'); // User not found
+        // User not found, automatically hang up.
+        handleHangUp();
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [firestore, otherUserId, router, play]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestore, otherUserId, play]);
 
   // Listen to call document for status changes
   useEffect(() => {
@@ -77,17 +79,19 @@ export default function OutgoingCallPage() {
                 }
             }).finally(() => {
                  setTimeout(() => {
-                    deleteDoc(callDocRef).finally(() => router.back());
+                    deleteDoc(callDocRef).finally(() => {
+                        // Don't navigate, just let the component unmount via parent state
+                    });
                  }, 2000);
             });
         } else if (data.status === 'answered') {
           stop();
-          router.replace(`/chat/call/active/${callId}`);
+          // Don't navigate, the parent layout will handle showing the active call screen
         }
       } else {
-        // Call document deleted (e.g., cancelled by caller)
+        // Call document deleted (e.g., cancelled by caller or declined)
         stop();
-        router.back();
+         // The parent will handle unmounting this component
       }
     });
 
@@ -95,13 +99,14 @@ export default function OutgoingCallPage() {
         stop();
         unsubscribe();
     };
-  }, [firestore, callId, router, stop]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestore, callId, stop]);
 
 
   const handleHangUp = async () => {
     stop();
     if (!firestore || !callId || !authUser) {
-      router.back();
+      // Just let the parent handle unmounting
       return;
     }
     const callDocRef = doc(firestore, 'calls', callId);
@@ -110,7 +115,7 @@ export default function OutgoingCallPage() {
     } catch (error) {
       console.error("Error hanging up call:", error);
     } finally {
-      router.back();
+       // Parent will handle unmounting this component
     }
   };
   

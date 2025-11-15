@@ -9,12 +9,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { PhoneOff } from 'lucide-react';
 import type { UserProfile, Call } from '@/lib/types';
-import { differenceInSeconds } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
+
 
 export default function ActiveCallPage() {
   const params = useParams();
   const callId = params.callId as string;
   const router = useRouter();
+  const { toast } = useToast();
 
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -23,7 +25,7 @@ export default function ActiveCallPage() {
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const startTimeRef = useRef<Date | null>(null);
+  const hangupInitiated = useRef(false);
 
 
   useEffect(() => {
@@ -42,23 +44,16 @@ export default function ActiveCallPage() {
           return;
         }
         
-        // If status is not 'answered' when we land here, something is wrong.
         if (data.status !== 'answered') {
-          router.back();
-          return;
+           toast({ title: 'Call Ended', description: 'The call was not answered or has ended.', variant: 'destructive'});
+           handleHangUp(true);
+           return;
         }
         
-        if (!intervalRef.current && data.timestamp) {
-            startTimeRef.current = data.timestamp.toDate();
-            // Ensure duration is non-negative
-            const initialDuration = differenceInSeconds(new Date(), startTimeRef.current);
-            setCallDuration(initialDuration > 0 ? initialDuration : 0);
-
+        // Start the timer only once
+        if (!intervalRef.current) {
             intervalRef.current = setInterval(() => {
-                if (startTimeRef.current) {
-                  const currentDuration = differenceInSeconds(new Date(), startTimeRef.current);
-                  setCallDuration(currentDuration > 0 ? currentDuration : 0);
-                }
+                setCallDuration(prev => prev + 1);
             }, 1000);
         }
 
@@ -67,10 +62,14 @@ export default function ActiveCallPage() {
           const userDocSnap = await getDoc(doc(firestore, 'users', otherUserId));
           if (userDocSnap.exists()) {
               setOtherUser(userDocSnap.data() as UserProfile);
+          } else {
+              // Other user doc doesn't exist, something is wrong, end the call
+              handleHangUp(false);
           }
         }
       } else {
-        router.back(); // Call doc was deleted
+        // Call doc was deleted, meaning the call is over.
+        handleHangUp(true);
       }
     });
 
@@ -80,7 +79,8 @@ export default function ActiveCallPage() {
         clearInterval(intervalRef.current);
       }
     };
-  }, [firestore, callId, authUser, otherUser, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestore, callId, authUser, otherUser]);
 
   const formatDuration = (totalSeconds: number) => {
     if (isNaN(totalSeconds) || totalSeconds < 0) totalSeconds = 0;
@@ -97,39 +97,29 @@ export default function ActiveCallPage() {
   }
 
   const handleHangUp = async (isRemoteHangup = false) => {
-    if (!firestore || !callId || !callData || !authUser) {
-      router.back();
-      return;
-    }
-    
+    // Prevent multiple hangup calls
+    if (hangupInitiated.current) return;
+    hangupInitiated.current = true;
+
     if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
     }
-
-    const finalDuration = callDuration;
     
-    // Prevent recursive updates or double operations
-    if (callData.status === 'ended' && !isRemoteHangup) {
-      router.back();
-      return;
-    }
-
-    try {
-        if (!isRemoteHangup) {
-            const callDocRef = doc(firestore, 'calls', callId);
+    // If this client is the one ending the call, update Firestore
+    if (!isRemoteHangup && firestore && callId && callData && authUser) {
+        const finalDuration = callDuration;
+        const callDocRef = doc(firestore, 'calls', callId);
+        
+        try {
             await updateDoc(callDocRef, { 
                 status: 'ended', // Signal to other user to hang up
                 duration: finalDuration,
             });
-        }
-       
-        // Both users will try to add this, but it's okay due to Firestore's behavior
-        const chatId = [callData.callerId, callData.receiverId].sort().join('_');
-        const messagesRef = collection(firestore, `chats/${chatId}/messages`);
-        
-        // Let's ensure the message is only added once by the person who initiated hangup
-        if (!isRemoteHangup) {
+           
+            // Add call log message to chat
+            const chatId = [callData.callerId, callData.receiverId].sort().join('_');
+            const messagesRef = collection(firestore, `chats/${chatId}/messages`);
             await addDoc(messagesRef, {
                 senderId: authUser.uid,
                 type: 'call',
@@ -142,27 +132,26 @@ export default function ActiveCallPage() {
                     status: 'answered'
                 }
             });
-        }
-        
-        // The original caller is responsible for cleaning up the call document.
-        if (callData.callerId === authUser.uid) {
-            setTimeout(async () => {
-                 try {
-                     await deleteDoc(doc(firestore, 'calls', callId));
-                 } catch (e) {
-                     // It might already be deleted by a rapid sequence of events, that's fine.
-                     console.warn("Could not delete call document, it might already be gone.", e);
-                 }
-            }, 3000); // 3-second delay
-        }
+            
+            // The original caller is responsible for cleaning up the call document.
+            if (callData.callerId === authUser.uid) {
+                setTimeout(async () => {
+                     try {
+                         await deleteDoc(callDocRef);
+                     } catch (e) {
+                         // It might already be deleted by a rapid sequence of events, that's fine.
+                         console.warn("Could not delete call document, it might already be gone.", e);
+                     }
+                }, 3000); // 3-second delay
+            }
 
-    } catch (error) {
-        console.error("Error hanging up call:", error);
-    } finally {
-        if (router) {
-          router.back();
+        } catch (error) {
+            console.error("Error hanging up call:", error);
         }
     }
+    
+     // We don't navigate back anymore, the incoming call component will just disappear
+     // And this component will unmount because the parent layout will no longer render it
   };
 
   const getInitials = (name: string | null | undefined) => {

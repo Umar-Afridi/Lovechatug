@@ -57,6 +57,8 @@ import { getDatabase, ref, onValue, off, onDisconnect, serverTimestamp as rtdbSe
 import { useSound } from '@/hooks/use-sound';
 import { FloatingRoomIndicator } from '@/components/chat/floating-room-indicator';
 import { IncomingCall } from '@/components/chat/incoming-call';
+import ActiveCallPage from './call/active/[callId]/page';
+import OutgoingCallPage from './call/outgoing/[userId]/page';
 
 
 // Context for sharing current room state
@@ -73,6 +75,23 @@ export const useRoomContext = () => {
   const context = useContext(RoomContext);
   if (!context) {
     throw new Error('useRoomContext must be used within a ChatAppLayout');
+  }
+  return context;
+};
+
+// Context for Call State
+interface CallContextType {
+  activeCall: Call | null;
+  startCall: (userId: string, type: 'audio' | 'video') => void;
+  endCall: () => void;
+}
+
+const CallContext = createContext<CallContextType | null>(null);
+
+export const useCallContext = () => {
+  const context = useContext(CallContext);
+  if (!context) {
+    throw new Error('useCallContext must be used within a CallProvider');
   }
   return context;
 };
@@ -190,7 +209,12 @@ function useIncomingCalls() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         const callDoc = snapshot.docs[0];
-        setIncomingCall({ id: callDoc.id, ...callDoc.data() } as Call);
+        const callData = { id: callDoc.id, ...callDoc.data() } as Call;
+
+        // If the call is already being handled, don't set it again
+        if (incomingCall?.id !== callData.id) {
+           setIncomingCall(callData);
+        }
       } else {
         setIncomingCall(null);
       }
@@ -199,11 +223,14 @@ function useIncomingCalls() {
     });
 
     return () => unsubscribe();
-  }, [user, firestore, authLoading]);
+  }, [user, firestore, authLoading, incomingCall?.id]);
 
-  const clearIncomingCall = () => setIncomingCall(null);
 
-  return { incomingCall, clearIncomingCall };
+  const handleCallRemotely = useCallback(() => {
+      setIncomingCall(null);
+  }, []);
+  
+  return { incomingCall, handleCallRemotely };
 }
 
 
@@ -225,7 +252,7 @@ export default function ChatAppLayout({
   const { toast } = useToast();
   
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
-  const { incomingCall, clearIncomingCall } = useIncomingCalls();
+  const { incomingCall, handleCallRemotely } = useIncomingCalls();
 
   const handleAccountDisabled = useCallback(() => {
     setAccountDisabled(true);
@@ -416,8 +443,9 @@ export default function ChatAppLayout({
         </AlertDialog>
 
         {incomingCall && (
-            <IncomingCall call={incomingCall} onHandled={clearIncomingCall} />
+            <IncomingCall call={incomingCall} onHandled={handleCallRemotely} />
         )}
+       
 
       <div className="flex h-screen bg-background">
         <SidebarProvider>
