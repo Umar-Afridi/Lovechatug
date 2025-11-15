@@ -1,6 +1,7 @@
 'use client';
 import { initializeFirebase } from '.';
 import { FirebaseProvider } from './provider';
+import React from 'react';
 
 // This provider is used to initialize Firebase on the client side.
 // It should be used as a wrapper around the root of the application.
@@ -10,10 +11,11 @@ export function FirebaseClientProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { app, auth, firestore } = initializeFirebase();
+  // Memoize the initialization to prevent re-running on every render.
+  const firebaseInstances = React.useMemo(() => initializeFirebase(), []);
 
   return (
-    <FirebaseProvider app={app} auth={auth} firestore={firestore}>
+    <FirebaseProvider {...firebaseInstances}>
       {children}
     </FirebaseProvider>
   );

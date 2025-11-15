@@ -24,9 +24,9 @@ export function FirebaseProvider({
   firestore 
 }: { 
   children: ReactNode,
-  app: FirebaseApp | null,
-  auth: Auth | null,
-  firestore: Firestore | null,
+  app: FirebaseApp,
+  auth: Auth,
+  firestore: Firestore,
 }) {
   return (
     <FirebaseContext.Provider value={{ app, auth, firestore }}>
@@ -46,7 +46,7 @@ export function useFirebase() {
 
 export function useFirebaseApp() {
   const context = useContext(FirebaseContext);
-  if (context === undefined) {
+  if (context === undefined || !context.app) {
     throw new Error('useFirebaseApp must be used within a FirebaseProvider');
   }
   return context.app;
@@ -54,7 +54,7 @@ export function useFirebaseApp() {
 
 export function useAuth() {
   const context = useContext(FirebaseContext);
-  if (context === undefined) {
+  if (context === undefined || !context.auth) {
     throw new Error('useAuth must be used within a FirebaseProvider');
   }
   return context.auth;
@@ -62,7 +62,7 @@ export function useAuth() {
 
 export function useFirestore() {
   const context = useContext(FirebaseContext);
-  if (context === undefined) {
+  if (context === undefined || !context.firestore) {
     throw new Error('useFirestore must be used within a FirebaseProvider');
   }
   return context.firestore;
