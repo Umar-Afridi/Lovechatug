@@ -42,6 +42,7 @@ import {
   Volume2,
   VolumeX,
   PhoneOff,
+  View,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -53,6 +54,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
@@ -67,6 +69,7 @@ import {
 import type { Room, RoomMember, UserProfile, RoomMessage } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { OfficialBadge } from '@/components/ui/official-badge';
+import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 
 
 const MIC_SLOTS = 8;
@@ -90,6 +93,8 @@ export default function RoomPage() {
   const [message, setMessage] = useState('');
   
   const [isDeafened, setIsDeafened] = useState(false);
+  const [isContactSheetOpen, setContactSheetOpen] = useState(false);
+  const [viewedProfile, setViewedProfile] = useState<UserProfile | null>(null);
 
   const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick', targetMember?: RoomMember | null }>({ isOpen: false, action: null });
   
@@ -170,16 +175,19 @@ export default function RoomPage() {
     const joinRoom = async () => {
         const memberDoc = await getDoc(memberRef);
         if (!memberDoc.exists()) {
-            let initialMicSlot = null;
+            let initialMicSlot: number | null = null;
             if (isOwner) {
                 initialMicSlot = OWNER_SLOT;
             } else if (userProfile?.officialBadge?.isOfficial) {
                 initialMicSlot = SUPER_ADMIN_SLOT;
             }
-            await writeBatch(firestore)
-                .set(memberRef, { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true })
-                .update(roomRef, { memberCount: increment(1) })
-                .commit();
+            
+            const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
+
+            const batch = writeBatch(firestore);
+            batch.set(memberRef, memberData);
+            batch.update(roomRef, { memberCount: increment(1) });
+            await batch.commit();
         }
     };
     joinRoom();
@@ -266,6 +274,21 @@ export default function RoomPage() {
   const ownerMember = useMemo(() => members.find(m => m.micSlot === OWNER_SLOT), [members]);
   const superAdminMember = useMemo(() => members.find(m => m.micSlot === SUPER_ADMIN_SLOT), [members]);
   
+  const handleViewProfile = (profile: UserProfile) => {
+    setViewedProfile(profile);
+    setContactSheetOpen(true);
+  };
+  
+  const handleToggleLock = async (slotNumber: number) => {
+    if (!isOwner) return;
+    const roomRef = doc(firestore, 'rooms', roomId);
+    if (room?.lockedSlots?.includes(slotNumber)) {
+        await updateDoc(roomRef, { lockedSlots: arrayRemove(slotNumber) });
+    } else {
+        await updateDoc(roomRef, { lockedSlots: arrayUnion(slotNumber) });
+    }
+  };
+
 
   if (!room || !authUser) {
     return (
@@ -282,46 +305,21 @@ export default function RoomPage() {
         const isLocked = !isSpecial && room?.lockedSlots?.includes(slotNumber);
         const isSelf = memberInSlot?.userId === authUser.uid;
         
-        const isClickable = !isSpecial && (isOwner || isSelf || (!memberInSlot && !isLocked));
-
-        const handleClick = async () => {
-            if (!isClickable) return;
+        const handleTakeSeat = async () => {
             if (!currentUserSlot) return;
-
             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-
-            if (memberInSlot) { // Slot is occupied
-                if (isSelf) { // It's me
-                    // Taking myself off the mic
-                    await updateDoc(memberRef, { micSlot: null });
-                } else if (isOwner) { // I'm the owner, clicking on someone else
-                    setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot });
-                }
-            } else { // Slot is empty and not locked
-                // Moving to this new slot
-                 await updateDoc(memberRef, { micSlot: slotNumber });
-            }
+            await updateDoc(memberRef, { micSlot: slotNumber });
         };
         
-        const handleToggleLock = async (e: React.MouseEvent) => {
-            e.stopPropagation();
-            if (!isOwner || isSpecial) return;
-            const roomRef = doc(firestore, 'rooms', roomId);
-            if (isLocked) {
-                await updateDoc(roomRef, { lockedSlots: arrayRemove(slotNumber) });
-            } else {
-                await updateDoc(roomRef, { lockedSlots: arrayUnion(slotNumber) });
-            }
-        };
-
-        const baseClasses = "relative flex flex-col items-center justify-center space-y-1 group";
-        const slotType = memberInSlot ? 'occupied' : 'empty';
-
-        return (
-            <div
-                key={isSpecial ? specialLabel : slotNumber}
-                className={cn(baseClasses, isClickable && "cursor-pointer")}
-                onClick={handleClick}
+        const handleLeaveSeat = async () => {
+            if (!currentUserSlot) return;
+            const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+            await updateDoc(memberRef, { micSlot: null });
+        }
+        
+        const content = (
+             <div
+                className={cn("relative flex flex-col items-center justify-center space-y-1 group")}
             >
                 <div className={cn("relative h-20 w-20 rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
                                   memberInSlot ? "ring-2 ring-offset-2 ring-offset-background" : "border-2 border-dashed border-muted-foreground/50",
@@ -353,11 +351,6 @@ export default function RoomPage() {
                          {specialLabel === "OWNER" ? <Crown className="h-5 w-5 text-yellow-500"/> : <Shield className="h-5 w-5 text-purple-500"/> }
                        </div>
                     )}
-                     {isOwner && !isSpecial && (
-                        <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={handleToggleLock}>
-                            {isLocked ? <Unlock className="h-4 w-4 text-primary" /> : <Lock className="h-4 w-4 text-muted-foreground" />}
-                        </Button>
-                    )}
                 </div>
                  <div className="h-5 flex items-center justify-center">
                     {profile ? (
@@ -370,10 +363,59 @@ export default function RoomPage() {
                 </div>
             </div>
         )
+        
+        if (isSpecial) return <div key={specialLabel}>{content}</div>
+        
+        return (
+            <DropdownMenu key={slotNumber}>
+                <DropdownMenuTrigger asChild>
+                    <div className="cursor-pointer">{content}</div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  {isOwner && memberInSlot && !isSelf && (
+                        <>
+                           <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })}>
+                                <UserX className="mr-2 h-4 w-4"/> Kick User
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => profile && handleViewProfile(profile)}>
+                                <View className="mr-2 h-4 w-4"/> View Profile
+                            </DropdownMenuItem>
+                        </>
+                    )}
+                    
+                    {isOwner && !memberInSlot && (
+                        <>
+                           <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
+                                {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
+                                {isLocked ? 'Unlock Mic' : 'Lock Mic'}
+                            </DropdownMenuItem>
+                        </>
+                    )}
+
+                    {!isOwner && !memberInSlot && !isLocked && (
+                         <DropdownMenuItem onClick={handleTakeSeat}>
+                            <Mic className="mr-2 h-4 w-4"/> Take Seat
+                         </DropdownMenuItem>
+                    )}
+                    
+                    {isSelf && slotNumber !== currentUserSlot?.micSlot && (
+                         <DropdownMenuItem onClick={handleLeaveSeat}>
+                            <MicOff className="mr-2 h-4 w-4"/> Leave Seat
+                         </DropdownMenuItem>
+                    )}
+
+                </DropdownMenuContent>
+            </DropdownMenu>
+        )
     }
 
   return (
     <>
+      <ContactProfileSheet 
+          isOpen={isContactSheetOpen} 
+          onOpenChange={setContactSheetOpen}
+          userProfile={viewedProfile}
+      />
       <AlertDialog open={dialogState.isOpen} onOpenChange={(isOpen) => !isOpen && setDialogState({ isOpen: false, action: null })}>
         <AlertDialogContent>
           <AlertDialogHeader>
