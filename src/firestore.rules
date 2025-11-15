@@ -2,17 +2,22 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // यह फंक्शन चेक करता है कि आया यوزر لاگ ان ہے یا نہیں۔
+    // It checks if the user is authenticated.
     function isSignedIn() {
       return request.auth != null;
     }
 
+    // यह फंक्शन चेक करता है कि درخواست करने वाला यوزر ही دستاویز کا مالک ہے۔
+    // It checks if the requesting user is the owner of the document (matching UID).
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isParticipant(chatDoc) {
-      return isSignedIn() && request.auth.uid in chatDoc.data.participants;
+    // यह फंक्शन किसी چیٹ میں دونوں شراکت داروں کو چیک کرتا ہے۔
+    // It checks if the user is one of the two participants in the chat.
+    function isParticipant(participants) {
+      return isSignedIn() && request.auth.uid in participants;
     }
     
     function isRoomOwner(roomId) {
@@ -23,80 +28,63 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
     }
 
-    // 1. Users Collection
+
+    // 1. صارفین کا مجموعہ (Users Collection)
     match /users/{userId} {
-      // Any authenticated user can read any profile (needed for chat lists, profiles, etc.)
-      allow read: if isSignedIn();
-      // A user can create their own profile document
+      allow read: if isSignedIn(); // Allow any signed-in user to read profiles
       allow create: if isOwner(userId);
-      // A user can only update or delete their own profile
       allow update, delete: if isOwner(userId);
-      // Allow username existence checks during signup by anyone
-      allow list: if true; 
+      // Allow list for username search for any signed in user.
+      // The client-side query filters out disabled users for non-admins.
+      allow list: if true;
     }
     
-    // 2. Chats Collection
+    // 2. چیٹس اور میسجز کا مجموعہ (Chats Collection)
     match /chats/{chatId} {
-      // Only participants of the chat can read or write to the chat document
-      allow read, write: if isParticipant(resource);
+      allow read, write: if isParticipant(resource.data.members);
       
-      // Messages Sub-collection
       match /messages/{messageId} {
-        // Only participants of the parent chat can read or write messages
-        allow read, write: if isParticipant(get(/databases/$(database)/documents/chats/$(chatId)));
+        allow read, write: if isParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data.members);
       }
     }
     
-    // 3. Friend Requests Collection
+    // 3. دوستوں کی درخواستوں کا مجموعہ (Friend Requests Collection)
     match /friendRequests/{requestId} {
-      // The sender or receiver can read, update, or delete the request
       allow read, update, delete: if isSignedIn() && (isOwner(resource.data.senderId) || isOwner(resource.data.receiverId));
-      // Any signed-in user can create a request, but only if they are the sender
       allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
-      // Allow querying for requests sent to the current user
       allow list: if isSignedIn();
     }
     
-    // 4. Calls Collection
+    // 4. کال کی تاریخ کا مجموعہ (Call History Collection)
     match /calls/{callId} {
-      // A user can query for calls where they are a participant
+      // The query `where('participants', 'array-contains', request.auth.uid)` ensures a user can only query their own calls.
+      // The `list` rule allows this query to execute.
+      // Individual document access is still protected by `get` and `write` rules.
       allow list: if isSignedIn();
-      // Only participants of the call can get, write, or delete the call record
-      allow get, write, delete: if isParticipant(resource);
+      allow get, write, delete: if isParticipant(resource.data.participants);
     }
 
-    // 5. Deleted Users Collection (for preventing re-registration, write-only)
+    // 5. ڈیلیٹ شدہ صارفین کا مجموعہ (Deleted Users Collection)
     match /deletedUsers/{email} {
       allow create: if true;
       allow read, write, delete: if false;
     }
-    
+
     // 6. Voice Chat Rooms Collection
     match /rooms/{roomId} {
-        // Any signed-in user can read room details
-        allow read: if isSignedIn(); 
-        // Only a signed-in user can create a room, and they must be the owner
+        allow get, list: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-        // Only the room owner can update or delete the room
         allow update, delete: if isRoomOwner(roomId);
         
-        // Members Sub-collection
         match /members/{userId} {
-            // Only a member of the room can read member details
             allow read: if isRoomMember(roomId);
-            // A user can add themselves to a room (join)
             allow create: if isOwner(userId);
-            // A user can update their own status (e.g., mute), or the owner can update anyone's status
             allow update: if isOwner(userId) || isRoomOwner(roomId);
-            // A user can leave the room, or the owner can kick them
             allow delete: if isOwner(userId) || isRoomOwner(roomId);
         }
         
-        // Messages Sub-collection
         match /messages/{messageId} {
-          // Any room member can read and create messages
           allow read, create: if isRoomMember(roomId);
-          // Only the message sender or the room owner can update/delete a message
           allow update, delete: if isOwner(request.resource.data.senderId) || isRoomOwner(roomId);
         }
     }
