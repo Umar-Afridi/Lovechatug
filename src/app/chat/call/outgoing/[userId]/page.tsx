@@ -1,11 +1,10 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, getDoc, onSnapshot, updateDoc, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, deleteDoc, collection, addDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { PhoneOff } from 'lucide-react';
@@ -50,7 +49,10 @@ export default function OutgoingCallPage() {
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => {
+      stop();
+      unsubscribe();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, otherUserId]);
 
@@ -64,26 +66,11 @@ export default function OutgoingCallPage() {
         setCallData(data);
         if (data.status === 'declined' || data.status === 'missed') {
             stop();
-            const chatId = [data.callerId, data.receiverId].sort().join('_');
-            const messagesRef = collection(firestore, `chats/${chatId}/messages`);
-            addDoc(messagesRef, {
-                senderId: data.callerId,
-                type: 'call',
-                content: 'Call not answered',
-                timestamp: serverTimestamp(),
-                status: 'sent',
-                callInfo: {
-                    type: data.type,
-                    duration: '0s',
-                    status: 'missed'
-                }
-            }).finally(() => {
-                 setTimeout(() => {
-                    deleteDoc(callDocRef).finally(() => {
-                        endCall();
-                    });
-                 }, 2000);
-            });
+            // The call document will be deleted by the receiver or a timeout,
+            // we just need to end the call on the caller's side.
+            setTimeout(() => {
+                endCall();
+            }, 1500); // Give user time to see the status
         } else if (data.status === 'answered') {
           stop();
           // The layout will now handle showing the active call screen
@@ -105,17 +92,19 @@ export default function OutgoingCallPage() {
 
   const handleHangUp = useCallback(async () => {
     stop();
+    // Use the callId from the context which should be reliable
     if (!firestore || !callId) {
       endCall(); 
       return;
     }
     const callDocRef = doc(firestore, 'calls', callId);
     try {
+       // Deleting the doc is the signal for all parties to end the call
        await deleteDoc(callDocRef);
     } catch (error) {
       console.warn("Could not delete call doc, it might already be gone:", error);
     } finally {
-       endCall(); // Immediately update UI state
+       endCall(); // This will unmount the component
     }
   }, [stop, endCall, firestore, callId]);
   
