@@ -148,6 +148,8 @@ export default function FriendsPage() {
               photoURL: friendUserProfile?.photoURL || request.fromUser.photoURL,
             },
           },
+           unreadCount: { [user.uid]: 0, [request.senderId]: 0 },
+           typing: { [user.uid]: false, [request.senderId]: false }
         });
 
         batch.delete(requestRef);

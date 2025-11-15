@@ -226,6 +226,9 @@ export default function ChatIdPage({
             setCurrentUser(data);
             setHaveIBlocked(data.blockedUsers?.includes(otherUserIdFromParams) ?? false);
         }
+    }, (error) => {
+      const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' });
+      errorEmitter.emit('permission-error', permissionError);
     });
 
     const unsubOtherUser = onSnapshot(doc(firestore, 'users', otherUserIdFromParams), (docSnap) => {
@@ -234,6 +237,9 @@ export default function ChatIdPage({
             setOtherUser(otherUserData);
             setAmIBlocked(otherUserData.blockedUsers?.includes(authUser.uid) ?? false);
         }
+    }, (error) => {
+        const permissionError = new FirestorePermissionError({ path: `users/${otherUserIdFromParams}`, operation: 'get' });
+        errorEmitter.emit('permission-error', permissionError);
     });
 
     return () => {
@@ -257,6 +263,8 @@ export default function ChatIdPage({
           }
       }, (error) => {
           console.error("Error listening to chat document:", error);
+           const permissionError = new FirestorePermissionError({ path: chatRef.path, operation: 'get' });
+           errorEmitter.emit('permission-error', permissionError);
       });
 
       return () => unsubscribe();
