@@ -26,9 +26,7 @@ import {
   setDoc,
 } from 'firebase/firestore';
 import {
-  ArrowLeft,
   Crown,
-  DoorOpen,
   Lock,
   Mic,
   MicOff,
@@ -47,14 +45,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
@@ -101,8 +97,6 @@ export default function RoomPage() {
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
-  const chatViewportRef = useRef<HTMLDivElement>(null);
-
 
   // --- Main Data Fetching and Room Joining Logic ---
   useEffect(() => {
@@ -157,9 +151,9 @@ export default function RoomPage() {
 
     // Listener for messages
     const messagesRef = collection(firestore, 'rooms', roomId, 'messages');
-    const qMessages = query(messagesRef, orderBy('timestamp', 'asc'), limit(50));
+    const qMessages = query(messagesRef, orderBy('timestamp', 'desc'), limit(10)); // Fetch latest 10
     const unsubMessages = onSnapshot(qMessages, (snapshot) => {
-        const msgs = snapshot.docs.map(d => ({id: d.id, ...d.data()} as RoomMessage));
+        const msgs = snapshot.docs.map(d => ({id: d.id, ...d.data()} as RoomMessage)).reverse(); // reverse to show oldest first
         setMessages(msgs);
     });
 
@@ -217,12 +211,6 @@ export default function RoomPage() {
       contextLeaveRoom();
     };
   }, [firestore, roomId, authUser?.uid, setMemberProfiles, memberProfiles, setCurrentRoom, toast, router, contextLeaveRoom]);
-
-    useEffect(() => {
-        if (chatViewportRef.current) {
-            chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
-        }
-    }, [messages]);
 
   // --- User Actions ---
   
@@ -347,9 +335,7 @@ export default function RoomPage() {
         }
         
         const content = (
-             <div
-                className={cn("relative flex flex-col items-center justify-center space-y-1 group")}
-            >
+             <div className="relative flex flex-col items-center justify-center space-y-1 group">
                 <div className={cn("relative h-20 w-20 rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
                                   memberInSlot ? "ring-2 ring-offset-2 ring-offset-background" : "border-2 border-dashed border-muted-foreground/50",
                                   memberInSlot && memberInSlot.isMuted ? "ring-destructive" : "ring-primary",
@@ -466,31 +452,33 @@ export default function RoomPage() {
     }
     
     const renderMessage = (msg: RoomMessage) => {
-        if (msg.type === 'notification') {
-            return <p className="text-center text-xs text-muted-foreground italic">{msg.content}</p>;
-        }
-        
         const senderProfile = memberProfiles[msg.senderId];
+        const isNotification = msg.type === 'notification';
 
         return (
-            <div className="flex items-start gap-2">
-                <Avatar className="h-8 w-8 cursor-pointer" onClick={() => handleViewProfile(msg.senderId)}>
-                    <AvatarImage src={msg.senderPhotoURL} />
-                    <AvatarFallback>{getInitials(msg.senderName)}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                         <span 
-                            className={cn("font-bold text-sm cursor-pointer", senderProfile?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}
-                            onClick={() => handleViewProfile(msg.senderId)}
-                         >
-                            {msg.senderName}
-                         </span>
-                         {senderProfile?.verifiedBadge?.showBadge && <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} />}
-                         {senderProfile?.officialBadge?.isOfficial && <OfficialBadge color={senderProfile.officialBadge.badgeColor} size="icon" className="h-4 w-4" />}
+            <div 
+                key={msg.id}
+                className={cn("animate-in fade-in slide-in-from-bottom-2 duration-300", isNotification && "text-center")}
+            >
+                {isNotification ? (
+                    <p className="text-xs text-muted-foreground italic bg-black/20 rounded-full px-3 py-1 inline-block">{msg.content}</p>
+                ) : (
+                    <div className="flex items-start gap-2 text-left">
+                        <Avatar className="h-6 w-6 cursor-pointer" onClick={() => handleViewProfile(msg.senderId)}>
+                            <AvatarImage src={msg.senderPhotoURL} />
+                            <AvatarFallback className="text-xs">{getInitials(msg.senderName)}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 text-sm">
+                           <span 
+                                className={cn("font-bold cursor-pointer pr-2", senderProfile?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}
+                                onClick={() => handleViewProfile(msg.senderId)}
+                            >
+                                {msg.senderName}:
+                           </span>
+                           <span className="text-white break-words">{msg.content}</span>
+                        </div>
                     </div>
-                    <p className="text-sm text-foreground/90">{msg.content}</p>
-                </div>
+                )}
             </div>
         );
     }
@@ -528,7 +516,7 @@ export default function RoomPage() {
       </AlertDialog>
 
       <div className="flex h-screen flex-col bg-gray-100 dark:bg-gray-900">
-        <header className="flex items-center justify-between gap-4 border-b p-3 bg-background shadow-sm">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b p-3 bg-background shadow-sm">
           <div className="flex items-center gap-2 overflow-hidden">
             <Avatar className="h-10 w-10">
                 <AvatarImage src={room.photoURL} />
@@ -558,25 +546,23 @@ export default function RoomPage() {
           </div>
         </header>
         
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-            <div className="flex justify-center items-center gap-x-4">
-                {renderSlot(OWNER_SLOT, true, "OWNER")}
-                {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
-            </div>
+        <div className="flex-1 overflow-hidden relative">
+            <div className="absolute inset-0 overflow-y-auto p-4 md:p-6 space-y-6">
+                <div className="grid grid-cols-4 gap-x-4 gap-y-2">
+                    <div className="col-start-2">{renderSlot(OWNER_SLOT, true, "OWNER")}</div>
+                    <div className="col-start-3">{renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}</div>
+                </div>
 
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: MIC_SLOTS }).map((_, i) => renderSlot(i + 1))}
+                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                    {Array.from({ length: MIC_SLOTS }).map((_, i) => renderSlot(i + 1))}
+                </div>
             </div>
-
-             <ScrollArea className="h-48 mt-4 rounded-md border p-2 bg-background/50" viewportRef={chatViewportRef}>
-                 <div className="p-2 space-y-3">
-                    {messages.map((msg) => (
-                        <div key={msg.id}>
-                           {renderMessage(msg)}
-                        </div>
-                    ))}
+            
+            <div className="absolute bottom-0 left-0 right-0 h-1/2 p-4 flex flex-col justify-end pointer-events-none">
+                 <div className="space-y-2 overflow-hidden [mask-image:linear-gradient(to_top,black_20%,transparent_100%)]">
+                    {messages.map(renderMessage)}
                  </div>
-             </ScrollArea>
+            </div>
         </div>
 
          <footer className="shrink-0 border-t bg-background p-3">
