@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Function to check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Function to check if the requesting user is the owner of the resource
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Rules for chat media
+    match /chats/{chatId}/{fileName} {
+      // Allow authenticated users to upload files if they are members of the chat.
+      // For simplicity, we are only checking for authentication for now.
+      // We also restrict the file type to common audio formats.
+      allow write: if isAuthenticated() && 
+                    (request.resource.contentType.matches('audio/webm') || 
+                     request.resource.contentType.matches('audio/mp4') ||
+                     request.resource.contentType.matches('audio/ogg'));
+
+      // Allow authenticated users to read files. In a real app, you'd restrict
+      // this to members of the chat.
+      allow read: if isAuthenticated();
+    }
+    
+    // Rules for user profile pictures
+    match /profile-pictures/{userId} {
+      // Allow read access to anyone (profile pictures are public)
+      allow read: if true;
+      // Allow write (create, update, delete) only by the owner of the profile
+      allow write: if isOwner(userId);
+    }
+
+     // Rules for room avatars
+    match /room-avatars/{fileName} {
+      // Allow read access to anyone
+      allow read: if true;
+      // Allow write access only to authenticated users (e.g., room owners)
+      allow write: if isAuthenticated();
+    }
+  }
+}
