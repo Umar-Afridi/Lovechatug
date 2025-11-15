@@ -59,7 +59,7 @@ export type Chat = {
     content: string;
     timestamp: any; // Firestore ServerTimestamp
     senderId: string;
-  };
+  } | null;
   participantDetails?: {
     [key: string]: {
         displayName: string;

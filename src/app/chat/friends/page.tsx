@@ -107,8 +107,15 @@ export default function FriendsPage() {
     try {
         const batch = writeBatch(firestore);
 
-        batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
-        batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
+        // Add each other to friends lists and add the chatId to both user profiles
+        batch.update(currentUserRef, { 
+            friends: arrayUnion(request.senderId),
+            chatIds: arrayUnion(chatId) 
+        });
+        batch.update(friendUserRef, { 
+            friends: arrayUnion(user.uid),
+            chatIds: arrayUnion(chatId)
+        });
         
         const chatSnap = await getDocNonRealTime(chatRef);
         if (!chatSnap.exists()) {
