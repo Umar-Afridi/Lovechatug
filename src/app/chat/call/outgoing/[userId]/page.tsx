@@ -16,8 +16,8 @@ import { useCallContext } from '@/app/chat/layout';
 export default function OutgoingCallPage() {
   const params = useParams();
   const otherUserId = params.userId as string;
-  const callId = params.callId as string | undefined;
-  const { endCall } = useCallContext();
+  const { outgoingCall, endCall } = useCallContext();
+  const callId = outgoingCall?.callId;
 
   const { user: authUser } = useUser();
   const firestore = useFirestore();
