@@ -23,6 +23,7 @@ import {
   increment,
   getDocs,
   where,
+  setDoc,
 } from 'firebase/firestore';
 import {
   ArrowLeft,
@@ -236,7 +237,8 @@ export default function RoomPage() {
   const handleToggleMute = async () => {
     if (!firestore || !authUser || !currentUserSlot) return;
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-    await updateDoc(memberRef, { isMuted: !isMuted });
+    // Use set with merge to prevent error if doc doesn't exist yet
+    await setDoc(memberRef, { isMuted: !isMuted }, { merge: true });
   };
 
   const handleSendMessage = async () => {
