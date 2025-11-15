@@ -84,8 +84,7 @@ export default function RoomPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
   const { setCurrentRoom, leaveCurrentRoom: contextLeaveRoom } = useRoomContext();
-  const [isMounted, setIsMounted] = useState(false);
-
+  
   const [room, setRoom] = useState<Room | null>(null);
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [memberProfiles, setMemberProfiles] = useState<Record<string, UserProfile>>({});
@@ -102,11 +101,11 @@ export default function RoomPage() {
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
 
-
+  // --- Main Data Fetching and Room Joining Logic ---
   useEffect(() => {
-    setIsMounted(true);
     if (!firestore || !roomId || !authUser) return;
 
+    // Listener for the main room document
     const roomRef = doc(firestore, 'rooms', roomId);
     const unsubRoom = onSnapshot(roomRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -121,8 +120,12 @@ export default function RoomPage() {
         toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
         router.push('/chat/rooms');
       }
+    }, (error) => {
+      console.error("Error fetching room:", error);
+      router.push('/chat/rooms');
     });
 
+    // Listener for the members subcollection
     const membersRef = collection(firestore, 'rooms', roomId, 'members');
     const qMembers = query(membersRef);
     const unsubMembers = onSnapshot(qMembers, async (snapshot) => {
@@ -139,7 +142,7 @@ export default function RoomPage() {
 
             const newProfiles: Record<string, UserProfile> = {};
             for (const chunk of chunks) {
-                 const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
+                const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
                 const profilesSnapshot = await getDocs(profilesQuery);
                 profilesSnapshot.forEach(doc => {
                     newProfiles[doc.id] = doc.data() as UserProfile;
@@ -149,6 +152,7 @@ export default function RoomPage() {
         }
     });
 
+    // Listener for messages
     const messagesRef = collection(firestore, 'rooms', roomId, 'messages');
     const qMessages = query(messagesRef, orderBy('timestamp', 'desc'), limit(50));
     const unsubMessages = onSnapshot(qMessages, (snapshot) => {
@@ -156,27 +160,19 @@ export default function RoomPage() {
         setMessages(msgs);
     });
 
-    return () => {
-      unsubRoom();
-      unsubMembers();
-      unsubMessages();
-      contextLeaveRoom();
-    };
-  }, [firestore, roomId, authUser?.uid, toast, router, setCurrentRoom, contextLeaveRoom]);
-
-   useEffect(() => {
-    if (!firestore || !authUser || !room || !isMounted || !memberProfiles[authUser.uid]) return;
-
-    const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-    const roomRef = doc(firestore, 'rooms', roomId);
-    
-    const userProfile = memberProfiles[authUser.uid];
-
+    // Join room logic
     const joinRoom = async () => {
+        const userProfileDoc = await getDoc(doc(firestore, 'users', authUser.uid));
+        if (!userProfileDoc.exists()) return;
+        const userProfile = userProfileDoc.data() as UserProfile;
+
+        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+        const roomRef = doc(firestore, 'rooms', roomId);
+        
         const memberDoc = await getDoc(memberRef);
         if (!memberDoc.exists()) {
             let initialMicSlot: number | null = null;
-            if (isOwner) {
+            if (roomRef.id === authUser.uid) { // simplified isOwner check for join
                 initialMicSlot = OWNER_SLOT;
             } else if (userProfile?.officialBadge?.isOfficial) {
                 initialMicSlot = SUPER_ADMIN_SLOT;
@@ -190,41 +186,51 @@ export default function RoomPage() {
             await batch.commit();
         }
     };
+    
     joinRoom();
 
+    // Cleanup listeners on component unmount
     return () => {
-      const leave = async () => {
-        if (firestore && authUser && roomId) {
-            const memberRefOnLeave = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-            const roomRefOnLeave = doc(firestore, 'rooms', roomId);
-             try {
-                const memberDoc = await getDoc(memberRefOnLeave);
-                if (memberDoc.exists()) {
-                    await writeBatch(firestore)
-                        .delete(memberRefOnLeave)
-                        .update(roomRefOnLeave, { memberCount: increment(-1) })
-                        .commit();
-                }
-             } catch(e) {
-                console.warn("Could not update member count on leave, room might be deleted.", e);
-             }
-        }
-      };
-      leave();
+      unsubRoom();
+      unsubMembers();
+      unsubMessages();
+      contextLeaveRoom();
     };
-  }, [firestore, authUser, roomId, room, isMounted, isOwner, memberProfiles]);
+  }, [firestore, roomId, authUser?.uid]);
 
+  // --- User Actions ---
+  
+  const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
+    if (!firestore || !authUser) return;
 
-  const handleLeaveRoom = async () => {
+    const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+    const roomRef = doc(firestore, 'rooms', roomId);
+
+    try {
+        const memberDoc = await getDoc(memberRef);
+        if (memberDoc.exists()) {
+            const batch = writeBatch(firestore);
+            batch.delete(memberRef);
+            // Only decrement count if not part of a room deletion
+            if (!isKickOrDelete) { 
+                batch.update(roomRef, { memberCount: increment(-1) });
+            }
+            await batch.commit();
+        }
+    } catch(e) {
+        console.warn("Could not leave room properly, room might be deleted.", e);
+    }
     router.push('/chat/rooms');
-  };
+  }, [firestore, authUser, roomId, router]);
 
   const handleDeleteRoom = async () => {
      if (!firestore || !isOwner || !room) return;
     try {
+        // First, signal to handleLeave that this is part of a delete operation
+        await handleLeaveRoom(true); 
         await deleteDoc(doc(firestore, 'rooms', room.id));
         toast({ title: 'Room Deleted', description: 'The room has been successfully deleted.' });
-        router.push('/chat/rooms');
+        // router push is handled in handleLeaveRoom
     } catch(e) {
         console.error("Error deleting room", e);
         toast({ title: 'Error', description: 'Failed to delete the room.', variant: 'destructive' });
@@ -251,6 +257,7 @@ export default function RoomPage() {
   const handleToggleMute = async () => {
     if (!firestore || !authUser || !currentUserSlot) return;
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+    // Use set with merge to create the document if it somehow doesn't exist yet
     await setDoc(memberRef, { isMuted: !isMuted }, { merge: true });
   };
 
@@ -271,18 +278,15 @@ export default function RoomPage() {
   
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : '?';
   
-  const ownerMember = useMemo(() => members.find(m => m.micSlot === OWNER_SLOT), [members]);
-  const superAdminMember = useMemo(() => members.find(m => m.micSlot === SUPER_ADMIN_SLOT), [members]);
-  
   const handleViewProfile = (profile: UserProfile) => {
     setViewedProfile(profile);
     setContactSheetOpen(true);
   };
   
   const handleToggleLock = async (slotNumber: number) => {
-    if (!isOwner) return;
+    if (!isOwner || !room) return;
     const roomRef = doc(firestore, 'rooms', roomId);
-    if (room?.lockedSlots?.includes(slotNumber)) {
+    if (room.lockedSlots?.includes(slotNumber)) {
         await updateDoc(roomRef, { lockedSlots: arrayRemove(slotNumber) });
     } else {
         await updateDoc(roomRef, { lockedSlots: arrayUnion(slotNumber) });
@@ -290,7 +294,7 @@ export default function RoomPage() {
   };
 
 
-  if (!room || !authUser) {
+  if (!room || !authUser || !currentUserSlot) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-900 text-white">
         <p>Joining room...</p>
@@ -368,7 +372,7 @@ export default function RoomPage() {
         
         return (
             <DropdownMenu key={slotNumber}>
-                <DropdownMenuTrigger asChild>
+                <DropdownMenuTrigger asChild disabled={!!memberInSlot && memberInSlot.userId !== authUser?.uid && !isOwner}>
                     <div className="cursor-pointer">{content}</div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
@@ -384,21 +388,19 @@ export default function RoomPage() {
                     )}
                     
                     {isOwner && !memberInSlot && (
-                        <>
-                           <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
-                                {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
-                                {isLocked ? 'Unlock Mic' : 'Lock Mic'}
-                            </DropdownMenuItem>
-                        </>
+                        <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
+                            {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
+                            {isLocked ? 'Unlock Mic' : 'Lock Mic'}
+                        </DropdownMenuItem>
                     )}
 
-                    {!isOwner && !memberInSlot && !isLocked && (
+                    {!memberInSlot && !isLocked && (
                          <DropdownMenuItem onClick={handleTakeSeat}>
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                          </DropdownMenuItem>
                     )}
                     
-                    {isSelf && slotNumber !== currentUserSlot?.micSlot && (
+                    {isSelf && slotNumber === currentUserSlot?.micSlot && currentUserSlot.micSlot > 0 && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
                          </DropdownMenuItem>
@@ -487,7 +489,7 @@ export default function RoomPage() {
 
         <footer className="shrink-0 border-t bg-background p-3 space-y-3">
              <div className="flex justify-center items-center gap-4">
-                 <Button variant={isMuted ? 'destructive' : 'secondary'} size="lg" className="rounded-full h-14 w-14" onClick={handleToggleMute}>
+                 <Button variant={isMuted ? 'destructive' : 'secondary'} size="lg" className="rounded-full h-14 w-14" onClick={handleToggleMute} disabled={currentUserSlot.micSlot === null}>
                     {isMuted ? <MicOff className="h-6 w-6"/> : <Mic className="h-6 w-6"/>}
                 </Button>
                  <Button variant={isDeafened ? 'destructive' : 'secondary'} size="lg" className="rounded-full h-14 w-14" onClick={() => setIsDeafened(!isDeafened)}>

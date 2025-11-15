@@ -32,13 +32,11 @@ export default function RoomsPage() {
 
     const unsubMyRooms = onSnapshot(q, (snapshot) => {
       let userRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
-      // If there are multiple rooms, prefer the official one.
       if (userRooms.length > 1) {
           const officialRoom = userRooms.find(r => r.ownerIsOfficial);
           if (officialRoom) {
               userRooms = [officialRoom];
           } else {
-              // Otherwise, just show the newest one.
               userRooms = [userRooms[0]];
           }
       }
@@ -50,16 +48,20 @@ export default function RoomsPage() {
     return () => unsubMyRooms();
   }, [firestore, user]);
 
-  // Fetch Public/Popular Rooms and exclude user's own room
+  // Fetch Public/Popular Rooms
   useEffect(() => {
     if (!firestore) return;
     setLoading(true);
     const roomsRef = collection(firestore, 'rooms');
-    const q = query(roomsRef, orderBy('memberCount', 'desc'), orderBy('createdAt', 'desc'));
+    const q = query(
+      roomsRef, 
+      where('memberCount', '>', 0), // Only show rooms with members
+      orderBy('memberCount', 'desc'), 
+      orderBy('createdAt', 'desc')
+    );
 
     const unsubPublicRooms = onSnapshot(q, (snapshot) => {
       const allRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
-      // Exclude the user's own room from the public list
       const myRoomIds = myRooms.map(room => room.id);
       const filteredPublicRooms = allRooms.filter(room => !myRoomIds.includes(room.id));
       
@@ -75,7 +77,6 @@ export default function RoomsPage() {
   
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'R';
   
-  // Filter public rooms based on search query
   const filteredRooms = publicRooms.filter(room => 
       room.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -118,7 +119,6 @@ export default function RoomsPage() {
 
   return (
     <div className="flex h-full flex-col bg-background">
-      {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <h1 className="text-xl font-bold">Voice Chat Rooms</h1>
         {myRooms.length === 0 && (
@@ -168,7 +168,6 @@ export default function RoomsPage() {
   );
 }
 
-// Helper for horizontal scrolling without visible scrollbar
 const style = document.createElement('style');
 style.innerHTML = `.scrollbar-hide::-webkit-scrollbar { display: none; } .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }`;
 document.head.appendChild(style);
