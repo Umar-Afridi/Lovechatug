@@ -13,7 +13,7 @@ export function FirebaseClientProvider({
   const { app, auth, firestore } = initializeFirebase();
 
   return (
-    <FirebaseProvider app={app} auth={auth} firestore={firestore}>
+    <FirebaseProvider>
       {children}
     </FirebaseProvider>
   );
