@@ -177,7 +177,7 @@ export default function RoomPage() {
                 initialMicSlot = SUPER_ADMIN_SLOT;
             }
             await writeBatch(firestore)
-                .set(memberRef, { userId: authUser.uid, micSlot: initialMicSlot, isMuted: false })
+                .set(memberRef, { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true })
                 .update(roomRef, { memberCount: increment(1) })
                 .commit();
         }
@@ -226,18 +226,23 @@ export default function RoomPage() {
   const handleKickUser = async (targetMember?: RoomMember | null) => {
     if (!firestore || !isOwner || !targetMember || targetMember.userId === authUser?.uid) return;
     const roomRef = doc(firestore, 'rooms', roomId);
-    await updateDoc(roomRef, { 
+    const memberRefToKick = doc(firestore, 'rooms', roomId, 'members', targetMember.userId);
+    
+    const batch = writeBatch(firestore);
+    batch.update(roomRef, { 
         [`kickedUsers.${targetMember.userId}`]: serverTimestamp(),
-        members: arrayRemove(targetMember.userId) // Also remove them from the members array
+        memberCount: increment(-1)
     });
-    // The onSnapshot listener for members will handle the UI update
+    batch.delete(memberRefToKick);
+
+    await batch.commit();
+    toast({title: "User Kicked", description: `${memberProfiles[targetMember.userId]?.displayName} has been removed.`})
     setDialogState({ isOpen: false, action: null });
   };
   
   const handleToggleMute = async () => {
     if (!firestore || !authUser || !currentUserSlot) return;
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-    // Use set with merge to prevent error if doc doesn't exist yet
     await setDoc(memberRef, { isMuted: !isMuted }, { merge: true });
   };
 
@@ -281,15 +286,19 @@ export default function RoomPage() {
 
         const handleClick = async () => {
             if (!isClickable) return;
+            if (!currentUserSlot) return;
+
             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
 
-            if (memberInSlot) {
-                if (isSelf) { 
+            if (memberInSlot) { // Slot is occupied
+                if (isSelf) { // It's me
+                    // Taking myself off the mic
                     await updateDoc(memberRef, { micSlot: null });
-                } else if (isOwner) { 
+                } else if (isOwner) { // I'm the owner, clicking on someone else
                     setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot });
                 }
-            } else { 
+            } else { // Slot is empty and not locked
+                // Moving to this new slot
                  await updateDoc(memberRef, { micSlot: slotNumber });
             }
         };
@@ -306,17 +315,12 @@ export default function RoomPage() {
         };
 
         const baseClasses = "relative flex flex-col items-center justify-center space-y-1 group";
-        const slotType = memberInSlot ? 'occupied' : isLocked ? 'locked' : 'empty';
-        const typeClasses = {
-            occupied: isSpecial ? '' : 'cursor-pointer',
-            locked: isOwner ? 'cursor-pointer' : 'cursor-not-allowed',
-            empty: isSpecial ? '' : 'cursor-pointer'
-        };
+        const slotType = memberInSlot ? 'occupied' : 'empty';
 
         return (
             <div
                 key={isSpecial ? specialLabel : slotNumber}
-                className={cn(baseClasses, typeClasses[slotType])}
+                className={cn(baseClasses, isClickable && "cursor-pointer")}
                 onClick={handleClick}
             >
                 <div className={cn("relative h-20 w-20 rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
@@ -325,17 +329,20 @@ export default function RoomPage() {
                                   isSelf && !isMuted && "talking-indicator",
                                   isSpecial && memberInSlot && "h-24 w-24",
                                   specialLabel === "OWNER" && "ring-yellow-500",
-                                  specialLabel === "SUPER" && "ring-purple-500"
+                                  specialLabel === "SUPER" && "ring-purple-500",
+                                  isLocked && "bg-muted-foreground/20"
                                   )}>
                     {profile ? (
                         <Avatar className="h-full w-full">
                             <AvatarImage src={profile.photoURL} />
                             <AvatarFallback className={cn("text-2xl", isSpecial && "text-4xl")}>{getInitials(profile.displayName)}</AvatarFallback>
                         </Avatar>
-                    ) : isLocked ? (
-                        <Lock className="h-8 w-8 text-muted-foreground"/>
                     ) : (
-                        <Mic className={cn("text-muted-foreground", isSpecial ? "h-10 w-10" : "h-8 w-8")}/>
+                         isLocked ? (
+                            <Lock className="h-8 w-8 text-muted-foreground"/>
+                        ) : (
+                            <Mic className={cn("text-muted-foreground", isSpecial ? "h-10 w-10" : "h-8 w-8")}/>
+                        )
                     )}
                     
                     {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
@@ -346,15 +353,21 @@ export default function RoomPage() {
                          {specialLabel === "OWNER" ? <Crown className="h-5 w-5 text-yellow-500"/> : <Shield className="h-5 w-5 text-purple-500"/> }
                        </div>
                     )}
+                     {isOwner && !isSpecial && (
+                        <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={handleToggleLock}>
+                            {isLocked ? <Unlock className="h-4 w-4 text-primary" /> : <Lock className="h-4 w-4 text-muted-foreground" />}
+                        </Button>
+                    )}
                 </div>
-                {profile ? <p className="text-sm font-medium truncate max-w-[80px] text-center">{profile.displayName}</p> : specialLabel ? null : <p className="h-5"></p>}
-                {specialLabel && <p className={cn("text-sm font-semibold", specialLabel === "OWNER" ? "text-yellow-500" : "text-purple-500")}>{specialLabel}</p>}
-
-                {isOwner && !memberInSlot && !isSpecial && (
-                    <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-6 w-6" onClick={handleToggleLock}>
-                        {isLocked ? <Unlock className="h-4 w-4 text-primary" /> : <Lock className="h-4 w-4 text-muted-foreground" />}
-                    </Button>
-                )}
+                 <div className="h-5 flex items-center justify-center">
+                    {profile ? (
+                         <p className="text-sm font-medium truncate max-w-[80px] text-center">{profile.displayName}</p>
+                    ) : specialLabel ? (
+                        <p className={cn("text-sm font-semibold", specialLabel === "OWNER" ? "text-yellow-500" : "text-purple-500")}>{specialLabel}</p>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">{slotNumber}</p>
+                    )}
+                </div>
             </div>
         )
     }
