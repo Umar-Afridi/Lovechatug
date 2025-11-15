@@ -381,6 +381,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                 batch.update(roomRef, { memberCount: increment(1) });
                 await batch.commit();
             } else if (roomData.ownerId === authUser.uid && memberDoc.data()?.micSlot !== 0) {
+                 // Ensure owner is always on slot 0 if they re-join
                  await updateDoc(memberRef, { micSlot: 0 });
             }
         };
@@ -388,7 +389,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         joinRoom();
 
         return () => {
-          // Leave room logic is handled by the layout context now
+          // Leave room logic is now handled by the layout context's unmount effect
         };
     }, [firestore, authUser, roomId, currentUserProfile, router, toast, setCurrentRoom]);
   
