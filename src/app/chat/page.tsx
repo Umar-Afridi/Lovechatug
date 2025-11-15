@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { Search, MessageSquare, UserPlus, Phone, Settings } from 'lucide-react';
+import { Search, MessageSquare, UserPlus, Phone, Settings, Home } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import FriendsPage from './friends/page';
 import CallsPage from './calls/page';
+import RoomsPage from './rooms/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
 import { collection, onSnapshot, doc, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
@@ -76,7 +77,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
                 const permissionError = new FirestorePermissionError({
                     path: userDocRef.path,
                     operation: 'get',
-                });
+                }, error);
                 errorEmitter.emit('permission-error', permissionError);
                 console.error(`Error fetching participant ${participantId}:`, error);
             }
@@ -185,6 +186,7 @@ export default function ChatPage() {
   
   const navigationItems = [
     { name: 'Inbox', icon: MessageSquare, content: 'inbox' },
+    { name: 'Rooms', icon: Home, content: 'rooms' },
     { name: 'Requests', icon: UserPlus, content: 'requests', count: requestCount },
     { name: 'Calls', icon: Phone, content: 'calls' },
   ];
@@ -228,13 +230,12 @@ export default function ChatPage() {
     }
     setLoading(true);
 
-    const userDocRef = doc(firestore, 'users', user.uid);
-    const unsubProfile = onSnapshot(userDocRef, (docSnap) => {
+    const unsubProfile = onSnapshot(doc(firestore, 'users', user.uid), (docSnap) => {
         if (docSnap.exists()) {
             setProfile(docSnap.data() as UserProfile);
         }
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: userDocRef.path, operation: 'get' });
+        const permissionError = new FirestorePermissionError({ path: `users/${user.uid}`, operation: 'get' }, error);
         errorEmitter.emit('permission-error', permissionError);
         console.error("Error fetching profile:", error);
     });
@@ -247,20 +248,10 @@ export default function ChatPage() {
     );
     const unsubChats = onSnapshot(chatsQuery, (snapshot) => {
         const chatsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
-        
-        const myBlockedList = profile?.blockedUsers || [];
-        const whoBlockedMe = profile?.blockedBy || [];
-        
-        const filtered = chatsData.filter(chat => {
-            const otherMemberId = chat.members.find(id => id !== user.uid);
-            if (!otherMemberId) return false;
-            return !myBlockedList.includes(otherMemberId) && !whoBlockedMe.includes(otherMemberId);
-        });
-
-        setChats(filtered);
+        setChats(chatsData);
         setLoading(false);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: 'chats', operation: 'list' });
+        const permissionError = new FirestorePermissionError({ path: 'chats', operation: 'list' }, error);
         errorEmitter.emit('permission-error', permissionError);
         console.error("Error fetching chats:", error);
         setLoading(false);
@@ -274,8 +265,8 @@ export default function ChatPage() {
         setRequestCount(snapshot.size);
       },
       (serverError) => {
-        const permissionError = new FirestorePermissionError({ path: incomingRequestsRef.path, operation: 'list' });
-        errorEmitter.emit('permission-error', serverError);
+        const permissionError = new FirestorePermissionError({ path: 'friendRequests', operation: 'list' }, serverError);
+        errorEmitter.emit('permission-error', permissionError);
       }
     );
     
@@ -286,8 +277,8 @@ export default function ChatPage() {
         const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequest));
         setSentRequests(requests);
     }, (serverError) => {
-        const permissionError = new FirestorePermissionError({ path: sentRequestsRef.path, operation: 'list' });
-        errorEmitter.emit('permission-error', serverError);
+        const permissionError = new FirestorePermissionError({ path: 'friendRequests', operation: 'list' }, serverError);
+        errorEmitter.emit('permission-error', permissionError);
     });
 
     return () => {
@@ -296,7 +287,7 @@ export default function ChatPage() {
         unsubscribeIncoming();
         unsubscribeSent();
     };
-  }, [user, firestore, profile?.blockedBy, profile?.blockedUsers]);
+  }, [user, firestore]);
 
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -330,9 +321,9 @@ export default function ChatPage() {
           setSearchResults(filteredUsers);
         } catch (serverError) {
             const permissionError = new FirestorePermissionError({
-                path: usersRef.path,
+                path: 'users',
                 operation: 'list',
-            });
+            }, serverError as Error);
             errorEmitter.emit('permission-error', permissionError);
         }
       }
@@ -352,8 +343,9 @@ export default function ChatPage() {
           await addDoc(requestsRef, newRequest);
           toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
       } catch (error) {
-          const permissionError = new FirestorePermissionError({ path: requestsRef.path, operation: 'create', requestResourceData: newRequest });
+          const permissionError = new FirestorePermissionError({ path: 'friendRequests', operation: 'create', requestResourceData: newRequest }, error as Error);
           errorEmitter.emit('permission-error', permissionError);
+          toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive'});
       }
   };
   
@@ -369,8 +361,9 @@ export default function ChatPage() {
           await deleteDoc(requestRef);
           toast({ title: 'Request Cancelled' });
       } catch(error) {
-           const permissionError = new FirestorePermissionError({ path: requestRef.path, operation: 'delete' });
+           const permissionError = new FirestorePermissionError({ path: requestRef.path, operation: 'delete' }, error as Error);
            errorEmitter.emit('permission-error', permissionError);
+           toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
       }
   }
 
@@ -448,6 +441,8 @@ export default function ChatPage() {
     switch (activeTab) {
         case 'inbox':
             return (loading || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={chats} currentUserId={user.uid} />);
+        case 'rooms':
+            return <RoomsPage />;
         case 'requests':
             return <FriendsPage />;
         case 'calls':

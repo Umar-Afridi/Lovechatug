@@ -11,6 +11,7 @@ import {
   LogOut,
   GalleryHorizontal,
   PlusSquare,
+  Home,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -103,6 +104,8 @@ function useUserProfile(onAccountDisabled: () => void) {
             onAccountDisabled();
           }
         } else {
+          // This case might happen for a brand new user before the doc is created
+          // We can set a temporary profile
           setProfile({
             uid: user.uid,
             displayName: user.displayName || 'User',
@@ -117,7 +120,7 @@ function useUserProfile(onAccountDisabled: () => void) {
         const permissionError = new FirestorePermissionError({
             path: userDocRef.path,
             operation: 'get',
-        });
+        }, error);
         errorEmitter.emit('permission-error', permissionError);
         console.error("Error fetching user profile:", error);
         setLoading(false);
@@ -153,7 +156,7 @@ function usePresence() {
         const firestoreUpdateData = { isOnline: true, lastSeen: serverTimestamp() };
         updateDoc(userStatusFirestoreRef, firestoreUpdateData).catch(err => {
           if (err.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({ path: userStatusFirestoreRef.path, operation: 'update', requestResourceData: firestoreUpdateData });
+            const permissionError = new FirestorePermissionError({ path: userStatusFirestoreRef.path, operation: 'update', requestResourceData: firestoreUpdateData }, err);
             errorEmitter.emit('permission-error', permissionError);
           }
         });
@@ -168,6 +171,7 @@ function usePresence() {
       }
        set(userStatusDatabaseRef, { isOnline: false, lastSeen: rtdbServerTimestamp() });
        updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() }).catch(err => {
+            // silent fail on sign out is okay
        });
     };
   }, [user, firestore]);
@@ -185,7 +189,7 @@ export default function ChatAppLayout({
   const { user, loading: authLoading } = useUser();
   const router = useRouter();
   const isMobile = useIsMobile();
-  const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2 && !pathname.startsWith('/chat/friends') && !pathname.startsWith('/chat/calls');
+  const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2 && !pathname.startsWith('/chat/friends') && !pathname.startsWith('/chat/calls') && !pathname.startsWith('/chat/rooms');
   const [requestCount, setRequestCount] = useState(0);
   const [isAccountDisabled, setAccountDisabled] = useState(false);
   const { toast } = useToast();
@@ -229,8 +233,8 @@ export default function ChatAppLayout({
         const permissionError = new FirestorePermissionError({
             path: requestsRef.path,
             operation: 'list',
-        });
-        errorEmitter.emit('permission-error', serverError);
+        }, serverError);
+        errorEmitter.emit('permission-error', permissionError);
         console.error("Error fetching friend request count:", serverError);
       }
     );
@@ -295,6 +299,31 @@ export default function ChatAppLayout({
   };
 
   const showSidebar = !isMobile || !isChatDetailPage;
+  
+  const menuItems = [
+    {
+      href: '/chat',
+      icon: MessageSquare,
+      label: 'Inbox',
+    },
+    {
+      href: '/chat/rooms',
+      icon: Home,
+      label: 'Rooms',
+    },
+    {
+       href: '/chat/friends',
+       icon: UserPlus,
+       label: 'Requests',
+       id: 'friend-requests',
+       count: requestCount,
+    },
+    {
+       href: '/chat/calls',
+       icon: Phone,
+       label: 'Calls',
+    },
+  ];
 
   if (!user) {
       return <>{children}</>;
@@ -356,8 +385,8 @@ export default function ChatAppLayout({
                         >
                             <item.icon />
                             <span>{item.label}</span>
-                            {item.id === 'friend-requests' && requestCount > 0 && (
-                                <SidebarMenuBadge>{requestCount}</SidebarMenuBadge>
+                            {item.id === 'friend-requests' && item.count > 0 && (
+                                <SidebarMenuBadge>{item.count}</SidebarMenuBadge>
                             )}
                         </SidebarMenuButton>
                         </Link>
@@ -396,22 +425,3 @@ export default function ChatAppLayout({
     </RoomContext.Provider>
   );
 }
-
-const menuItems = [
-  {
-    href: '/chat',
-    icon: MessageSquare,
-    label: 'Chats',
-  },
-  {
-     href: '/chat/friends',
-     icon: UserPlus,
-     label: 'Friend Requests',
-     id: 'friend-requests'
-  },
-  {
-     href: '/chat/calls',
-     icon: Phone,
-     label: 'Call History',
-  },
-];

@@ -69,7 +69,7 @@ export default function ChatIdPage({
 }: {
   params: { chatId: string }; // chatId is the OTHER user's ID
 }) {
-  const { chatId: otherUserIdFromParams } = React.use(params);
+  const { chatId: otherUserIdFromParams } = params;
   const router = useRouter();
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -152,7 +152,7 @@ export default function ChatIdPage({
   }, [router]);
 
 
-  // Determine Chat ID
+  // Determine Chat ID based on the new security rule
   useEffect(() => {
     if (!authUser || !otherUserIdFromParams) return;
     const determinedChatId = [authUser.uid, otherUserIdFromParams].sort().join('_');
@@ -197,7 +197,6 @@ export default function ChatIdPage({
             if (!chatSnap.exists()) {
               const newChatData = {
                 members: [authUser.uid, otherUserData.uid],
-                participants: [authUser.uid, otherUserData.uid], // For security rules
                 createdAt: serverTimestamp(),
                 participantDetails: {
                     [authUser.uid]: { displayName: currentUserData.displayName, photoURL: currentUserData.photoURL },
@@ -211,7 +210,7 @@ export default function ChatIdPage({
 
         } catch (error: any) {
             console.error("Error setting up chat page:", error);
-            const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' });
+            const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' }, error);
             errorEmitter.emit('permission-error', permissionError);
             toast({ title: 'Error', description: 'Could not initialize chat.', variant: 'destructive' });
         }
@@ -227,7 +226,7 @@ export default function ChatIdPage({
             setHaveIBlocked(data.blockedUsers?.includes(otherUserIdFromParams) ?? false);
         }
     }, (error) => {
-      const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' });
+      const permissionError = new FirestorePermissionError({ path: `users/${authUser.uid}`, operation: 'get' }, error);
       errorEmitter.emit('permission-error', permissionError);
     });
 
@@ -238,7 +237,7 @@ export default function ChatIdPage({
             setAmIBlocked(otherUserData.blockedUsers?.includes(authUser.uid) ?? false);
         }
     }, (error) => {
-        const permissionError = new FirestorePermissionError({ path: `users/${otherUserIdFromParams}`, operation: 'get' });
+        const permissionError = new FirestorePermissionError({ path: `users/${otherUserIdFromParams}`, operation: 'get' }, error);
         errorEmitter.emit('permission-error', permissionError);
     });
 
@@ -263,7 +262,7 @@ export default function ChatIdPage({
           }
       }, (error) => {
           console.error("Error listening to chat document:", error);
-           const permissionError = new FirestorePermissionError({ path: chatRef.path, operation: 'get' });
+           const permissionError = new FirestorePermissionError({ path: chatRef.path, operation: 'get' }, error);
            errorEmitter.emit('permission-error', permissionError);
       });
 
@@ -307,9 +306,9 @@ export default function ChatIdPage({
       isFirstMessageLoad.current = false; // Mark initial load as complete
     }, (serverError) => {
         const permissionError = new FirestorePermissionError({
-            path: messagesRef.path,
+            path: `chats/${chatId}/messages`,
             operation: 'list',
-        });
+        }, serverError);
         errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
@@ -340,7 +339,7 @@ export default function ChatIdPage({
                 path: `chats/${chatId}/messages`,
                 operation: 'update',
                 requestResourceData: { status: 'read' }
-            });
+            }, serverError);
             errorEmitter.emit('permission-error', permissionError);
         });
     }
@@ -379,10 +378,10 @@ export default function ChatIdPage({
           });
           batch.commit().catch((serverError) => {
              const permissionError = new FirestorePermissionError({
-                path: messagesRef.path,
+                path: `chats/${chatId}/messages`,
                 operation: 'update',
                 requestResourceData: { status: 'delivered' }
-            });
+            }, serverError);
             errorEmitter.emit('permission-error', permissionError);
           });
         }
@@ -449,7 +448,6 @@ export default function ChatIdPage({
              if (!chatSnap.exists()) {
                 const chatData = {
                     members: [authUser.uid, otherUser.uid],
-                    participants: [authUser.uid, otherUser.uid], // For security rules
                     createdAt: serverTimestamp(),
                     participantDetails: {
                         [authUser.uid]: { displayName: currentUser?.displayName, photoURL: currentUser?.photoURL },
@@ -638,7 +636,6 @@ export default function ChatIdPage({
         if (!chatSnap.exists()) {
           const newChatData = {
               members: [authUser.uid, otherUser.uid],
-              participants: [authUser.uid, otherUser.uid], // For security rules
               createdAt: serverTimestamp(),
               participantDetails: {
                   [authUser.uid]: { displayName: currentUser.displayName, photoURL: currentUser.photoURL },
@@ -678,7 +675,7 @@ export default function ChatIdPage({
               path: messagesRef.path,
               operation: 'create',
               requestResourceData: newMessageData,
-          });
+          }, serverError);
           errorEmitter.emit('permission-error', permissionError);
       });
     };
@@ -777,7 +774,7 @@ export default function ChatIdPage({
             router.push(`/chat/call/outgoing/${otherUser.uid}?callId=${docRef.id}`);
         } catch (error) {
             console.error('Error initiating call:', error);
-            const permissionError = new FirestorePermissionError({ path: 'calls', operation: 'create', requestResourceData: newCall });
+            const permissionError = new FirestorePermissionError({ path: 'calls', operation: 'create', requestResourceData: newCall }, error as Error);
             errorEmitter.emit('permission-error', permissionError);
             toast({
                 title: 'Call Failed',

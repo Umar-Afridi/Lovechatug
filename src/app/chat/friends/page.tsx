@@ -79,9 +79,9 @@ export default function FriendsPage() {
               setRequests(populatedRequests);
             } catch (userError) {
               const permissionError = new FirestorePermissionError({
-                  path: usersRef.path,
+                  path: 'users',
                   operation: 'list',
-              });
+              }, userError as Error);
               errorEmitter.emit('permission-error', permissionError);
             }
 
@@ -95,7 +95,7 @@ export default function FriendsPage() {
         const permissionError = new FirestorePermissionError({
             path: 'friendRequests',
             operation: 'list',
-        });
+        }, serverError);
         errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
@@ -111,29 +111,24 @@ export default function FriendsPage() {
     const currentUserRef = doc(firestore, 'users', user.uid);
     const friendUserRef = doc(firestore, 'users', request.senderId);
     
+    // Create chatId based on the new rule: sorted UIDs joined by '_'
     const chatId = [user.uid, request.senderId].sort().join('_');
     const chatRef = doc(firestore, 'chats', chatId);
 
     try {
         const batch = writeBatch(firestore);
 
-        // Use set with merge to avoid "No document to update" errors
-        batch.set(currentUserRef, { friends: arrayUnion(request.senderId), chatIds: arrayUnion(chatId) }, { merge: true });
-        batch.set(friendUserRef, { friends: arrayUnion(user.uid), chatIds: arrayUnion(chatId) }, { merge: true });
+        // Add each other to friends lists
+        batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
+        batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
         
-        // Use a non-realtime get to avoid conflicts with listeners
-        const currentUserSnap = await getDocNonRealTime(currentUserRef);
-        const friendUserSnap = await getDocNonRealTime(friendUserRef);
+        // Add chatId to both users' profiles
+        batch.update(currentUserRef, { chatIds: arrayUnion(chatId) });
+        batch.update(friendUserRef, { chatIds: arrayUnion(chatId) });
         
-        const currentUserProfile = currentUserSnap.data() as UserProfile;
-        const friendUserProfile = friendUserSnap.data() as UserProfile;
+        // Create the chat document
+        const currentUserProfile = (await getDocNonRealTime(currentUserRef)).data() as UserProfile;
         
-        if (!currentUserProfile || !friendUserProfile) {
-            // Even if profiles are incomplete, we create them on the fly now with set merge.
-            // Let's ensure we have basic details for the chat participant list.
-            console.warn("One of the user profiles was missing, but proceeding.");
-        }
-
         batch.set(chatRef, {
           members: [user.uid, request.senderId],
           createdAt: serverTimestamp(),
@@ -143,8 +138,8 @@ export default function FriendsPage() {
               photoURL: currentUserProfile?.photoURL || user.photoURL,
             },
             [request.senderId]: {
-              displayName: friendUserProfile?.displayName || request.fromUser.displayName,
-              photoURL: friendUserProfile?.photoURL || request.fromUser.photoURL,
+              displayName: request.fromUser.displayName,
+              photoURL: request.fromUser.photoURL,
             },
           },
            unreadCount: { [user.uid]: 0, [request.senderId]: 0 },
@@ -160,8 +155,9 @@ export default function FriendsPage() {
         const permissionError = new FirestorePermissionError({
             path: `batch write for friend accept`,
             operation: 'update',
-        });
+        }, error);
         errorEmitter.emit('permission-error', permissionError);
+        toast({ title: 'Error', description: 'Could not accept friend request.', variant: 'destructive'});
     }
   };
 
@@ -176,7 +172,7 @@ export default function FriendsPage() {
              const permissionError = new FirestorePermissionError({
                 path: requestRef.path,
                 operation: 'delete',
-            });
+            }, serverError);
             errorEmitter.emit('permission-error', permissionError);
         });
   };
@@ -194,39 +190,41 @@ export default function FriendsPage() {
         <div className="p-4 space-y-4">
             <h1 className="text-xl font-bold">Friend Requests</h1>
             {requests.map(request => (
-                <div key={request.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
-                    <div className="flex items-center gap-4">
-                        <div className="relative">
-                            <Avatar>
-                                <AvatarImage src={request.fromUser?.photoURL} />
-                                <AvatarFallback>{getInitials(request.fromUser?.displayName)}</AvatarFallback>
-                            </Avatar>
-                            {request.fromUser?.officialBadge?.isOfficial && (
-                                <div className="absolute bottom-0 right-0">
-                                    <OfficialBadge color={request.fromUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
-                                </div>
-                            )}
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <p className={cn(
-                                  "font-semibold",
-                                  request.fromUser?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
-                                )}>
-                                  {request.fromUser?.displayName ?? 'Loading...'}
-                                </p>
-                                {request.fromUser?.verifiedBadge?.showBadge && (
-                                    <VerifiedBadge color={request.fromUser.verifiedBadge.badgeColor} />
+                request.fromUser && (
+                    <div key={request.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
+                        <div className="flex items-center gap-4">
+                            <div className="relative">
+                                <Avatar>
+                                    <AvatarImage src={request.fromUser.photoURL} />
+                                    <AvatarFallback>{getInitials(request.fromUser.displayName)}</AvatarFallback>
+                                </Avatar>
+                                {request.fromUser.officialBadge?.isOfficial && (
+                                    <div className="absolute bottom-0 right-0">
+                                        <OfficialBadge color={request.fromUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
+                                    </div>
                                 )}
                             </div>
-                            <p className="text-sm text-muted-foreground">@{request.fromUser?.username ?? '...'}</p>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <p className={cn(
+                                      "font-semibold",
+                                      request.fromUser.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+                                    )}>
+                                      {request.fromUser.displayName ?? 'Loading...'}
+                                    </p>
+                                    {request.fromUser.verifiedBadge?.showBadge && (
+                                        <VerifiedBadge color={request.fromUser.verifiedBadge.badgeColor} />
+                                    )}
+                                </div>
+                                <p className="text-sm text-muted-foreground">@{request.fromUser.username ?? '...'}</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button size="sm" onClick={() => handleAccept(request)} disabled={!request.fromUser}>Accept</Button>
+                            <Button size="sm" variant="outline" onClick={() => handleDecline(request.id)}>Decline</Button>
                         </div>
                     </div>
-                    <div className="flex gap-2">
-                        <Button size="sm" onClick={() => handleAccept(request)} disabled={!request.fromUser}>Accept</Button>
-                        <Button size="sm" variant="outline" onClick={() => handleDecline(request.id)}>Decline</Button>
-                    </div>
-                </div>
+                )
             ))}
         </div>
     </ScrollArea>

@@ -9,7 +9,7 @@ export function FirebaseErrorListener() {
   const { user } = useUser();
 
   useEffect(() => {
-    const handlePermissionError = (error: FirestorePermissionError | Error) => {
+    const handlePermissionError = (error: Error) => {
       let contextualError: Error;
       
       // Ensure the error is an instance of FirestorePermissionError and has the method
@@ -19,7 +19,7 @@ export function FirebaseErrorListener() {
         contextualError.name = error.name;
         contextualError.stack = error.stack;
       } else {
-        // Fallback for generic errors
+        // Fallback for generic errors or errors that are not FirestorePermissionError
         contextualError = error;
       }
       
