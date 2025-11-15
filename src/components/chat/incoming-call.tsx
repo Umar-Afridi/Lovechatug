@@ -20,11 +20,16 @@ export function IncomingCall({ call, onHandled }: IncomingCallProps) {
   const firestore = useFirestore();
   const [caller, setCaller] = useState<UserProfile | null>(null);
 
-  const playIncomingCallSound = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e');
+  const playIncomingCallSound = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e', { loop: true });
+  const { stop: stopIncomingCallSound } = playIncomingCallSound;
+
 
   useEffect(() => {
-    playIncomingCallSound();
-  }, [playIncomingCallSound]);
+    playIncomingCallSound.play();
+    return () => {
+      stopIncomingCallSound();
+    };
+  }, [playIncomingCallSound, stopIncomingCallSound]);
   
   useEffect(() => {
     if (!firestore || !call.callerId) return;
@@ -40,6 +45,7 @@ export function IncomingCall({ call, onHandled }: IncomingCallProps) {
   }, [firestore, call.callerId]);
 
   const handleAccept = async () => {
+    stopIncomingCallSound();
     if (!firestore || !call.id) return;
     const callDocRef = doc(firestore, 'calls', call.id);
     try {
@@ -53,6 +59,7 @@ export function IncomingCall({ call, onHandled }: IncomingCallProps) {
   };
 
   const handleDecline = async () => {
+    stopIncomingCallSound();
     if (!firestore || !call.id) return;
     const callDocRef = doc(firestore, 'calls', call.id);
     try {

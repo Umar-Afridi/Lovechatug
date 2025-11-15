@@ -1,44 +1,57 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 export function useSound(
   url: string,
-  { volume = 1, playbackRate = 1 }: { volume?: number; playbackRate?: number } = {}
+  { volume = 1, playbackRate = 1, loop = false }: { volume?: number; playbackRate?: number, loop?: boolean } = {}
 ) {
-  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const audioEl = new Audio(url);
-    setAudio(audioEl);
+    audioRef.current = audioEl;
 
     return () => {
       audioEl.pause();
-      setAudio(null);
+      audioRef.current = null;
     };
   }, [url]);
 
   useEffect(() => {
-    if (audio) {
-      audio.volume = volume;
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
     }
-  }, [audio, volume]);
+  }, [volume]);
+  
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.loop = loop;
+    }
+  }, [loop]);
 
   useEffect(() => {
-    if (audio) {
-      audio.playbackRate = playbackRate;
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
     }
-  }, [audio, playbackRate]);
+  }, [playbackRate]);
 
   const play = useCallback(() => {
-    if (audio) {
-      audio.currentTime = 0;
-      audio.play().catch(error => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(error => {
         // Autoplay was prevented. This is a common browser policy.
         console.warn('Audio play was prevented:', error);
       });
     }
-  }, [audio]);
+  }, []);
 
-  return play;
+  const stop = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  }, []);
+
+  return { play, stop };
 }

@@ -27,7 +27,7 @@ export default function OutgoingCallPage() {
   const [callStatus, setCallStatus] = useState('Calling...');
   const [loading, setLoading] = useState(true);
 
-  const playRingingSound = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e');
+  const { play, stop } = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e', { loop: true });
 
 
   // Fetch receiver's profile
@@ -40,7 +40,7 @@ export default function OutgoingCallPage() {
         setOtherUser(userData);
         if (userData.isOnline) {
             setCallStatus('Ringing...');
-            playRingingSound();
+            play();
         } else {
             setCallStatus('Calling...');
         }
@@ -50,7 +50,7 @@ export default function OutgoingCallPage() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [firestore, otherUserId, router, playRingingSound]);
+  }, [firestore, otherUserId, router, play]);
 
   // Listen to call document for status changes
   useEffect(() => {
@@ -61,6 +61,7 @@ export default function OutgoingCallPage() {
         const data = docSnap.data() as Call;
         setCallData(data);
         if (data.status === 'declined' || data.status === 'missed') {
+            stop();
             const chatId = [data.callerId, data.receiverId].sort().join('_');
             const messagesRef = collection(firestore, `chats/${chatId}/messages`);
             addDoc(messagesRef, {
@@ -80,19 +81,25 @@ export default function OutgoingCallPage() {
                  }, 2000);
             });
         } else if (data.status === 'answered') {
+          stop();
           router.replace(`/chat/call/active/${callId}`);
         }
       } else {
         // Call document deleted (e.g., cancelled by caller)
+        stop();
         router.back();
       }
     });
 
-    return () => unsubscribe();
-  }, [firestore, callId, router]);
+    return () => {
+        stop();
+        unsubscribe();
+    };
+  }, [firestore, callId, router, stop]);
 
 
   const handleHangUp = async () => {
+    stop();
     if (!firestore || !callId || !authUser) {
       router.back();
       return;
