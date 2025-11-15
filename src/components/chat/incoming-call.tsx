@@ -20,12 +20,11 @@ export function IncomingCall({ call, onHandled }: IncomingCallProps) {
   const firestore = useFirestore();
   const [caller, setCaller] = useState<UserProfile | null>(null);
 
-  const playIncomingCallSound = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e', { loop: true });
-  const { stop: stopIncomingCallSound } = playIncomingCallSound;
+  const { play: playIncomingCallSound, stop: stopIncomingCallSound } = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e', { loop: true });
 
 
   useEffect(() => {
-    playIncomingCallSound.play();
+    playIncomingCallSound();
     return () => {
       stopIncomingCallSound();
     };
