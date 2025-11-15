@@ -1,23 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useFirestore } from '@/firebase/provider';
-import { doc, getDoc, updateDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Phone, PhoneOff } from 'lucide-react';
 import type { UserProfile, Call } from '@/lib/types';
 import { useSound } from '@/hooks/use-sound';
+import { useCallContext } from '@/app/chat/layout';
 
 interface IncomingCallProps {
   call: Call;
-  onAccept: (call: Call) => void;
-  onDecline: () => void;
 }
 
-export function IncomingCall({ call, onAccept, onDecline }: IncomingCallProps) {
+export function IncomingCall({ call }: IncomingCallProps) {
   const firestore = useFirestore();
+  const { endCall } = useCallContext();
   const [caller, setCaller] = useState<UserProfile | null>(null);
 
   const { play: playIncomingCallSound, stop: stopIncomingCallSound } = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e', { loop: true });
@@ -34,46 +33,45 @@ export function IncomingCall({ call, onAccept, onDecline }: IncomingCallProps) {
     if (!firestore || !call.callerId) return;
 
     const callerDocRef = doc(firestore, 'users', call.callerId);
-    getDoc(callerDocRef).then((docSnap) => {
+    const unsubscribe = onSnapshot(callerDocRef, (docSnap) => {
       if (docSnap.exists()) {
         setCaller(docSnap.data() as UserProfile);
       } else {
-        // If caller doesn't exist, automatically decline.
         handleDecline();
       }
-    }).catch(() => {
-        // Also decline on error
+    }, () => {
         handleDecline();
     });
+
+    return () => unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, call.callerId]);
 
-  const handleAccept = async () => {
+  const handleAccept = useCallback(async () => {
     stopIncomingCallSound();
     if (!firestore || !call.id) return;
     const callDocRef = doc(firestore, 'calls', call.id);
     try {
-        const updatedCallData = { ...call, status: 'answered' as const, answeredAt: serverTimestamp() };
-        await updateDoc(callDocRef, { status: 'answered', answeredAt: serverTimestamp() });
-        onAccept(updatedCallData as Call); 
+        await updateDoc(callDocRef, { status: 'answered' });
+        // The central state in layout.tsx will handle the transition to ActiveCallPage
     } catch(e) {
         console.error("Error accepting call: ", e);
-        onDecline();
+        endCall(); // Clean up state if accept fails
     }
-  };
+  }, [stopIncomingCallSound, firestore, call.id, endCall]);
 
-  const handleDecline = async () => {
+  const handleDecline = useCallback(async () => {
     stopIncomingCallSound();
-    onDecline(); 
+    endCall(); 
     if (!firestore || !call.id) return;
     const callDocRef = doc(firestore, 'calls', call.id);
     try {
-        await updateDoc(callDocRef, { status: 'declined' });
-        // The caller is responsible for deleting the doc after seeing the 'declined' status
+       // We can just delete the doc, which signals the end of the call for everyone.
+       await deleteDoc(callDocRef);
     } catch (e) {
         console.error("Error declining call: ", e);
     }
-  };
+  }, [stopIncomingCallSound, endCall, firestore, call.id]);
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';

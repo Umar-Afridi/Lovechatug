@@ -32,13 +32,11 @@ export default function ActiveCallPage() {
     // Start the timer only once
     if (!intervalRef.current) {
         let startTime = new Date().getTime();
-        // If there is a timestamp, use it. Otherwise, assume call just started.
-        if (callData.answeredAt) {
-            const answeredAt = callData.answeredAt;
-            // Check if it's a Firestore Timestamp object before calling .toDate()
-            if (answeredAt && typeof answeredAt.toDate === 'function') {
-                startTime = answeredAt.toDate().getTime();
-            }
+        const answeredAt = callData.answeredAt;
+        
+        // Check if answeredAt is a valid Firestore Timestamp object
+        if (answeredAt && typeof answeredAt.toDate === 'function') {
+            startTime = answeredAt.toDate().getTime();
         }
         
         intervalRef.current = setInterval(() => {
@@ -57,7 +55,7 @@ export default function ActiveCallPage() {
               setOtherUser(userDocSnap.data() as UserProfile);
             } else {
               // Other user doc doesn't exist, something is wrong, end the call
-              handleHangUp(false);
+              handleHangUp();
             }
         });
     }
@@ -86,7 +84,7 @@ export default function ActiveCallPage() {
     return parts.join(':');
   }
 
-  const handleHangUp = async (isRemoteHangup = false) => {
+  const handleHangUp = async () => {
     if (hangupInitiated.current) return;
     hangupInitiated.current = true;
 
@@ -97,15 +95,13 @@ export default function ActiveCallPage() {
     
     endCall();
 
-    if (!isRemoteHangup && firestore && callId && callData && authUser) {
+    if (firestore && callId && callData && authUser) {
         const finalDuration = callDuration;
         const callDocRef = doc(firestore, 'calls', callId);
         
         try {
-            await updateDoc(callDocRef, { 
-                status: 'ended', 
-                duration: finalDuration,
-            });
+            // Deleting the document is the cleanest way to end the call for all parties
+            await deleteDoc(callDocRef);
            
             const chatId = [callData.callerId, callData.receiverId].sort().join('_');
             const messagesRef = collection(firestore, `chats/${chatId}/messages`);
@@ -121,14 +117,6 @@ export default function ActiveCallPage() {
                     status: 'answered'
                 }
             });
-            
-            if (callData.callerId === authUser.uid) {
-                setTimeout(async () => {
-                     try { await deleteDoc(callDocRef); } catch (e) {
-                         console.warn("Could not delete call document, it might already be gone.", e);
-                     }
-                }, 3000);
-            }
 
         } catch (error) {
             console.error("Error hanging up call:", error);
@@ -167,7 +155,7 @@ export default function ActiveCallPage() {
           variant="destructive"
           size="lg"
           className="rounded-full h-20 w-20 bg-red-600 hover:bg-red-700"
-          onClick={() => handleHangUp(false)}
+          onClick={handleHangUp}
         >
           <PhoneOff className="h-8 w-8" />
           <span className="sr-only">Hang Up</span>

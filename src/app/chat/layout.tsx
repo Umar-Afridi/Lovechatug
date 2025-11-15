@@ -193,23 +193,27 @@ function usePresence() {
 function CallProvider({ children }: { children: React.ReactNode }) {
     const { user, loading: authLoading } = useUser();
     const firestore = useFirestore();
-    const router = useRouter();
 
     const [incomingCall, setIncomingCall] = useState<Call | null>(null);
     const [activeCall, setActiveCall] = useState<Call | null>(null);
     const [outgoingCall, setOutgoingCall] = useState<Omit<Call, 'id' | 'timestamp' | 'participants'| 'status' | 'direction' > & { callId?: string } | null>(null);
+    
+    // Simplified state machine: only one of these can be non-null at a time.
+    // This prevents overlaps and race conditions.
 
     // Listen for incoming calls
     useEffect(() => {
         if (!user || !firestore || authLoading || activeCall || outgoingCall) return;
         
         const callsRef = collection(firestore, 'calls');
+        // A call is "incoming" if it's for me and its status is 'outgoing' (meaning the other person initiated it)
         const q = query(callsRef, where('receiverId', '==', user.uid), where('status', '==', 'outgoing'), limit(1));
         
         const unsubscribe = onSnapshot(q, (snapshot) => {
             if (!snapshot.empty) {
                 const callDoc = snapshot.docs[0];
                 const callData = { id: callDoc.id, ...callDoc.data() } as Call;
+                // Only set if there isn't already an incoming call being displayed
                 if (!incomingCall) {
                     setIncomingCall(callData);
                 }
@@ -219,58 +223,62 @@ function CallProvider({ children }: { children: React.ReactNode }) {
         });
         return () => unsubscribe();
     }, [user, firestore, authLoading, incomingCall, activeCall, outgoingCall]);
-
-    // Listen to active call status
+    
+    // This effect listens to the state of ANY call document that this user is a participant in.
+    // It's the central point for handling call state changes (answered, declined, ended).
     useEffect(() => {
-        if (!activeCall?.id || !firestore) return;
+        if (!user || !firestore || authLoading) return;
 
-        const callDocRef = doc(firestore, 'calls', activeCall.id);
-        const unsubscribe = onSnapshot(callDocRef, (docSnap) => {
-            if (!docSnap.exists() || docSnap.data().status === 'ended') {
-                setActiveCall(null);
+        // Find any call this user is part of.
+        const callsRef = collection(firestore, 'calls');
+        const q = query(callsRef, where('participants', 'array-contains', user.uid), limit(1));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (snapshot.empty) {
+                 // No active call documents found, so clear all call states.
+                endCall();
+                return;
+            }
+
+            const callDoc = snapshot.docs[0];
+            const callData = { id: callDoc.id, ...callDoc.data() } as Call;
+
+            switch (callData.status) {
+                case 'answered':
+                    // If a call is answered, we are in an active call.
+                    // Clear other states and set the active call.
+                    setIncomingCall(null);
+                    setOutgoingCall(null);
+                    setActiveCall(callData);
+                    break;
+                
+                case 'outgoing':
+                    // This state is handled by the caller and the receiver separately.
+                    // The caller will see the OutgoingCallPage.
+                    // The receiver will see the IncomingCall component.
+                    // We don't need to do anything here as the other useEffect handles incoming calls.
+                    break;
+
+                case 'declined':
+                case 'missed':
+                case 'ended':
+                     // These are terminal states. The call is over.
+                     // The OutgoingCallPage or ActiveCallPage might show a brief message,
+                     // but the central state should be cleared.
+                    endCall();
+                    break;
+                
+                default:
+                    // Any other status, clean up.
+                    endCall();
+                    break;
             }
         });
+
         return () => unsubscribe();
-    }, [activeCall?.id, firestore]);
-    
-     // Listen to outgoing call status
-    useEffect(() => {
-      if (!outgoingCall?.callId || !firestore) return;
-      
-      const callDocRef = doc(firestore, 'calls', outgoingCall.callId);
-      const unsubscribe = onSnapshot(callDocRef, (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data() as Call;
-          if (data.status === 'answered') {
-              setActiveCall(data);
-              setOutgoingCall(null); // Clear outgoing call state
-          } else if (data.status === 'declined' || data.status === 'missed') {
-              // The outgoing call page will show the status, just clean up here after a delay
-              setTimeout(() => {
-                  if (outgoingCall?.callId === data.id) { // Ensure we are clearing the correct call
-                      setOutgoingCall(null);
-                  }
-              }, 2000);
-          }
-        } else {
-           // Document was deleted (caller cancelled, receiver declined/missed and cleaned up)
-           setOutgoingCall(null);
-        }
-      });
-      return () => unsubscribe();
-    }, [outgoingCall, firestore]);
 
+    }, [user, firestore, authLoading]);
 
-    const handleAcceptCall = (call: Call) => {
-        setIncomingCall(null);
-        setActiveCall(call);
-    };
-    
-    const handleDeclineOrEnd = () => {
-        setIncomingCall(null);
-        setActiveCall(null);
-        setOutgoingCall(null);
-    };
 
     const startCall = useCallback(async (userId: string, type: 'audio' | 'video') => {
         if (!firestore || !user || activeCall || outgoingCall || incomingCall) {
@@ -287,7 +295,7 @@ function CallProvider({ children }: { children: React.ReactNode }) {
             type: type,
             status: 'outgoing' as const, 
             timestamp: serverTimestamp(),
-            direction: 'outgoing' as const,
+            direction: 'outgoing' as const, // This property is for call history, not real-time state
         };
     
         try {
@@ -299,7 +307,9 @@ function CallProvider({ children }: { children: React.ReactNode }) {
     }, [firestore, user, activeCall, outgoingCall, incomingCall]);
 
     const endCall = useCallback(() => {
-        handleDeclineOrEnd();
+        setIncomingCall(null);
+        setActiveCall(null);
+        setOutgoingCall(null);
     }, []);
 
     const contextValue = {
@@ -311,6 +321,8 @@ function CallProvider({ children }: { children: React.ReactNode }) {
     
     // Determine what to render based on the call state
     const renderCallScreen = () => {
+        // This logic is now much simpler.
+        // It renders the correct component based on the *single source of truth* state.
         if (activeCall) {
             return <div className="fixed inset-0 z-[1001]"><ActiveCallPage /></div>;
         }
@@ -318,7 +330,9 @@ function CallProvider({ children }: { children: React.ReactNode }) {
             return <div className="fixed inset-0 z-[1001]"><OutgoingCallPage /></div>;
         }
         if (incomingCall) {
-            return <IncomingCall call={incomingCall} onAccept={handleAcceptCall} onDecline={handleDeclineOrEnd} />;
+            // onAccept and onDecline will trigger state changes in Firestore,
+            // which will then be picked up by the main listener useEffect.
+            return <IncomingCall call={incomingCall} />;
         }
         return null;
     }
@@ -625,5 +639,3 @@ export default function ChatAppLayoutWithProvider({ children }: { children: Reac
         </CallProvider>
     );
 }
-
-    

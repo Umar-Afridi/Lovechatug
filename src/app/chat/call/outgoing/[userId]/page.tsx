@@ -16,12 +16,12 @@ export default function OutgoingCallPage() {
   const params = useParams();
   const otherUserId = params.userId as string;
   const { outgoingCall, endCall } = useCallContext();
-  const callId = outgoingCall?.callId;
+  const callId = outgoingCall?.callId; // Get callId from context
 
   const firestore = useFirestore();
 
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
-  const [callData, setCallData] = useState<Call | null>(null);
+  const [callStatusText, setCallStatusText] = useState('Ringing...');
   const [loading, setLoading] = useState(true);
 
   const { play, stop } = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e', { loop: true });
@@ -41,18 +41,24 @@ export default function OutgoingCallPage() {
             play();
         } else {
             // User not found, automatically hang up.
-            handleHangUp();
+            setCallStatusText('User not found');
+            setTimeout(handleHangUp, 1500);
         }
     }).catch(() => {
-        handleHangUp();
+        setCallStatusText('Error reaching user');
+        setTimeout(handleHangUp, 1500);
     }).finally(() => {
         setLoading(false); 
     });
 
+    // Also listen for real-time changes to the user's online status
     const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const userData = docSnap.data() as UserProfile;
         setOtherUser(userData);
+        if (callStatusText === 'Ringing...' && !userData.isOnline) {
+            setCallStatusText('Unavailable');
+        }
       }
     });
 
@@ -65,38 +71,27 @@ export default function OutgoingCallPage() {
 
   // Listen to call document for status changes
   useEffect(() => {
-    if (!firestore || !callId) {
-        if(!loading) { // If not loading and no callId, something went wrong.
-            endCall();
-        }
-        return;
-    };
+    if (!firestore || !callId) return;
     
     const callDocRef = doc(firestore, 'calls', callId);
     const unsubscribe = onSnapshot(callDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as Call;
-        setCallData(data);
-        if (data.status === 'declined' || data.status === 'missed') {
+         // The transition to 'answered' is handled by the layout's central listener
+        if (data.status === 'declined') {
+            setCallStatusText('Call Declined');
             stop();
-            // The call document will be deleted by the receiver or a timeout,
-            // we just need to end the call on the caller's side.
-            setTimeout(() => {
-                endCall();
-            }, 1500); // Give user time to see the status
+            setTimeout(handleHangUp, 1500);
         }
       } else {
-        // Call document deleted (e.g., cancelled by caller or declined)
-        stop();
+        // Document was deleted (call was cancelled, declined, or ended)
         endCall();
       }
     });
 
-    return () => {
-        unsubscribe();
-    };
+    return () => unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, callId, loading]);
+  }, [firestore, callId]);
 
 
   const handleHangUp = useCallback(async () => {
@@ -112,12 +107,12 @@ export default function OutgoingCallPage() {
     } catch (error) {
       console.warn("Could not delete call doc, it might already be gone:", error);
     } finally {
-       endCall(); // This will unmount the component
+       endCall(); // This will clean up local state and unmount the component
     }
   }, [stop, endCall, firestore, callId]);
   
   const getInitials = (name: string | null | undefined) => {
-    if (!name) return 'U';
+    if (!name) return '?';
     return name
       .split(' ')
       .map((n) => n[0])
@@ -132,17 +127,10 @@ export default function OutgoingCallPage() {
     );
   }
 
-  const getStatusText = () => {
-    if (callData?.status === 'declined') return 'Call Declined';
-    if (callData?.status === 'missed' && !otherUser?.isOnline) return 'Unavailable';
-    if (callData?.status === 'missed') return 'Call Unanswered';
-    return 'Ringing...';
-  }
-
   return (
     <div className="flex h-screen w-full flex-col items-center justify-between bg-gray-900 text-white p-8 animate-in fade-in-0">
       <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4">
-        {otherUser && (
+        {otherUser ? (
             <>
                 <Avatar className="h-32 w-32 border-4 border-gray-600">
                 <AvatarImage src={otherUser.photoURL} />
@@ -152,8 +140,12 @@ export default function OutgoingCallPage() {
                 </Avatar>
                 <h1 className="text-4xl font-bold">{otherUser.displayName}</h1>
             </>
+        ) : (
+             <div className="h-32 w-32 rounded-full bg-gray-700 flex items-center justify-center border-4 border-gray-600">
+                <p className="text-5xl">?</p>
+             </div>
         )}
-        <p className="text-lg text-gray-400">{getStatusText()}</p>
+        <p className="text-lg text-gray-400">{callStatusText}</p>
       </div>
 
       <div className="flex items-center justify-center">
@@ -164,7 +156,7 @@ export default function OutgoingCallPage() {
           onClick={handleHangUp}
         >
           <PhoneOff className="h-8 w-8" />
-          <span className="sr-only">Hang Up</span>
+          <span className="sr-only">Cancel Call</span>
         </Button>
       </div>
     </div>
