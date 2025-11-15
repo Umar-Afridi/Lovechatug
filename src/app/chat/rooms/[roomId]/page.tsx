@@ -101,6 +101,31 @@ export default function RoomPage() {
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
 
+  // --- User Actions ---
+  
+  const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
+    if (!firestore || !authUser) return;
+
+    setMessages([]); // Clear messages locally on leave
+    const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+    const roomRef = doc(firestore, 'rooms', roomId);
+
+    try {
+        const memberDoc = await getDoc(memberRef);
+        if (memberDoc.exists()) {
+            const batch = writeBatch(firestore);
+            batch.delete(memberRef);
+            if (!isKickOrDelete) { 
+                batch.update(roomRef, { memberCount: increment(-1) });
+            }
+            await batch.commit();
+        }
+    } catch(e) {
+        console.warn("Could not leave room properly, room might be deleted.", e);
+    }
+    router.push('/chat/rooms');
+  }, [firestore, authUser, roomId, router]);
+
   // --- Main Data Fetching and Room Joining Logic ---
   useEffect(() => {
     if (!firestore || !roomId || !authUser) return;
@@ -246,31 +271,6 @@ export default function RoomPage() {
       return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [handleLeaveRoom]);
 
-
-  // --- User Actions ---
-  
-  const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
-    if (!firestore || !authUser) return;
-
-    setMessages([]); // Clear messages locally on leave
-    const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-    const roomRef = doc(firestore, 'rooms', roomId);
-
-    try {
-        const memberDoc = await getDoc(memberRef);
-        if (memberDoc.exists()) {
-            const batch = writeBatch(firestore);
-            batch.delete(memberRef);
-            if (!isKickOrDelete) { 
-                batch.update(roomRef, { memberCount: increment(-1) });
-            }
-            await batch.commit();
-        }
-    } catch(e) {
-        console.warn("Could not leave room properly, room might be deleted.", e);
-    }
-    router.push('/chat/rooms');
-  }, [firestore, authUser, roomId, router]);
 
   const handleDeleteRoom = async () => {
      if (!firestore || !isOwner || !room) return;
@@ -582,8 +582,8 @@ export default function RoomPage() {
           </div>
         </header>
         
-        <div className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 space-y-6">
-            <div className="flex justify-center gap-x-4">
+        <div className="relative flex-1 flex flex-col overflow-hidden p-4 md:p-6 space-y-4">
+             <div className="flex justify-center gap-x-4">
                 {renderSlot(OWNER_SLOT, true, "OWNER")}
                 {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
             </div>
@@ -592,12 +592,13 @@ export default function RoomPage() {
                 {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
             </div>
 
-            <div className="h-24 md:h-32 flex flex-col-reverse gap-2 overflow-hidden [mask-image:linear-gradient(to_top,black_50%,transparent_100%)]">
-                {messages.slice().reverse().map(renderMessage)}
-            </div>
-
             <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
                 {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+            </div>
+
+            {/* Chat Overlay */}
+            <div className="absolute bottom-0 left-0 right-0 h-1/3 flex flex-col-reverse gap-2 p-4 overflow-hidden pointer-events-none [mask-image:linear-gradient(to_top,black_60%,transparent_100%)]">
+                {messages.slice().reverse().map(renderMessage)}
             </div>
         </div>
 
@@ -606,7 +607,7 @@ export default function RoomPage() {
             <div className="relative flex items-center gap-2">
                  <Input 
                     placeholder="Send a message..." 
-                    className="h-10 flex-1"
+                    className="h-10 flex-1 bg-muted border-muted-foreground/30 focus-visible:ring-primary"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
