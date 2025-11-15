@@ -619,15 +619,12 @@ export default function RoomPage() {
                 {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
             </div>
 
-             <div className="w-full max-w-lg mx-auto flex-grow flex flex-col justify-end pb-4">
-                <AnimatePresence>
-                    <motion.div
-                        layout
-                        className="flex flex-col-reverse justify-start gap-2 overflow-hidden"
-                    >
-                        {messages.map((msg, index) => renderMessage(msg, index))}
-                    </motion.div>
-                </AnimatePresence>
+            <div className="w-full max-w-lg mx-auto flex-grow flex flex-col justify-end pb-4 min-h-[150px]">
+              <AnimatePresence>
+                <div className="flex flex-col-reverse justify-start gap-2 overflow-hidden">
+                    {messages.map((msg, index) => renderMessage(msg, index))}
+                </div>
+              </AnimatePresence>
             </div>
 
             <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
@@ -644,11 +641,11 @@ export default function RoomPage() {
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                 />
-                 <Button variant="ghost" size="icon" className="h-10 w-10" onClick={handleSendMessage}>
-                    <Send className="h-5 w-5"/>
-                </Button>
-                <Button variant="ghost" size="icon" className="h-10 w-10" onClick={handleToggleMute} disabled={currentUserSlot.micSlot === null}>
+                 <Button variant="ghost" size="icon" className="h-10 w-10" onClick={handleToggleMute} disabled={currentUserSlot.micSlot === null}>
                     {isMuted ? <MicOff className="h-5 w-5"/> : <Mic className="h-5 w-5"/>}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-10 w-10" onClick={handleSendMessage}>
+                    <Send className="h-5 w-5"/>
                 </Button>
                  <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => setIsDeafened(!isDeafened)}>
                     {isDeafened ? <VolumeX className="h-5 w-5"/> : <Volume2 className="h-5 w-5"/>}
