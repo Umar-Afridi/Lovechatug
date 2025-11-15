@@ -50,7 +50,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import type { UserProfile, Room } from '@/lib/types';
+import type { UserProfile, Room, Chat } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getDatabase, ref, onValue, off, onDisconnect, serverTimestamp as rtdbServerTimestamp, set } from 'firebase/database';
@@ -60,8 +60,8 @@ import { FloatingRoomIndicator } from '@/components/chat/floating-room-indicator
 
 // Context for sharing current room state
 interface RoomContextType {
-  currentRoom: Room | null;
-  setCurrentRoom: (room: Room | null) => void;
+  currentRoom: Chat | null;
+  setCurrentRoom: (room: Chat | null) => void;
   leaveCurrentRoom: () => void;
 }
 
@@ -99,12 +99,10 @@ function useUserProfile(onAccountDisabled: () => void) {
           const data = docSnap.data() as UserProfile;
           setProfile(data);
 
-          // Check if the account has just been disabled
           if (data.isDisabled) {
             onAccountDisabled();
           }
         } else {
-          // Fallback to auth data if firestore doc doesn't exist
           setProfile({
             uid: user.uid,
             displayName: user.displayName || 'User',
@@ -140,29 +138,18 @@ function usePresence() {
   useEffect(() => {
     if (!user || !firestore) return;
 
-    // Get a reference to the Realtime Database
     const db = getDatabase();
-    // Create a reference for this user's presence status in the Realtime Database.
     const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
-    // Create a reference to this user's document in Firestore.
     const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
-
-    // Get a reference to the special '.info/connected' path in Realtime Database.
-    // This path is true when the client is connected and false when it's not.
     const connectedRef = ref(db, '.info/connected');
 
     const unsubscribe = onValue(connectedRef, (snap) => {
       if (snap.val() === true) {
-        // The client is connected.
-        // 1. Set the Realtime Database presence status.
         const presenceData = { isOnline: true, lastSeen: rtdbServerTimestamp() };
         set(userStatusDatabaseRef, presenceData);
 
-        // 2. When the client disconnects, update the Realtime Database.
-        // THIS IS THE CRITICAL PART: `onDisconnect` is a Realtime Database feature.
         onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
 
-        // 3. Also update the Firestore document to show the user is online.
         const firestoreUpdateData = { isOnline: true, lastSeen: serverTimestamp() };
         updateDoc(userStatusFirestoreRef, firestoreUpdateData).catch(err => {
           if (err.code === 'permission-denied') {
@@ -176,13 +163,11 @@ function usePresence() {
     });
 
     return () => {
-       // On unmount/cleanup, explicitly set offline in both databases.
-      if (typeof unsubscribe === 'function') {
+       if (typeof unsubscribe === 'function') {
         off(connectedRef, 'value', unsubscribe);
       }
        set(userStatusDatabaseRef, { isOnline: false, lastSeen: rtdbServerTimestamp() });
        updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() }).catch(err => {
-            // This might fail if the user is already offline, which is fine.
        });
     };
   }, [user, firestore]);
@@ -200,12 +185,12 @@ export default function ChatAppLayout({
   const { user, loading: authLoading } = useUser();
   const router = useRouter();
   const isMobile = useIsMobile();
-  const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2 && !pathname.startsWith('/chat/rooms') && !pathname.startsWith('/chat/friends') && !pathname.startsWith('/chat/calls') && !pathname.startsWith('/chat/stories');
+  const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2 && !pathname.startsWith('/chat/friends') && !pathname.startsWith('/chat/calls');
   const [requestCount, setRequestCount] = useState(0);
   const [isAccountDisabled, setAccountDisabled] = useState(false);
   const { toast } = useToast();
   
-  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  const [currentRoom, setCurrentRoom] = useState<Chat | null>(null);
 
   const handleAccountDisabled = useCallback(() => {
     setAccountDisabled(true);
@@ -218,22 +203,9 @@ export default function ChatAppLayout({
   const isFirstRequestLoad = useRef(true);
   
   const leaveCurrentRoom = useCallback(async () => {
-    if (!firestore || !user || !currentRoom) return;
-
-    const memberRef = doc(firestore, 'rooms', currentRoom.id, 'members', user.uid);
-    const roomRef = doc(firestore, 'rooms', currentRoom.id);
-    
-    try {
-        const batch = writeBatch(firestore);
-        batch.delete(memberRef);
-        batch.update(roomRef, { memberCount: -1 });
-        await batch.commit();
-    } catch (error) {
-        console.warn("Could not cleanly leave room on context:", error);
-    } finally {
-       setCurrentRoom(null);
-    }
-  }, [firestore, user, currentRoom]);
+    // This logic might need to be adjusted depending on voice chat implementation
+    setCurrentRoom(null);
+  }, [setCurrentRoom]);
 
 
   useEffect(() => {
@@ -270,12 +242,10 @@ export default function ChatAppLayout({
  useEffect(() => {
     if (!authLoading) {
       if (user) {
-        // If user is logged in, and they are on the root page, redirect to chat
         if (pathname === '/' || pathname === '/signup') {
           router.push('/chat');
         }
       } else {
-        // If user is not logged in, and they are trying to access a protected page, redirect to login
         if (pathname.startsWith('/chat') || pathname.startsWith('/profile') || pathname.startsWith('/settings')) {
           router.push('/');
         }
@@ -285,12 +255,11 @@ export default function ChatAppLayout({
 
   const handleSignOut = async () => {
     if (auth && user && firestore) {
-      await leaveCurrentRoom(); // Leave room before signing out
+      await leaveCurrentRoom();
       const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
       const db = getDatabase();
       const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
 
-      // Set offline in both databases before signing out
       await updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() });
       await set(userStatusDatabaseRef, { isOnline: false, lastSeen: rtdbServerTimestamp() });
 
@@ -327,7 +296,6 @@ export default function ChatAppLayout({
 
   const showSidebar = !isMobile || !isChatDetailPage;
 
-  // Render children directly if we are on login/signup pages
   if (!user) {
       return <>{children}</>;
   }
@@ -434,11 +402,6 @@ const menuItems = [
     href: '/chat',
     icon: MessageSquare,
     label: 'Chats',
-  },
-  {
-     href: '/chat/rooms',
-     icon: PlusSquare,
-     label: 'Rooms',
   },
   {
      href: '/chat/friends',

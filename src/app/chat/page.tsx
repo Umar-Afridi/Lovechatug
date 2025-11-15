@@ -2,17 +2,15 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { Search, MessageSquare, PlusSquare, UserPlus, Phone, Settings, Users } from 'lucide-react';
+import { Search, MessageSquare, UserPlus, Phone, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Chat, UserProfile, FriendRequest } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import RoomsPage from './rooms/page';
 import FriendsPage from './friends/page';
 import CallsPage from './calls/page';
-import StoriesPage from './stories/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
 import { collection, onSnapshot, doc, query, where, getDocs, getDoc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
@@ -31,7 +29,6 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
     const firestore = useFirestore();
     const [participant, setParticipant] = useState<UserProfile | null>(null);
     
-    // The unread count is now directly on the chat object
     const unreadCount = chat.unreadCount?.[currentUserId] ?? 0;
 
     const formatTimestamp = (timestamp: any) => {
@@ -57,14 +54,12 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
     useEffect(() => {
         if (!firestore || !participantId) return;
 
-        // Use the pre-filled details if available, otherwise fetch
         const prefilledDetails = chat.participantDetails?.[participantId];
         if (prefilledDetails?.displayName) {
              setParticipant({
                 uid: participantId,
                 displayName: prefilledDetails.displayName,
                 photoURL: prefilledDetails.photoURL,
-                // Add other required fields with default values
                 email: '',
                 username: '',
              } as UserProfile);
@@ -198,8 +193,6 @@ export default function ChatPage() {
   
   const navigationItems = [
     { name: 'Inbox', icon: MessageSquare, content: 'inbox' },
-    { name: 'Rooms', icon: PlusSquare, content: 'rooms' },
-    { name: 'Stories', icon: Users, content: 'stories' },
     { name: 'Requests', icon: UserPlus, content: 'requests', count: requestCount },
     { name: 'Calls', icon: Phone, content: 'calls' },
   ];
@@ -273,7 +266,6 @@ export default function ChatPage() {
             if (userProfile.chatIds && userProfile.chatIds.length > 0 && firestore) {
                 setLoadingChats(true);
                 
-                // Filter out chats with users who have blocked the current user
                 const chatIdsToListen = userProfile.chatIds;
                 
                 if (chatIdsToListen.length > 0) {
@@ -284,7 +276,6 @@ export default function ChatPage() {
                           if (chatDoc.exists()) {
                               const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
                               
-                              // Check if the other member has blocked the current user
                               const otherMemberId = chatData.members.find(id => id !== user.uid);
                               const myBlockedBy = userProfile.blockedBy || [];
 
@@ -300,12 +291,10 @@ export default function ChatPage() {
                                       }
                                   });
                               } else {
-                                // If I am blocked, remove the chat from my list
                                 setChats(prevChats => prevChats.filter(c => c.id !== chatDoc.id));
                               }
 
                           } else {
-                            // Chat document might have been deleted (e.g., unfriend)
                              setChats(prevChats => prevChats.filter(c => c.id !== chatRef.id));
                           }
                       },
@@ -341,7 +330,6 @@ export default function ChatPage() {
    useEffect(() => {
     if (!firestore || !user?.uid) return;
 
-    // Listener for incoming friend requests (for the badge count)
     const incomingRequestsRef = collection(firestore, 'friendRequests');
     const qIncoming = query(incomingRequestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
 
@@ -355,7 +343,6 @@ export default function ChatPage() {
       }
     );
     
-    // Listener for requests sent by the current user (to manage button state)
     const sentRequestsRef = collection(firestore, 'friendRequests');
     const qSent = query(sentRequestsRef, where('senderId', '==', user.uid));
     
@@ -381,7 +368,6 @@ export default function ChatPage() {
     return chats.filter(chat => {
         const otherMemberId = chat.members.find(id => id !== user.uid);
         if (!otherMemberId) return false;
-        // Don't show chat if I blocked them, or if they blocked me
         return !blockedByMe.includes(otherMemberId) && !whoBlockedMe.includes(otherMemberId);
     });
   }, [chats, profile, user]);
@@ -432,7 +418,8 @@ export default function ChatPage() {
       const newRequest = {
           senderId: user.uid,
           receiverId: receiverId,
-          status: 'pending' as const
+          status: 'pending' as const,
+          createdAt: serverTimestamp(),
       };
       
       try {
@@ -539,10 +526,6 @@ export default function ChatPage() {
     switch (activeTab) {
         case 'inbox':
             return (loadingChats || loadingProfile || !user ? <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div> : <ChatList chats={filteredChats} currentUserId={user.uid} />);
-        case 'rooms':
-            return <RoomsPage />;
-        case 'stories':
-            return <StoriesPage />;
         case 'requests':
             return <FriendsPage />;
         case 'calls':

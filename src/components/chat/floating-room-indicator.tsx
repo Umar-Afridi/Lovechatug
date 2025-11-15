@@ -5,18 +5,22 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Mic } from 'lucide-react';
-import type { Room } from '@/lib/types';
+import type { Chat } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface FloatingRoomIndicatorProps {
-  room: Room;
+  room: Chat; // Changed from Room to Chat
 }
 
 export function FloatingRoomIndicator({ room }: FloatingRoomIndicatorProps) {
+  // Simplified logic, assuming it's a 1-on-1 chat context now
+  // In a real group chat scenario, you'd have a proper name and image
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'R';
+  const roomName = `Chat`; 
+  const roomPhoto = '';
 
   return (
-    <Link href={`/chat/rooms/${room.id}`} passHref>
+    <Link href={`/chat/${room.id}`} passHref>
       <motion.div
         drag
         dragConstraints={{ top: -200, left: -300, right: 20, bottom: 20 }}
@@ -39,8 +43,8 @@ export function FloatingRoomIndicator({ room }: FloatingRoomIndicatorProps) {
             }}
           />
           <Avatar className="h-16 w-16 border-2 border-background relative">
-            <AvatarImage src={room.photoURL} />
-            <AvatarFallback className="text-xl bg-muted">{getInitials(room.name)}</AvatarFallback>
+            <AvatarImage src={roomPhoto} />
+            <AvatarFallback className="text-xl bg-muted">{getInitials(roomName)}</AvatarFallback>
              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                 <Mic className="h-6 w-6 text-white" />
             </div>
