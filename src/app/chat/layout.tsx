@@ -12,6 +12,7 @@ import {
   GalleryHorizontal,
   PlusSquare,
   Home,
+  Inbox,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -59,9 +60,10 @@ import { FloatingRoomIndicator } from '@/components/chat/floating-room-indicator
 
 // Context for sharing current room state
 interface RoomContextType {
-  currentRoom: Chat | null;
-  setCurrentRoom: (room: Chat | null) => void;
+  currentRoom: Room | null;
+  setCurrentRoom: (room: Room | null) => void;
   leaveCurrentRoom: () => void;
+  inboxCount: number;
 }
 
 const RoomContext = createContext<RoomContextType | null>(null);
@@ -181,10 +183,11 @@ export default function ChatAppLayout({
   const isMobile = useIsMobile();
   const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2 && !pathname.startsWith('/chat/friends') && !pathname.startsWith('/chat/calls') && !pathname.startsWith('/chat/rooms');
   const [requestCount, setRequestCount] = useState(0);
+  const [inboxCount, setInboxCount] = useState(0);
   const [isAccountDisabled, setAccountDisabled] = useState(false);
   const { toast } = useToast();
   
-  const [currentRoom, setCurrentRoom] = useState<Chat | null>(null);
+  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
 
   const handleAccountDisabled = useCallback(() => {
     setAccountDisabled(true);
@@ -197,9 +200,21 @@ export default function ChatAppLayout({
   const isFirstRequestLoad = useRef(true);
   
   const leaveCurrentRoom = useCallback(async () => {
-    // This logic might need to be adjusted depending on voice chat implementation
+    if (!firestore || !user || !currentRoom) return;
+    
+    const memberRef = doc(firestore, 'rooms', currentRoom.id, 'members', user.uid);
+    const roomRef = doc(firestore, 'rooms', currentRoom.id);
+    
+    try {
+        const batch = writeBatch(firestore);
+        batch.delete(memberRef);
+        batch.update(roomRef, { memberCount: -1 }); // Decrement might need adjustment
+        await batch.commit();
+    } catch(e) {
+        console.warn("Could not leave room properly", e);
+    }
     setCurrentRoom(null);
-  }, [setCurrentRoom]);
+  }, [firestore, user, currentRoom]);
 
 
   useEffect(() => {
@@ -226,6 +241,26 @@ export default function ChatAppLayout({
 
     return () => unsubscribe();
   }, [firestore, user?.uid, requestCount, playRequestSound]);
+  
+  // New listener for total unread messages
+  useEffect(() => {
+    if (!firestore || !user?.uid) return;
+
+    const chatsRef = collection(firestore, 'chats');
+    const chatsQuery = query(chatsRef, where('members', 'array-contains', user.uid));
+    
+    const unsubscribeChats = onSnapshot(chatsQuery, (snapshot) => {
+        let totalUnread = 0;
+        snapshot.forEach(doc => {
+            const chat = doc.data() as Chat;
+            totalUnread += chat.unreadCount?.[user.uid] ?? 0;
+        });
+        setInboxCount(totalUnread);
+    });
+
+    return () => unsubscribeChats();
+
+  }, [firestore, user?.uid]);
 
 
  useEffect(() => {
@@ -244,7 +279,9 @@ export default function ChatAppLayout({
 
   const handleSignOut = async () => {
     if (auth && user && firestore) {
-      await leaveCurrentRoom();
+      if(currentRoom) {
+         await leaveCurrentRoom();
+      }
       const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
       const db = getDatabase();
       const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
@@ -288,8 +325,10 @@ export default function ChatAppLayout({
   const menuItems = [
     {
       href: '/chat',
-      icon: MessageSquare,
+      icon: Inbox,
       label: 'Inbox',
+      id: 'inbox',
+      count: inboxCount
     },
     {
       href: '/chat/rooms',
@@ -316,7 +355,7 @@ export default function ChatAppLayout({
 
 
   return (
-    <RoomContext.Provider value={{ currentRoom, setCurrentRoom, leaveCurrentRoom }}>
+    <RoomContext.Provider value={{ currentRoom, setCurrentRoom, leaveCurrentRoom, inboxCount }}>
       <AlertDialog open={isAccountDisabled}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -365,12 +404,12 @@ export default function ChatAppLayout({
                     <SidebarMenuItem key={item.href}>
                         <Link href={item.href}>
                         <SidebarMenuButton
-                            isActive={pathname === item.href || (item.href === '/chat' && pathname.startsWith('/chat') && !menuItems.slice(1).some(i => pathname.startsWith(i.href)))}
+                            isActive={pathname === item.href || (item.id === 'inbox' && pathname.startsWith('/chat') && !menuItems.slice(1).some(i => pathname.startsWith(i.href)))}
                             tooltip={item.label}
                         >
                             <item.icon />
                             <span>{item.label}</span>
-                            {item.id === 'friend-requests' && item.count > 0 && (
+                             {item.count !== undefined && item.count > 0 && (
                                 <SidebarMenuBadge>{item.count}</SidebarMenuBadge>
                             )}
                         </SidebarMenuButton>

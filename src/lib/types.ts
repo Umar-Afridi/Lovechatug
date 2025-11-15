@@ -54,7 +54,6 @@ export type Message = {
 export type Chat = {
   id: string;
   members: string[]; // array of user ids
-  participants: string[]; // array of user ids, for security rules
   createdAt: any;
   lastMessage?: {
     content: string;

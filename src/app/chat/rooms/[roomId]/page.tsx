@@ -42,6 +42,7 @@ import {
   VolumeX,
   PhoneOff,
   View,
+  Inbox,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -69,6 +70,8 @@ import { OfficialBadge } from '@/components/ui/official-badge';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { AnimatePresence, motion } from 'framer-motion';
+import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
 
 
 const MIC_SLOTS = 8;
@@ -82,7 +85,7 @@ export default function RoomPage() {
   const { user: authUser } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const { setCurrentRoom, leaveCurrentRoom: contextLeaveRoom } = useRoomContext();
+  const { setCurrentRoom, leaveCurrentRoom: contextLeaveRoom, inboxCount } = useRoomContext();
   
   const [room, setRoom] = useState<Room | null>(null);
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -105,7 +108,9 @@ export default function RoomPage() {
   const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
     if (!firestore || !authUser) return;
 
-    setMessages([]); // Clear messages locally on leave
+    setMessages([]); 
+    contextLeaveRoom();
+    
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
     const roomRef = doc(firestore, 'rooms', roomId);
 
@@ -123,7 +128,7 @@ export default function RoomPage() {
         console.warn("Could not leave room properly, room might be deleted.", e);
     }
     router.push('/chat/rooms');
-  }, [firestore, authUser, roomId, router]);
+  }, [firestore, authUser, roomId, router, contextLeaveRoom]);
   
   const handleBeforeUnload = useCallback((e: BeforeUnloadEvent) => {
       handleLeaveRoom();
@@ -138,10 +143,8 @@ export default function RoomPage() {
   useEffect(() => {
     if (!firestore || !roomId || !authUser) return;
     
-    // Set join timestamp only once when component mounts
     setJoinTimestamp(Timestamp.now());
 
-    // Listener for the main room document
     const roomRef = doc(firestore, 'rooms', roomId);
     const unsubRoom = onSnapshot(roomRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -161,7 +164,6 @@ export default function RoomPage() {
       router.push('/chat/rooms');
     });
 
-    // Listener for the members subcollection
     const membersRef = collection(firestore, 'rooms', roomId, 'members');
     const qMembers = query(membersRef);
     const unsubMembers = onSnapshot(qMembers, async (snapshot) => {
@@ -188,7 +190,6 @@ export default function RoomPage() {
         }
     });
 
-    // Join room logic
     const joinRoom = async () => {
         const userProfileDoc = await getDoc(doc(firestore, 'users', authUser.uid));
         if (!userProfileDoc.exists()) return;
@@ -199,7 +200,7 @@ export default function RoomPage() {
         
         const memberDoc = await getDoc(memberRef);
         const roomDoc = await getDoc(roomRef);
-        if (!roomDoc.exists()) return; // Room might be deleted
+        if (!roomDoc.exists()) return;
         const currentRoomData = roomDoc.data() as Room;
         
         let initialMicSlot: number | null = null;
@@ -227,7 +228,6 @@ export default function RoomPage() {
             
             await batch.commit();
         } else {
-             // If user is owner and not in owner slot, move them there
             const currentMemberData = memberDoc.data() as RoomMember;
             if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
                 await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
@@ -237,11 +237,9 @@ export default function RoomPage() {
     
     joinRoom();
 
-    // Cleanup listeners on component unmount
     return () => {
       unsubRoom();
       unsubMembers();
-      contextLeaveRoom();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, roomId, authUser?.uid]);
@@ -255,14 +253,13 @@ export default function RoomPage() {
       messagesRef,
       where('timestamp', '>', joinTimestamp),
       orderBy('timestamp', 'desc'),
-      limit(5) // Limit to 5 messages for display
+      limit(10) // Increased limit slightly
     );
 
     const unsubMessages = onSnapshot(qMessages, (snapshot) => {
       const newMsgs = snapshot.docs
         .map(d => ({ id: d.id, ...d.data() } as RoomMessage))
         .reverse();
-
       setMessages(newMsgs);
     });
 
@@ -367,9 +364,13 @@ export default function RoomPage() {
         const handleTakeSeat = async () => {
             if (!currentUserSlot) return;
 
-            // Enforce owner-only rule for owner slot
             if (slotNumber === OWNER_SLOT && authUser.uid !== room.ownerId) {
                 toast({ title: "Permission Denied", description: "Only the room owner can take this seat.", variant: "destructive"});
+                return;
+            }
+            // Super admin slot is also restricted
+            if (slotNumber === SUPER_ADMIN_SLOT && !profile?.officialBadge?.isOfficial) {
+                 toast({ title: "Permission Denied", description: "Only official users can take this seat.", variant: "destructive"});
                 return;
             }
 
@@ -399,7 +400,7 @@ export default function RoomPage() {
                             <AvatarFallback className="text-2xl">{getInitials(profile.displayName)}</AvatarFallback>
                         </Avatar>
                     ) : isLocked ? (
-                        <Lock className="text-muted-foreground h-8 w-8" />
+                         <Lock className="text-muted-foreground h-8 w-8" />
                     ): (
                          <Mic className={cn("text-muted-foreground h-8 w-8")}/>
                     )}
@@ -415,7 +416,12 @@ export default function RoomPage() {
                 </div>
                  <div className="h-5 flex items-center justify-center">
                     {profile ? (
-                         <p className={cn("text-sm font-medium truncate max-w-[80px] text-center", specialLabel && "font-semibold", profile.colorfulName && specialLabel !== 'OWNER' && specialLabel !== 'SUPER' && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}>{profile.displayName}</p>
+                         <p className={cn(
+                            "text-sm font-medium truncate max-w-[80px] text-center", 
+                            profile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+                         )}>
+                           {profile.displayName}
+                         </p>
                     ) : specialLabel ? (
                         <p className={cn("text-sm font-semibold")}>{specialLabel}</p>
                     ) : (
@@ -475,18 +481,18 @@ export default function RoomPage() {
         return (
           <motion.div
             key={msg.id}
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10, transition: { duration: 0.3 } }}
-            transition={{ duration: 0.3, delay: index * 0.05 }}
-            className={cn("transition-opacity duration-500 w-full", isNotification && "text-center")}
+            exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
+            transition={{ duration: 0.3 }}
+            className={cn("transition-opacity duration-300 w-full", isNotification && "text-center")}
           >
             {isNotification ? (
               <p className="text-xs text-muted-foreground italic bg-black/20 rounded-full px-3 py-1 inline-block">
                 {msg.content}
               </p>
             ) : (
-              <div className="flex items-start gap-2 text-left bg-black/20 text-white p-2 rounded-lg">
+              <div className="flex items-start gap-2 text-left bg-black/20 text-white p-2 rounded-lg max-w-sm md:max-w-md">
                 <Avatar
                   className="h-6 w-6 cursor-pointer"
                   onClick={() => handleViewProfile(msg.senderId)}
@@ -578,9 +584,8 @@ export default function RoomPage() {
           </div>
         </header>
         
-        <main className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 space-y-6">
-             {/* Mic Slots Section */}
-            <div className="space-y-4">
+        <main className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 justify-between">
+            <div className="space-y-6">
                 <div className="flex justify-center gap-x-4">
                     {renderSlot(OWNER_SLOT, true, "OWNER")}
                     {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
@@ -595,24 +600,15 @@ export default function RoomPage() {
                 </div>
             </div>
 
-            {/* Chat Messages Section */}
-            <div className="flex-grow flex flex-col justify-end min-h-0 pb-4">
-                <div className="space-y-2 overflow-y-auto max-h-[150px]">
-                    <AnimatePresence initial={false}>
-                        {messages.map((msg, index) => renderMessage(msg, index))}
-                    </AnimatePresence>
-                </div>
+            <div className="h-40 flex flex-col-reverse items-start gap-2 overflow-hidden">
+                <AnimatePresence>
+                    {messages.map((msg, index) => renderMessage(msg, index))}
+                </AnimatePresence>
             </div>
         </main>
         
         <footer className="shrink-0 border-t bg-background p-3">
           <div className="flex items-center gap-2">
-            <Button variant={isMuted ? 'destructive' : 'secondary'} size="icon" onClick={handleToggleMute}>
-                {isMuted ? <MicOff /> : <Mic />}
-            </Button>
-             <Button variant="secondary" size="icon" onClick={() => setIsDeafened(!isDeafened)}>
-                {isDeafened ? <VolumeX /> : <Volume2 />}
-            </Button>
             <div className="relative flex-1">
                 <Input 
                     placeholder="Type a message..."
@@ -625,8 +621,19 @@ export default function RoomPage() {
                     <Send className="h-5 w-5" />
                 </Button>
             </div>
-             <Button variant="secondary" size="icon">
-                <Paperclip />
+            <Button variant={isMuted ? 'destructive' : 'secondary'} size="icon" onClick={handleToggleMute}>
+                {isMuted ? <MicOff /> : <Mic />}
+            </Button>
+            <Button variant="secondary" size="icon" onClick={() => setIsDeafened(!isDeafened)}>
+                {isDeafened ? <VolumeX /> : <Volume2 />}
+            </Button>
+             <Button variant="secondary" size="icon" className="relative" asChild>
+                <Link href="/chat">
+                    <Inbox />
+                    {inboxCount > 0 && (
+                        <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{inboxCount}</Badge>
+                    )}
+                </Link>
             </Button>
           </div>
         </footer>
