@@ -148,6 +148,7 @@ export function LoginForm() {
           description: "Please check your inbox and verify your email address.",
         });
         await sendEmailVerification(userCredential.user);
+        await auth.signOut(); // Sign out the user until they verify
         return;
       }
       // Redirection is now handled by the layout
