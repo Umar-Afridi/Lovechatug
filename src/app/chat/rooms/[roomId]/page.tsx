@@ -333,6 +333,7 @@ export default function RoomPage() {
         
         return (
             <div
+                key={slotNumber}
                 className={cn(baseClasses, typeClasses[slotType])}
                 onClick={isClickable ? handleClick : undefined}
             >
