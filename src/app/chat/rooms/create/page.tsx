@@ -38,7 +38,7 @@ export default function CreateRoomPage() {
     }
     
     setIsCreating(true);
-    let photoURL: string | undefined = undefined;
+    let photoURL: string | null = null;
 
     try {
         if (roomPhoto) {
