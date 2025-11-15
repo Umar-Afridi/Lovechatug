@@ -34,8 +34,11 @@ export default function ActiveCallPage() {
         let startTime = new Date().getTime();
         // If there is a timestamp, use it. Otherwise, assume call just started.
         if (callData.answeredAt) {
-            const answeredAt = callData.answeredAt as Timestamp;
-            startTime = answeredAt.toDate().getTime();
+            const answeredAt = callData.answeredAt;
+            // Check if it's a Firestore Timestamp object before calling .toDate()
+            if (answeredAt && typeof answeredAt.toDate === 'function') {
+                startTime = answeredAt.toDate().getTime();
+            }
         }
         
         intervalRef.current = setInterval(() => {
@@ -85,7 +88,7 @@ export default function ActiveCallPage() {
 
   const handleHangUp = async (isRemoteHangup = false) => {
     if (hangupInitiated.current) return;
-    hangupIniti_ated.current = true;
+    hangupInitiated.current = true;
 
     if (intervalRef.current) {
         clearInterval(intervalRef.current);
