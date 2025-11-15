@@ -40,7 +40,7 @@ export default function RoomsPage() {
     return () => unsubMyRooms();
   }, [firestore, user]);
 
-  // Fetch Public/Popular Rooms
+  // Fetch Public/Popular Rooms and exclude user's own room
   useEffect(() => {
     if (!firestore) return;
     setLoading(true);
@@ -49,7 +49,11 @@ export default function RoomsPage() {
 
     const unsubPublicRooms = onSnapshot(q, (snapshot) => {
       const allRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
-      setPublicRooms(allRooms);
+      // Exclude the user's own room from the public list
+      const myRoomIds = myRooms.map(room => room.id);
+      const filteredPublicRooms = allRooms.filter(room => !myRoomIds.includes(room.id));
+      
+      setPublicRooms(filteredPublicRooms);
       setLoading(false);
     }, (error) => {
         console.error("Error fetching popular rooms: ", error);
@@ -57,19 +61,20 @@ export default function RoomsPage() {
     });
 
     return () => unsubPublicRooms();
-  }, [firestore]);
+  }, [firestore, myRooms]); // Rerun when myRooms changes
   
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'R';
   
+  // Filter public rooms based on search query
   const filteredRooms = publicRooms.filter(room => 
       room.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const renderRoomList = (title: string, rooms: Room[], icon?: React.ReactNode) => (
+  const renderRoomList = (title: string, rooms: Room[], icon?: React.ReactNode, emptyMessage?: string) => (
     <div className="space-y-3">
         <h2 className="text-xl font-bold flex items-center gap-2 px-4">{icon}{title}</h2>
         {rooms.length === 0 ? (
-            <p className="text-muted-foreground px-4 text-sm">No rooms found.</p>
+            <p className="text-muted-foreground px-4 text-sm">{emptyMessage || "No rooms found."}</p>
         ) : (
             <div className="relative">
                 <div className="flex space-x-4 overflow-x-auto p-4 scrollbar-hide">
@@ -106,11 +111,13 @@ export default function RoomsPage() {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <h1 className="text-xl font-bold">Voice Chat Rooms</h1>
-        <Button size="sm" asChild>
-            <Link href="/chat/rooms/create">
-                <Plus className="mr-2 h-4 w-4" /> Create Room
-            </Link>
-        </Button>
+        {myRooms.length === 0 && (
+          <Button size="sm" asChild>
+              <Link href="/chat/rooms/create">
+                  <Plus className="mr-2 h-4 w-4" /> Create Room
+              </Link>
+          </Button>
+        )}
       </div>
       
       <div className="p-4 border-b">
@@ -139,11 +146,11 @@ export default function RoomsPage() {
                  </div>
              </div>
         ) : searchQuery ? (
-            renderRoomList("Search Results", filteredRooms)
+            renderRoomList("Search Results", filteredRooms, null, "No rooms found matching your search.")
         ) : (
           <div className="space-y-8 py-4">
-            {myRooms.length > 0 && renderRoomList("My Rooms", myRooms, <Star className="text-yellow-500 h-6 w-6"/>)}
-            {renderRoomList("Popular Rooms", publicRooms, <Tv className="text-purple-500 h-6 w-6"/>)}
+            {myRooms.length > 0 && renderRoomList("My Room", myRooms, <Star className="text-yellow-500 h-6 w-6"/>)}
+            {renderRoomList("Popular Rooms", publicRooms, <Tv className="text-purple-500 h-6 w-6"/>, "No other rooms are live right now.")}
           </div>
         )}
       </ScrollArea>
