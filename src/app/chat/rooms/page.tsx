@@ -31,7 +31,17 @@ export default function RoomsPage() {
     const q = query(roomsRef, where('ownerId', '==', user.uid), orderBy('createdAt', 'desc'));
 
     const unsubMyRooms = onSnapshot(q, (snapshot) => {
-      const userRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+      let userRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+      // If there are multiple rooms, prefer the official one.
+      if (userRooms.length > 1) {
+          const officialRoom = userRooms.find(r => r.ownerIsOfficial);
+          if (officialRoom) {
+              userRooms = [officialRoom];
+          } else {
+              // Otherwise, just show the newest one.
+              userRooms = [userRooms[0]];
+          }
+      }
       setMyRooms(userRooms);
     }, (error) => {
         console.error("Error fetching user's rooms: ", error);
