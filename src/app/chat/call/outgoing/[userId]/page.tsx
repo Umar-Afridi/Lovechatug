@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, getDoc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, updateDoc, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { PhoneOff } from 'lucide-react';
@@ -61,8 +61,24 @@ export default function OutgoingCallPage() {
         const data = docSnap.data() as Call;
         setCallData(data);
         if (data.status === 'declined' || data.status === 'missed') {
-          // End call if receiver declined or it was missed
-          setTimeout(() => router.back(), 2000); // Go back after 2 seconds
+          // Add a message to the chat for missed/declined calls
+            const chatId = [data.callerId, data.receiverId].sort().join('_');
+            const messagesRef = collection(firestore, `chats/${chatId}/messages`);
+            addDoc(messagesRef, {
+                senderId: data.callerId,
+                type: 'call',
+                content: 'Call not answered',
+                timestamp: serverTimestamp(),
+                status: 'sent',
+                callInfo: {
+                    type: data.type,
+                    duration: '0s',
+                    status: 'missed'
+                }
+            }).then(() => {
+                // End call if receiver declined or it was missed
+                setTimeout(() => router.back(), 2000); // Go back after 2 seconds
+            });
         } else if (data.status === 'answered') {
           // Navigate to active call screen
           router.push(`/chat/call/active/${callId}`);
@@ -78,7 +94,7 @@ export default function OutgoingCallPage() {
 
 
   const handleHangUp = async () => {
-    if (!firestore || !callId) {
+    if (!firestore || !callId || !authUser) {
       router.back();
       return;
     }
@@ -86,7 +102,6 @@ export default function OutgoingCallPage() {
     try {
       // If the call was outgoing or ringing, we can just delete it
       // as the other user hasn't interacted yet.
-      // If it's answered, we would update status, but for now we delete.
       await deleteDoc(callDocRef);
     } catch (error) {
       console.error("Error hanging up call:", error);

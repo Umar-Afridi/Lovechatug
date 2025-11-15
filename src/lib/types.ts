@@ -34,7 +34,7 @@ export type Message = {
   senderId: string;
   content: string;
   timestamp: any; // Firestore ServerTimestamp
-  type: 'text' | 'image' | 'audio' | 'room_invite' | 'notification'; // Added 'notification' type
+  type: 'text' | 'image' | 'audio' | 'room_invite' | 'notification' | 'call';
   mediaUrl?: string;
   status: 'sent' | 'delivered' | 'read';
   replyTo?: {
@@ -48,6 +48,11 @@ export type Message = {
     roomId: string;
     roomName: string;
     roomPhotoURL?: string;
+  }
+  callInfo?: {
+      type: 'audio' | 'video';
+      duration: string; // e.g., "15m 32s"
+      status: 'answered' | 'missed' | 'declined' | 'outgoing';
   }
 };
 

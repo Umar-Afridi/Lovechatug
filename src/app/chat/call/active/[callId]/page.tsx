@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { PhoneOff } from 'lucide-react';
@@ -23,6 +23,8 @@ export default function ActiveCallPage() {
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<Date | null>(null);
+
 
   useEffect(() => {
     if (!firestore || !callId) return;
@@ -42,16 +44,16 @@ export default function ActiveCallPage() {
         
         // Start timer if it's not already running
         if (!intervalRef.current && data.timestamp) {
-            const startTime = data.timestamp.toDate();
+            startTimeRef.current = data.timestamp.toDate();
             intervalRef.current = setInterval(() => {
-                setCallDuration(differenceInSeconds(new Date(), startTime));
+                setCallDuration(differenceInSeconds(new Date(), startTimeRef.current!));
             }, 1000);
         }
 
         // Fetch the other user's profile if we haven't already
         if (!otherUser && authUser) {
           const otherUserId = data.callerId === authUser.uid ? data.receiverId : data.callerId;
-          const userDoc = await onSnapshot(doc(firestore, 'users', otherUserId), (userSnap) => {
+          const userDoc = onSnapshot(doc(firestore, 'users', otherUserId), (userSnap) => {
               if (userSnap.exists()) {
                   setOtherUser(userSnap.data() as UserProfile);
               }
@@ -71,45 +73,74 @@ export default function ActiveCallPage() {
     };
   }, [firestore, callId, authUser, otherUser, router]);
 
+  const formatDuration = (totalSeconds: number) => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    const parts = [];
+    if (hours > 0) parts.push(hours.toString().padStart(2, '0'));
+    parts.push(minutes.toString().padStart(2, '0'));
+    parts.push(seconds.toString().padStart(2, '0'));
+    
+    return parts.join(':');
+  }
+
   const handleHangUp = async () => {
-    if (!firestore || !callId || !callData) {
+    if (!firestore || !callId || !callData || !authUser) {
       router.back();
       return;
     }
+    
+    if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+    }
 
     const callDocRef = doc(firestore, 'calls', callId);
-    
-    // Check if the current user is the caller. If so, they are responsible for deleting the doc.
-    if (callData.callerId === authUser?.uid) {
-        try {
-            await deleteDoc(callDocRef);
-        } catch (error) {
-            console.error("Error deleting call document:", error);
+    const finalDuration = callDuration;
+
+    try {
+        // Update the call document with the final duration and status
+        await updateDoc(callDocRef, { 
+            duration: finalDuration,
+            status: 'answered' // Keep status as answered to log it correctly
+        });
+
+        // Add a message to the chat
+        const chatId = [callData.callerId, callData.receiverId].sort().join('_');
+        const messagesRef = collection(firestore, `chats/${chatId}/messages`);
+        await addDoc(messagesRef, {
+            senderId: authUser.uid,
+            type: 'call',
+            content: 'Call ended',
+            timestamp: serverTimestamp(),
+            status: 'sent',
+            callInfo: {
+                type: callData.type,
+                duration: formatDuration(finalDuration),
+                status: 'answered'
+            }
+        });
+
+        // The caller is responsible for deleting the document after a short delay
+        // to ensure the receiver gets the update.
+        if (callData.callerId === authUser?.uid) {
+            setTimeout(async () => {
+                await deleteDoc(callDocRef);
+            }, 5000); // 5-second delay
         }
-    } else {
-        // If the receiver hangs up, they just update the status.
-        // The caller will then see this and delete the doc.
-        try {
-            await updateDoc(callDocRef, { status: 'declined' }); // A status to signify hangup
-        } catch(error) {
-            console.error("Error updating call status:", error);
-        }
+
+    } catch (error) {
+        console.error("Error hanging up call:", error);
+    } finally {
+        router.back();
     }
-    
-    // In all cases, the user who hangs up goes back.
-    router.back();
   };
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
     return name.split(' ').map((n) => n[0]).join('');
   };
-  
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const secs = (seconds % 60).toString().padStart(2, '0');
-    return `${mins}:${secs}`;
-  }
 
   if (!otherUser) {
     return (

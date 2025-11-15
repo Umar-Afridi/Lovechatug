@@ -41,6 +41,7 @@ import {
   AlertCircle,
   Ban,
   DoorOpen,
+  PhoneMissed,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
@@ -860,6 +861,19 @@ export default function ChatIdPage({
                         </Button>
                     </div>
                 );
+            case 'call':
+                 const isMissed = msg.callInfo?.status === 'missed' || msg.callInfo?.status === 'declined';
+                 const isOutgoing = msg.senderId === authUser.uid;
+                 const icon = msg.callInfo?.type === 'video' ? <Video className="h-4 w-4 mr-2"/> : <Phone className="h-4 w-4 mr-2"/>;
+                 return (
+                    <div className="flex items-center">
+                        {icon}
+                        <div>
+                            <p className="font-semibold">{isMissed ? 'Missed Call' : 'Call'}</p>
+                            <p className="text-xs">{isOutgoing ? 'Outgoing' : 'Incoming'} - {msg.callInfo?.duration}</p>
+                        </div>
+                    </div>
+                )
             default:
                 return null;
         }

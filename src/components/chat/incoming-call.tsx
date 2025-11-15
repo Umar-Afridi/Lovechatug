@@ -43,17 +43,27 @@ export function IncomingCall({ call, onHandled }: IncomingCallProps) {
   const handleAccept = async () => {
     if (!firestore || !call.id) return;
     const callDocRef = doc(firestore, 'calls', call.id);
-    await updateDoc(callDocRef, { status: 'answered' });
-    onHandled();
-    router.push(`/chat/call/active/${call.id}`);
+    try {
+        await updateDoc(callDocRef, { status: 'answered' });
+        onHandled();
+        router.push(`/chat/call/active/${call.id}`);
+    } catch(e) {
+        console.error("Error accepting call: ", e);
+        onHandled();
+    }
   };
 
   const handleDecline = async () => {
     if (!firestore || !call.id) return;
     const callDocRef = doc(firestore, 'calls', call.id);
-    // Instead of deleting, update the status so caller knows it was declined.
-    await updateDoc(callDocRef, { status: 'declined' });
-    onHandled();
+    try {
+        // Instead of deleting, update the status so caller knows it was declined.
+        await updateDoc(callDocRef, { status: 'declined' });
+    } catch (e) {
+        console.error("Error declining call: ", e);
+    } finally {
+        onHandled();
+    }
   };
 
   const getInitials = (name: string | null | undefined) => {
