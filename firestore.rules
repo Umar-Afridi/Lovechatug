@@ -19,17 +19,24 @@ service cloud.firestore {
     function isParticipant(participants) {
       return isSignedIn() && request.auth.uid in participants;
     }
+    
+    function isRoomOwner(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerId == request.auth.uid;
+    }
+    
+    function isRoomMember(roomId) {
+      return exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
+    }
 
 
     // 1. صارفین کا مجموعہ (Users Collection)
     match /users/{userId} {
       allow read: if isSignedIn(); // Allow any signed-in user to read profiles
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
+      allow update, delete: if isOwner(userId);
       // Allow list for username search for any signed in user.
       // The client-side query filters out disabled users for non-admins.
-      // Super admins can see all users in their dedicated panel.
-      allow list: if isSignedIn();
+      allow list: if true;
     }
     
     // 2. چیٹس اور میسجز کا مجموعہ (Chats Collection)
@@ -61,6 +68,25 @@ service cloud.firestore {
     match /deletedUsers/{email} {
       allow create: if true;
       allow read, write, delete: if false;
+    }
+
+    // 6. Voice Chat Rooms Collection
+    match /rooms/{roomId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+        allow update, delete: if isRoomOwner(roomId);
+        
+        match /members/{userId} {
+            allow read: if isRoomMember(roomId);
+            allow create: if isOwner(userId);
+            allow update: if isOwner(userId) || isRoomOwner(roomId);
+            allow delete: if isOwner(userId) || isRoomOwner(roomId);
+        }
+        
+        match /messages/{messageId} {
+          allow read, create: if isRoomMember(roomId);
+          allow update, delete: if isOwner(request.resource.data.senderId) || isRoomOwner(roomId);
+        }
     }
   }
 }
