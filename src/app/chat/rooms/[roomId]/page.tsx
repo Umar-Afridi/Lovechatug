@@ -170,9 +170,11 @@ export default function RoomPage() {
         const roomRef = doc(firestore, 'rooms', roomId);
         
         const memberDoc = await getDoc(memberRef);
+        const currentRoomData = (await getDoc(roomRef)).data() as Room;
+
         if (!memberDoc.exists()) {
             let initialMicSlot: number | null = null;
-            if (roomRef.id === authUser.uid) { // simplified isOwner check for join
+            if (currentRoomData.ownerId === authUser.uid) {
                 initialMicSlot = OWNER_SLOT;
             } else if (userProfile?.officialBadge?.isOfficial) {
                 initialMicSlot = SUPER_ADMIN_SLOT;
@@ -257,7 +259,6 @@ export default function RoomPage() {
   const handleToggleMute = async () => {
     if (!firestore || !authUser || !currentUserSlot) return;
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-    // Use set with merge to create the document if it somehow doesn't exist yet
     await setDoc(memberRef, { isMuted: !isMuted }, { merge: true });
   };
 
@@ -341,7 +342,7 @@ export default function RoomPage() {
                         </Avatar>
                     ) : (
                          isLocked ? (
-                            <Lock className="h-8 w-8 text-muted-foreground"/>
+                            <div className="absolute inset-0 flex items-center justify-center"><Lock className="h-8 w-8 text-muted-foreground"/></div>
                         ) : (
                             <Mic className={cn("text-muted-foreground", isSpecial ? "h-10 w-10" : "h-8 w-8")}/>
                         )
@@ -475,15 +476,38 @@ export default function RoomPage() {
         </header>
         
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-            {/* Special Slots */}
-            <div className="grid grid-cols-2 gap-4">
-                {renderSlot(OWNER_SLOT, true, "OWNER")}
-                {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
-            </div>
             
             {/* Member Slots */}
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: MIC_SLOTS }).map((_, i) => renderSlot(i + 1))}
+             <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                {Array.from({ length: MIC_SLOTS }).map((_, i) => {
+                    const slotNumber = i + 1;
+                    if (slotNumber === 2) {
+                        return (
+                            <React.Fragment key="owner-slot-fragment">
+                                <div></div>
+                                <div className="col-start-2">{renderSlot(OWNER_SLOT, true, "OWNER")}</div>
+                                {renderSlot(slotNumber)}
+                            </React.Fragment>
+                        );
+                    }
+                     if (slotNumber === 3) {
+                         return (
+                            <React.Fragment key="super-slot-fragment">
+                                {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
+                                {renderSlot(slotNumber)}
+                            </React.Fragment>
+                         )
+                     }
+                    if (slotNumber === 1) {
+                         return (
+                            <React.Fragment key="slot-1-fragment">
+                                {renderSlot(slotNumber)}
+                                <div></div>
+                            </React.Fragment>
+                         )
+                    }
+                    return renderSlot(slotNumber);
+                })}
             </div>
         </div>
 
