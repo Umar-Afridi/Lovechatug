@@ -13,9 +13,10 @@ import type { UserProfile, Call } from '@/lib/types';
 import { useSound } from '@/hooks/use-sound';
 import { useCallContext } from '@/app/chat/layout';
 
-export default function OutgoingCallPage({ params }: { params: { userId: string, callId?: string }}) {
-  const otherUserId = params.userId;
-  const callId = params.callId;
+export default function OutgoingCallPage() {
+  const params = useParams();
+  const otherUserId = params.userId as string;
+  const callId = params.callId as string | undefined;
   const { endCall } = useCallContext();
 
   const { user: authUser } = useUser();
