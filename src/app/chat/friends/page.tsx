@@ -116,6 +116,11 @@ export default function FriendsPage() {
             batch.set(chatRef, {
               members: [user.uid, request.senderId],
               createdAt: serverTimestamp(),
+              lastMessage: {
+                  content: "No messages yet",
+                  timestamp: serverTimestamp(),
+                  senderId: ""
+              },
               participantDetails: {
                 [user.uid]: {
                   displayName: currentUserProfile?.displayName || user.displayName,
