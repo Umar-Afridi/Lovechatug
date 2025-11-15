@@ -122,29 +122,28 @@ export default function FriendsPage() {
         batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
         batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
         
-        // Add chatId to both users' profiles
-        batch.update(currentUserRef, { chatIds: arrayUnion(chatId) });
-        batch.update(friendUserRef, { chatIds: arrayUnion(chatId) });
-        
-        // Create the chat document
-        const currentUserProfile = (await getDocNonRealTime(currentUserRef)).data() as UserProfile;
-        
-        batch.set(chatRef, {
-          members: [user.uid, request.senderId],
-          createdAt: serverTimestamp(),
-          participantDetails: {
-            [user.uid]: {
-              displayName: currentUserProfile?.displayName || user.displayName,
-              photoURL: currentUserProfile?.photoURL || user.photoURL,
-            },
-            [request.senderId]: {
-              displayName: request.fromUser.displayName,
-              photoURL: request.fromUser.photoURL,
-            },
-          },
-           unreadCount: { [user.uid]: 0, [request.senderId]: 0 },
-           typing: { [user.uid]: false, [request.senderId]: false }
-        });
+        // Check if chat already exists before creating
+        const chatSnap = await getDocNonRealTime(chatRef);
+        if (!chatSnap.exists()) {
+            const currentUserProfile = (await getDocNonRealTime(currentUserRef)).data() as UserProfile;
+            batch.set(chatRef, {
+              members: [user.uid, request.senderId].sort(),
+              createdAt: serverTimestamp(),
+              participantDetails: {
+                [user.uid]: {
+                  displayName: currentUserProfile?.displayName || user.displayName,
+                  photoURL: currentUserProfile?.photoURL || user.photoURL,
+                },
+                [request.senderId]: {
+                  displayName: request.fromUser.displayName,
+                  photoURL: request.fromUser.photoURL,
+                },
+              },
+               unreadCount: { [user.uid]: 0, [request.senderId]: 0 },
+               typing: { [user.uid]: false, [request.senderId]: false }
+            });
+        }
+
 
         batch.delete(requestRef);
 

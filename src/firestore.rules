@@ -13,22 +13,11 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
     
-    // This function checks if a user is a member of a given chat.
+    // This function checks if a user is a member of a given chat based on the chatId format (uid1_uid2)
     function isChatMember(chatId) {
         return isSignedIn() && chatId.includes(request.auth.uid);
     }
-
-    // This function checks if a user is a member of a given voice room.
-    function isRoomMember(roomId) {
-      return exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
-    }
     
-    // This function checks if a user is the owner of a given voice room.
-    function isRoomOwner(roomId) {
-      return get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerId == request.auth.uid;
-    }
-
-
     // 1. Users Collection (/users/{userId})
     match /users/{userId} {
       // Any signed-in user can read any other user's profile.
@@ -39,8 +28,6 @@ service cloud.firestore {
       allow create, update, delete: if isOwner(userId);
       
       // Allow listing of users (e.g., for search), but client-side logic must filter results.
-      // We are allowing this broadly for simplicity, but in a production app,
-      // you might add more specific query constraints.
       allow list: if isSignedIn();
     }
     
@@ -63,6 +50,8 @@ service cloud.firestore {
       // Only the sender or the receiver of a request can read, update, or delete it.
       allow read, update, delete: if isSignedIn() && (isOwner(resource.data.senderId) || isOwner(resource.data.receiverId));
       
+      // A user can query the list of requests they have received.
+      allow list: if isSignedIn();
     }
     
     // 4. Call History Collection (/calls/{callId})
@@ -73,7 +62,7 @@ service cloud.firestore {
       // A user is allowed to perform list queries (e.g., "get my call history"),
       // but the query itself MUST contain `where('participants', 'array-contains', request.auth.uid)`
       // to be successful. This rule enables that secure query.
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() && request.query.where.get('participants').get('arrayValue').get('values')[0].get('stringValue') == request.auth.uid;
     }
 
     // 5. Deleted Users Collection (/deletedUsers/{email}) - For preventing re-registration
@@ -91,26 +80,26 @@ service cloud.firestore {
         // A user can only create a room where they are the owner.
         allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
         // Only the room owner can update or delete it.
-        allow update, delete: if isRoomOwner(roomId);
+        allow update, delete: if isOwner(get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerId);
         
         // Rules for the `members` subcollection within a room
         match /members/{userId} {
             // Room members can read the member list.
-            allow read: if isRoomMember(roomId);
+            allow read: if isSignedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
             // A user can only create their own member document (i.e., join a room).
             allow create: if isOwner(userId);
             // A user can update their own status, or the room owner can update any member.
-            allow update: if isOwner(userId) || isRoomOwner(roomId);
+            allow update: if isOwner(userId) || isOwner(get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerId);
             // A user can delete themselves (leave), or the room owner can kick a member.
-            allow delete: if isOwner(userId) || isRoomOwner(roomId);
+            allow delete: if isOwner(userId) || isOwner(get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerId);
         }
         
         // Rules for the `messages` subcollection within a room
         match /messages/{messageId} {
           // Only room members can read or create messages.
-          allow read, create: if isRoomMember(roomId);
+          allow read, create: if isSignedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
           // Only the message sender or the room owner can update or delete a message.
-          allow update, delete: if isOwner(request.resource.data.senderId) || isRoomOwner(roomId);
+          allow update, delete: if isOwner(request.resource.data.senderId) || isOwner(get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerId);
         }
     }
   }

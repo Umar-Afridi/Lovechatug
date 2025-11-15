@@ -1,3 +1,4 @@
+
 {
   "indexes": [
     {
@@ -11,20 +12,6 @@
         {
           "fieldPath": "timestamp",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "users",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "officialBadge.isOfficial",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "isOnline",
-          "order": "ASCENDING"
         }
       ]
     },
