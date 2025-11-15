@@ -69,6 +69,8 @@ import { OfficialBadge } from '@/components/ui/official-badge';
 
 
 const MIC_SLOTS = 8;
+const SUPER_ADMIN_SLOT = -1;
+const OWNER_SLOT = 0;
 
 export default function RoomPage() {
   const params = useParams();
@@ -86,13 +88,14 @@ export default function RoomPage() {
   const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [message, setMessage] = useState('');
   
-  const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
 
   const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick', targetMember?: RoomMember | null }>({ isOpen: false, action: null });
   
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
+  const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
+
 
   useEffect(() => {
     setIsMounted(true);
@@ -123,12 +126,19 @@ export default function RoomPage() {
         const newMemberIds = membersList.map(m => m.userId).filter(id => !memberProfiles[id]);
         if (newMemberIds.length > 0) {
             const profilesRef = collection(firestore, 'users');
-            const profilesQuery = query(profilesRef, where('uid', 'in', newMemberIds));
-            const profilesSnapshot = await getDocs(profilesQuery);
+            const chunks = [];
+            for (let i = 0; i < newMemberIds.length; i += 30) {
+                chunks.push(newMemberIds.slice(i, i + 30));
+            }
+
             const newProfiles: Record<string, UserProfile> = {};
-            profilesSnapshot.forEach(doc => {
-                newProfiles[doc.id] = doc.data() as UserProfile;
-            });
+            for (const chunk of chunks) {
+                 const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
+                const profilesSnapshot = await getDocs(profilesQuery);
+                profilesSnapshot.forEach(doc => {
+                    newProfiles[doc.id] = doc.data() as UserProfile;
+                });
+            }
             setMemberProfiles(prev => ({...prev, ...newProfiles}));
         }
     });
@@ -146,20 +156,24 @@ export default function RoomPage() {
       unsubMessages();
       contextLeaveRoom();
     };
-  }, [firestore, roomId, authUser, toast, router, setCurrentRoom, contextLeaveRoom]);
+  }, [firestore, roomId, authUser?.uid, toast, router, setCurrentRoom, contextLeaveRoom]);
 
    useEffect(() => {
-    if (!firestore || !authUser || !room || !isMounted) return;
+    if (!firestore || !authUser || !room || !isMounted || !memberProfiles[authUser.uid]) return;
 
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
     const roomRef = doc(firestore, 'rooms', roomId);
+    
+    const userProfile = memberProfiles[authUser.uid];
 
     const joinRoom = async () => {
         const memberDoc = await getDoc(memberRef);
         if (!memberDoc.exists()) {
             let initialMicSlot = null;
             if (isOwner) {
-                initialMicSlot = 0;
+                initialMicSlot = OWNER_SLOT;
+            } else if (userProfile?.officialBadge?.isOfficial) {
+                initialMicSlot = SUPER_ADMIN_SLOT;
             }
             await writeBatch(firestore)
                 .set(memberRef, { userId: authUser.uid, micSlot: initialMicSlot, isMuted: false })
@@ -175,10 +189,13 @@ export default function RoomPage() {
             const memberRefOnLeave = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
             const roomRefOnLeave = doc(firestore, 'rooms', roomId);
              try {
-                await writeBatch(firestore)
-                    .delete(memberRefOnLeave)
-                    .update(roomRefOnLeave, { memberCount: increment(-1) })
-                    .commit();
+                const memberDoc = await getDoc(memberRefOnLeave);
+                if (memberDoc.exists()) {
+                    await writeBatch(firestore)
+                        .delete(memberRefOnLeave)
+                        .update(roomRefOnLeave, { memberCount: increment(-1) })
+                        .commit();
+                }
              } catch(e) {
                 console.warn("Could not update member count on leave, room might be deleted.", e);
              }
@@ -186,7 +203,7 @@ export default function RoomPage() {
       };
       leave();
     };
-  }, [firestore, authUser, roomId, room, isMounted, isOwner]);
+  }, [firestore, authUser, roomId, room, isMounted, isOwner, memberProfiles]);
 
 
   const handleLeaveRoom = async () => {
@@ -208,14 +225,18 @@ export default function RoomPage() {
   const handleKickUser = async (targetMember?: RoomMember | null) => {
     if (!firestore || !isOwner || !targetMember || targetMember.userId === authUser?.uid) return;
     const roomRef = doc(firestore, 'rooms', roomId);
-    await updateDoc(roomRef, { [`kickedUsers.${targetMember.userId}`]: serverTimestamp() });
+    await updateDoc(roomRef, { 
+        [`kickedUsers.${targetMember.userId}`]: serverTimestamp(),
+        members: arrayRemove(targetMember.userId) // Also remove them from the members array
+    });
+    // The onSnapshot listener for members will handle the UI update
     setDialogState({ isOpen: false, action: null });
   };
   
   const handleToggleMute = async () => {
     if (!firestore || !authUser || !currentUserSlot) return;
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-    await updateDoc(memberRef, { isMuted: !currentUserSlot.isMuted });
+    await updateDoc(memberRef, { isMuted: !isMuted });
   };
 
   const handleSendMessage = async () => {
@@ -235,7 +256,9 @@ export default function RoomPage() {
   
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : '?';
   
-  const ownerMember = useMemo(() => members.find(m => m.micSlot === 0), [members]);
+  const ownerMember = useMemo(() => members.find(m => m.micSlot === OWNER_SLOT), [members]);
+  const superAdminMember = useMemo(() => members.find(m => m.micSlot === SUPER_ADMIN_SLOT), [members]);
+  
 
   if (!room || !authUser) {
     return (
@@ -245,65 +268,132 @@ export default function RoomPage() {
     );
   }
   
-  const renderSlot = (slotNumber: number) => {
-      const memberInSlot = members.find(m => m.micSlot === slotNumber);
-      const profile = memberInSlot ? memberProfiles[memberInSlot.userId] : null;
+    const renderSlot = (slotNumber: number) => {
+        const memberInSlot = members.find(m => m.micSlot === slotNumber);
+        const profile = memberInSlot ? memberProfiles[memberInSlot.userId] : null;
+        
+        const isLocked = room?.lockedSlots?.includes(slotNumber);
+        const isSelf = memberInSlot?.userId === authUser.uid;
+        const isClickable = !memberInSlot || isOwner || isSelf;
 
-      const handleSlotClick = async () => {
-          if (!memberInSlot) {
-              if (isOwner || !room.lockedSlots?.includes(slotNumber)) {
-                  const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-                  await updateDoc(memberRef, { micSlot: slotNumber });
-              } else {
-                  toast({ title: 'Slot Locked', description: 'This slot is locked by the owner.' });
-              }
-          } else if (memberInSlot.userId === authUser.uid) {
-              const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-              await updateDoc(memberRef, { micSlot: null });
-          } else if (isOwner) {
-              setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot });
-          }
-      };
-      
-      const handleToggleLock = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!isOwner) return;
-        const roomRef = doc(firestore, 'rooms', roomId);
-        const isLocked = room.lockedSlots?.includes(slotNumber);
-        if (isLocked) {
-            await updateDoc(roomRef, { lockedSlots: arrayRemove(slotNumber) });
-        } else {
-            await updateDoc(roomRef, { lockedSlots: arrayUnion(slotNumber) });
-        }
-      };
+        const handleClick = async () => {
+            if (!isClickable) return;
+            const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
 
-      return (
-          <div key={slotNumber} className="relative flex flex-col items-center justify-center space-y-1" onClick={handleSlotClick}>
-              <button className={cn("relative h-20 w-20 rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
+            if (memberInSlot) {
+                if (isSelf) { // User clicks their own slot to leave it
+                    await updateDoc(memberRef, { micSlot: null });
+                } else if (isOwner) { // Owner clicks on another member
+                    setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot });
+                }
+            } else { // Empty slot
+                if (isLocked && !isOwner) {
+                    toast({ title: 'Slot Locked', description: 'The owner has locked this slot.' });
+                } else {
+                    await updateDoc(memberRef, { micSlot: slotNumber });
+                }
+            }
+        };
+        
+        const handleToggleLock = async (e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (!isOwner) return;
+            const roomRef = doc(firestore, 'rooms', roomId);
+            if (isLocked) {
+                await updateDoc(roomRef, { lockedSlots: arrayRemove(slotNumber) });
+            } else {
+                await updateDoc(roomRef, { lockedSlots: arrayUnion(slotNumber) });
+            }
+        };
+
+        const baseClasses = "relative flex flex-col items-center justify-center space-y-1 group";
+        const slotType = memberInSlot ? 'occupied' : isLocked ? 'locked' : 'empty';
+        const typeClasses = {
+            occupied: 'cursor-pointer',
+            locked: isOwner ? 'cursor-pointer' : 'cursor-not-allowed',
+            empty: isOwner || !isLocked ? 'cursor-pointer' : 'cursor-not-allowed'
+        };
+
+        return (
+            <div
+                key={slotNumber}
+                className={cn(baseClasses, typeClasses[slotType])}
+                onClick={isClickable ? handleClick : undefined}
+            >
+                <div className={cn("relative h-20 w-20 rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
                                   memberInSlot ? "ring-2 ring-offset-2 ring-offset-background" : "border-2 border-dashed border-muted-foreground/50",
                                   memberInSlot && memberInSlot.isMuted ? "ring-destructive" : "ring-primary")}>
-                  {profile ? (
-                      <Avatar className="h-full w-full">
-                          <AvatarImage src={profile.photoURL} />
-                          <AvatarFallback className="text-2xl">{getInitials(profile.displayName)}</AvatarFallback>
-                      </Avatar>
-                  ) : room.lockedSlots?.includes(slotNumber) ? (
-                      <Lock className="h-8 w-8 text-muted-foreground"/>
-                  ) : (
-                      <Mic className="h-8 w-8 text-muted-foreground"/>
-                  )}
-                  
-                  {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
-              </button>
-              {profile && <p className="text-sm font-medium truncate max-w-[80px]">{profile.displayName}</p>}
-               {isOwner && !memberInSlot && (
+                    {profile ? (
+                        <Avatar className="h-full w-full">
+                            <AvatarImage src={profile.photoURL} />
+                            <AvatarFallback className="text-2xl">{getInitials(profile.displayName)}</AvatarFallback>
+                        </Avatar>
+                    ) : isLocked ? (
+                        <Lock className="h-8 w-8 text-muted-foreground"/>
+                    ) : (
+                        <Mic className="h-8 w-8 text-muted-foreground"/>
+                    )}
+                    
+                    {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
+                </div>
+                {profile && <p className="text-sm font-medium truncate max-w-[80px] text-center">{profile.displayName}</p>}
+                {isOwner && !memberInSlot && (
                     <Button variant="ghost" size="icon" className="absolute top-0 right-0 h-6 w-6" onClick={handleToggleLock}>
-                        {room.lockedSlots?.includes(slotNumber) ? <Unlock className="h-4 w-4 text-primary" /> : <Lock className="h-4 w-4 text-muted-foreground" />}
+                        {isLocked ? <Unlock className="h-4 w-4 text-primary" /> : <Lock className="h-4 w-4 text-muted-foreground" />}
                     </Button>
                 )}
-          </div>
-      )
-  }
+            </div>
+        )
+    }
+
+    const renderSpecialSlot = (slotType: 'owner' | 'superAdmin') => {
+        const isOwnerSlot = slotType === 'owner';
+        const member = isOwnerSlot ? ownerMember : superAdminMember;
+        const profile = member ? memberProfiles[member.userId] : null;
+        const isSelf = member?.userId === authUser?.uid;
+
+        if (!member && !isOwnerSlot) return <div className="h-32 w-32" />; // Placeholder for layout
+        if (!member && isOwnerSlot) return (
+             <div className="flex flex-col items-center justify-center space-y-2">
+                <div className="h-32 w-32" />
+                <p className="text-sm text-muted-foreground font-semibold">OWNER</p>
+             </div>
+        );
+        if (!profile) return null; // Still loading profile
+
+        return (
+            <div className="flex flex-col items-center justify-center space-y-2">
+                <div className="relative">
+                    <button className={cn(
+                        "relative h-32 w-32 rounded-full bg-muted flex items-center justify-center transition-all duration-200 ring-4 ring-offset-4 ring-offset-background",
+                         isSelf && "talking-indicator",
+                         member?.isMuted ? "ring-destructive" : (isOwnerSlot ? "ring-yellow-500" : "ring-purple-500")
+                    )}>
+                        <Avatar className="h-full w-full">
+                            <AvatarImage src={profile.photoURL} />
+                            <AvatarFallback className="text-5xl">{getInitials(profile.displayName)}</AvatarFallback>
+                        </Avatar>
+                        
+                         <div className="absolute -top-3 -right-3 h-10 w-10 bg-background rounded-full p-1 border-4 flex items-center justify-center"
+                            style={{ borderColor: isOwnerSlot ? 'hsl(var(--ring-yellow-500))' : 'hsl(var(--ring-purple-500))' }}
+                         >
+                            {isOwnerSlot ? <Crown className="h-6 w-6 text-yellow-500"/> : <Shield className="h-6 w-6 text-purple-500"/> }
+                         </div>
+
+                        {member?.isMuted && (
+                             <div className="absolute bottom-1 right-1 bg-destructive rounded-full p-2 border-2 border-background">
+                                <MicOff className="h-4 w-4 text-white"/>
+                            </div>
+                        )}
+                    </button>
+                </div>
+                <p className="font-bold text-lg">{profile.displayName}</p>
+                 <p className={cn("text-sm font-semibold", isOwnerSlot ? "text-yellow-500" : "text-purple-500")}>
+                    {isOwnerSlot ? "OWNER" : "SUPER ADMIN"}
+                </p>
+            </div>
+        );
+    }
 
   return (
     <>
@@ -364,24 +454,13 @@ export default function RoomPage() {
         </header>
         
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-            {/* Owner Slot */}
-            <div className="flex flex-col items-center justify-center space-y-2">
-                <div className="relative">
-                    <button className={cn("relative h-28 w-28 rounded-full bg-muted flex items-center justify-center transition-all duration-200 ring-2 ring-offset-4 ring-offset-background", ownerMember && ownerMember.isMuted ? "ring-destructive" : "ring-yellow-500")}>
-                        {ownerMember && memberProfiles[ownerMember.userId] ? (
-                            <Avatar className="h-full w-full">
-                                <AvatarImage src={memberProfiles[ownerMember.userId].photoURL} />
-                                <AvatarFallback className="text-4xl">{getInitials(memberProfiles[ownerMember.userId].displayName)}</AvatarFallback>
-                            </Avatar>
-                        ) : (
-                            <Crown className="h-12 w-12 text-yellow-500"/>
-                        )}
-                    </button>
-                    <Crown className="absolute -top-2 -right-2 h-8 w-8 text-yellow-500 bg-background rounded-full p-1 border-2 border-yellow-500"/>
-                </div>
-                {ownerMember && memberProfiles[ownerMember.userId] && <p className="font-bold text-lg">{memberProfiles[ownerMember.userId].displayName}</p>}
-                <p className="text-sm text-yellow-500 font-semibold">OWNER</p>
+            {/* Special Slots */}
+            <div className="flex justify-center items-start gap-8">
+                {renderSpecialSlot('owner')}
+                {superAdminMember && renderSpecialSlot('superAdmin')}
             </div>
+            
+             <p className="text-center text-sm font-bold text-muted-foreground tracking-widest">THRONE</p>
 
             {/* Member Slots */}
             <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
@@ -391,8 +470,8 @@ export default function RoomPage() {
 
         <footer className="shrink-0 border-t bg-background p-3 space-y-3">
              <div className="flex justify-center items-center gap-4">
-                 <Button variant={currentUserSlot?.isMuted ? 'destructive' : 'secondary'} size="lg" className="rounded-full h-14 w-14" onClick={handleToggleMute}>
-                    {currentUserSlot?.isMuted ? <MicOff className="h-6 w-6"/> : <Mic className="h-6 w-6"/>}
+                 <Button variant={isMuted ? 'destructive' : 'secondary'} size="lg" className="rounded-full h-14 w-14" onClick={handleToggleMute}>
+                    {isMuted ? <MicOff className="h-6 w-6"/> : <Mic className="h-6 w-6"/>}
                 </Button>
                  <Button variant={isDeafened ? 'destructive' : 'secondary'} size="lg" className="rounded-full h-14 w-14" onClick={() => setIsDeafened(!isDeafened)}>
                     {isDeafened ? <VolumeX className="h-6 w-6"/> : <Volume2 className="h-6 w-6"/>}
