@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
@@ -11,13 +11,14 @@ import { Button } from '@/components/ui/button';
 import { PhoneOff } from 'lucide-react';
 import type { UserProfile, Call } from '@/lib/types';
 import { useSound } from '@/hooks/use-sound';
+import { useCallContext } from '@/app/chat/layout';
 
 export default function OutgoingCallPage() {
   const params = useParams();
   const otherUserId = params.userId as string;
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callId = searchParams.get('callId');
+  const { endCall } = useCallContext();
 
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -52,7 +53,7 @@ export default function OutgoingCallPage() {
     });
     return () => unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, otherUserId, play]);
+  }, [firestore, otherUserId]);
 
   // Listen to call document for status changes
   useEffect(() => {
@@ -80,18 +81,18 @@ export default function OutgoingCallPage() {
             }).finally(() => {
                  setTimeout(() => {
                     deleteDoc(callDocRef).finally(() => {
-                        // Don't navigate, just let the component unmount via parent state
+                        endCall();
                     });
                  }, 2000);
             });
         } else if (data.status === 'answered') {
           stop();
-          // Don't navigate, the parent layout will handle showing the active call screen
+          // The layout will now handle showing the active call screen
         }
       } else {
         // Call document deleted (e.g., cancelled by caller or declined)
         stop();
-         // The parent will handle unmounting this component
+        endCall();
       }
     });
 
@@ -100,24 +101,22 @@ export default function OutgoingCallPage() {
         unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, callId, stop]);
+  }, [firestore, callId]);
 
 
-  const handleHangUp = async () => {
+  const handleHangUp = useCallback(async () => {
     stop();
-    if (!firestore || !callId || !authUser) {
-      // Just let the parent handle unmounting
+    endCall(); // Immediately update UI state
+    if (!firestore || !callId) {
       return;
     }
     const callDocRef = doc(firestore, 'calls', callId);
     try {
-      await deleteDoc(callDocRef);
+       await deleteDoc(callDocRef);
     } catch (error) {
-      console.error("Error hanging up call:", error);
-    } finally {
-       // Parent will handle unmounting this component
+      console.warn("Could not delete call doc, it might already be gone:", error);
     }
-  };
+  }, [stop, endCall, firestore, callId]);
   
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
