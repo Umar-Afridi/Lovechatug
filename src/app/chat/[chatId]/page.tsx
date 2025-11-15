@@ -73,7 +73,7 @@ export default function ChatIdPage() {
   const { user: authUser } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const { startCall } = useCallContext();
+  const callContext = useCallContext();
   
   const [chatId, setChatId] = useState<string | null>(null);
   const [chatData, setChatData] = useState<ChatType | null>(null);
@@ -732,8 +732,8 @@ export default function ChatIdPage() {
     };
     
     const handleInitiateCall = (type: 'audio' | 'video') => {
-        if (!otherUser) return;
-        startCall(otherUser.uid, type);
+        if (!otherUser || !callContext) return;
+        callContext.startCall(otherUser.uid, type);
     };
   
   const MessageStatus = ({ status }: { status: MessageType['status'] }) => {
