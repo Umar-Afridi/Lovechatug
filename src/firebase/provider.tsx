@@ -3,7 +3,6 @@ import { createContext, useContext, ReactNode } from 'react';
 import { FirebaseApp } from 'firebase/app';
 import { Auth } from 'firebase/auth';
 import { Firestore } from 'firebase/firestore';
-import { initializeFirebase } from '.';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
 type FirebaseContextValue = {
@@ -18,8 +17,17 @@ const FirebaseContext = createContext<FirebaseContextValue>({
   firestore: null,
 });
 
-export function FirebaseProvider({ children }: { children: ReactNode }) {
-  const { app, auth, firestore } = initializeFirebase();
+export function FirebaseProvider({ 
+  children, 
+  app, 
+  auth, 
+  firestore 
+}: { 
+  children: ReactNode,
+  app: FirebaseApp | null,
+  auth: Auth | null,
+  firestore: Firestore | null,
+}) {
   return (
     <FirebaseContext.Provider value={{ app, auth, firestore }}>
       <FirebaseErrorListener />

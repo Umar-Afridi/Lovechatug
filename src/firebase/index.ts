@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { firebaseConfig } from './config';
@@ -7,20 +7,24 @@ import { firebaseConfig } from './config';
 let isFirestoreInitialized = false;
 
 export function initializeFirebase() {
-  const apps = getApps();
-  const app = apps.length ? apps[0] : initializeApp(firebaseConfig);
+  const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
   const auth = getAuth(app);
   
   // Initialize Firestore with persistent cache
   // This enables offline capabilities and faster loading
   let firestore;
-  if (!isFirestoreInitialized) {
-     firestore = initializeFirestore(app, {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager()
-      })
-    });
-    isFirestoreInitialized = true;
+  if (typeof window !== 'undefined' && !isFirestoreInitialized) {
+     try {
+        firestore = initializeFirestore(app, {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager()
+          })
+        });
+        isFirestoreInitialized = true;
+     } catch (e) {
+        console.error("Firestore initialization error:", e);
+        firestore = getFirestore(app); // Fallback to default initialization
+     }
   } else {
     firestore = getFirestore(app);
   }
