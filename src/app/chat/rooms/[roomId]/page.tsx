@@ -221,7 +221,6 @@ export default function RoomPage() {
             const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
             batch.set(memberRef, memberData);
             
-            // Only increment count if not joining as a super admin
             if (!isJoiningAsSuperAdmin) {
               batch.update(roomRef, { memberCount: increment(1) });
             }
@@ -239,7 +238,6 @@ export default function RoomPage() {
             await batch.commit();
         } else {
             const currentMemberData = memberDoc.data() as RoomMember;
-             // Ensure owner/super-admin slots are correctly assigned if they re-join
             if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
                 await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
             } else if (userProfile?.officialBadge?.isOfficial && currentMemberData.micSlot !== SUPER_ADMIN_SLOT) {
@@ -273,7 +271,6 @@ export default function RoomPage() {
       setMessages(prevMessages => {
           const newMsgs = snapshot.docs
               .map(d => ({ id: d.id, ...d.data() } as RoomMessage))
-              // Filter out messages that are already in state to prevent duplicates
               .filter(newMsg => !prevMessages.some(prevMsg => prevMsg.id === newMsg.id));
           
           if (newMsgs.length > 0) {
@@ -294,7 +291,6 @@ export default function RoomPage() {
     try {
         await deleteDoc(doc(firestore, 'rooms', room.id));
         toast({ title: 'Room Deleted', description: 'The room has been successfully deleted.' });
-        // The handleLeaveRoom will be triggered by the component unmount, which is fine
         router.push('/chat/rooms');
     } catch(e) {
         console.error("Error deleting room", e);
@@ -383,7 +379,7 @@ export default function RoomPage() {
         const isSelf = memberInSlot?.userId === authUser.uid;
         
         const handleTakeSeat = async () => {
-            if (!currentUserSlot) return;
+            if (!currentUserSlot || (slotNumber === OWNER_SLOT && authUser.uid !== room.ownerId)) return;
             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
             await updateDoc(memberRef, { micSlot: slotNumber });
         };
@@ -410,7 +406,7 @@ export default function RoomPage() {
                     ) : isLocked ? (
                          <Lock className="text-muted-foreground h-8 w-8" />
                     ): (
-                         <Mic className={cn("text-muted-foreground h-8 w-8", isSpecial && "text-muted-foreground/50")}/>
+                         <Mic className={cn("text-muted-foreground h-8 w-8")}/>
                     )}
                     
                     {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
@@ -467,17 +463,12 @@ export default function RoomPage() {
                     )}
 
                     {!memberInSlot && !isLocked && currentUserSlot?.micSlot === null && (
-                         <DropdownMenuItem 
-                            onClick={handleTakeSeat} 
-                            disabled={
-                                (slotNumber === OWNER_SLOT && authUser.uid !== room.ownerId)
-                            }
-                         >
+                         <DropdownMenuItem onClick={handleTakeSeat}>
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                          </DropdownMenuItem>
                     )}
                     
-                    {isSelf && slotNumber === currentUserSlot?.micSlot && currentUserSlot.micSlot > 0 && (
+                    {isSelf && slotNumber === currentUserSlot?.micSlot && currentUserSlot.micSlot >= 0 && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
                          </DropdownMenuItem>
@@ -599,24 +590,26 @@ export default function RoomPage() {
           </div>
         </header>
         
-        <main className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 justify-start gap-6">
-            {/* Top Row: Owner and Super */}
-            <div className="flex justify-center gap-x-4 md:gap-x-8">
-                {renderSlot(OWNER_SLOT, true, "OWNER")}
-                {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
-            </div>
-            
-            {/* Mic Slots */}
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
-            </div>
+        <main className="flex-1 flex flex-col overflow-hidden p-4 md:p-6">
+            <div className="flex flex-col items-center gap-6">
+                 {/* Top Row: Owner and Super */}
+                <div className="flex justify-center gap-x-4 md:gap-x-8">
+                    {renderSlot(OWNER_SLOT, true, "OWNER")}
+                    {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
+                </div>
+                
+                {/* Mic Slots */}
+                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
+                </div>
 
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+                </div>
             </div>
 
             {/* Chat Area */}
-             <div className="mt-auto h-40 flex flex-col-reverse items-start gap-2 overflow-y-auto overflow-x-hidden p-2 rounded-lg bg-black/10">
+            <div className="mt-auto h-40 flex flex-col justify-end items-start gap-2 overflow-y-auto overflow-x-hidden p-2 rounded-lg bg-black/10">
                 <AnimatePresence>
                     {messages.slice(-5).map((msg, index) => renderMessage(msg, index))}
                 </AnimatePresence>
