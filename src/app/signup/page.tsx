@@ -2,7 +2,7 @@
 
 import { SignupForm } from '@/components/auth/signup-form';
 import { AuthHeader } from '@/components/auth/auth-header';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 
 export default function SignupPage() {
@@ -11,7 +11,11 @@ export default function SignupPage() {
       <div className="w-full max-w-md">
         <AuthHeader activeTab="signup" />
         <Card className="rounded-t-none">
-          <CardContent className="pt-6">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold">Create an Account</CardTitle>
+            <CardDescription>Join the community and start chatting!</CardDescription>
+          </CardHeader>
+          <CardContent>
             <SignupForm />
           </CardContent>
         </Card>

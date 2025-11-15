@@ -1,19 +1,11 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth, useFirestore } from '@/firebase/provider';
-import { createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification, updateProfile } from 'firebase/auth';
-import { doc, setDoc, collection, query, where, getDocs, getDoc, serverTimestamp } from 'firebase/firestore';
-import Link from 'next/link';
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -56,8 +48,6 @@ export function SignupForm() {
 
     const username = usernameInput.toLowerCase();
     
-    const usersRef = collection(firestore, 'users');
-
     try {
         // Step 1: Create the user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -115,10 +105,6 @@ export function SignupForm() {
 
   return (
     <>
-      <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold">Create an Account</h2>
-        <p className="text-muted-foreground text-sm">Join the community and start chatting!</p>
-      </div>
       {message ? (
         <Alert variant="default" className="border-green-500 bg-green-50 text-green-800">
             <CheckCircle className="h-4 w-4 text-green-500" />
