@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { PhoneOff } from 'lucide-react';
 import type { UserProfile, Call } from '@/lib/types';
+import { useSound } from '@/hooks/use-sound';
 
 export default function OutgoingCallPage() {
   const params = useParams();
@@ -26,6 +27,9 @@ export default function OutgoingCallPage() {
   const [callStatus, setCallStatus] = useState('Calling...');
   const [loading, setLoading] = useState(true);
 
+  const playRingingSound = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e');
+
+
   // Fetch receiver's profile
   useEffect(() => {
     if (!firestore || !otherUserId) return;
@@ -34,14 +38,19 @@ export default function OutgoingCallPage() {
       if (docSnap.exists()) {
         const userData = docSnap.data() as UserProfile;
         setOtherUser(userData);
-        setCallStatus(userData.isOnline ? 'Ringing...' : 'Calling...');
+        if (userData.isOnline) {
+            setCallStatus('Ringing...');
+            playRingingSound();
+        } else {
+            setCallStatus('Calling...');
+        }
       } else {
         router.push('/chat'); // User not found
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [firestore, otherUserId, router]);
+  }, [firestore, otherUserId, router, playRingingSound]);
 
   // Listen to call document for status changes
   useEffect(() => {
@@ -55,10 +64,8 @@ export default function OutgoingCallPage() {
           // End call if receiver declined or it was missed
           setTimeout(() => router.back(), 2000); // Go back after 2 seconds
         } else if (data.status === 'answered') {
-          // Navigate to active call screen (to be implemented)
-          // For now, just log and go back
-          console.log("Call answered!");
-          setTimeout(() => router.back(), 1000);
+          // Navigate to active call screen
+          router.push(`/chat/call/active/${callId}`);
         }
       } else {
         // Call document deleted (e.g., cancelled by caller)

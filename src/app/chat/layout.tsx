@@ -49,13 +49,14 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useEffect, useState, useRef, useCallback, createContext, useContext } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch } from 'firebase/firestore';
-import type { UserProfile, Room, Chat } from '@/lib/types';
+import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit } from 'firebase/firestore';
+import type { UserProfile, Room, Chat, Call } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getDatabase, ref, onValue, off, onDisconnect, serverTimestamp as rtdbServerTimestamp, set } from 'firebase/database';
 import { useSound } from '@/hooks/use-sound';
 import { FloatingRoomIndicator } from '@/components/chat/floating-room-indicator';
+import { IncomingCall } from '@/components/chat/incoming-call';
 
 
 // Context for sharing current room state
@@ -169,6 +170,42 @@ function usePresence() {
   }, [user, firestore]);
 }
 
+// Custom hook for incoming calls
+function useIncomingCalls() {
+  const { user, loading: authLoading } = useUser();
+  const firestore = useFirestore();
+  const [incomingCall, setIncomingCall] = useState<Call | null>(null);
+
+  useEffect(() => {
+    if (!user || !firestore || authLoading) return;
+
+    const callsRef = collection(firestore, 'calls');
+    const q = query(
+      callsRef,
+      where('receiverId', '==', user.uid),
+      where('status', '==', 'outgoing'),
+      limit(1)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        const callDoc = snapshot.docs[0];
+        setIncomingCall({ id: callDoc.id, ...callDoc.data() } as Call);
+      } else {
+        setIncomingCall(null);
+      }
+    }, (error) => {
+      console.error('Error listening for incoming calls:', error);
+    });
+
+    return () => unsubscribe();
+  }, [user, firestore, authLoading]);
+
+  const clearIncomingCall = () => setIncomingCall(null);
+
+  return { incomingCall, clearIncomingCall };
+}
+
 
 export default function ChatAppLayout({
   children,
@@ -188,6 +225,7 @@ export default function ChatAppLayout({
   const { toast } = useToast();
   
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  const { incomingCall, clearIncomingCall } = useIncomingCalls();
 
   const handleAccountDisabled = useCallback(() => {
     setAccountDisabled(true);
@@ -208,7 +246,14 @@ export default function ChatAppLayout({
     try {
         const batch = writeBatch(firestore);
         batch.delete(memberRef);
-        batch.update(roomRef, { memberCount: -1 }); // Decrement might need adjustment
+        
+        const memberDoc = await getDoc(memberRef);
+        if (memberDoc.exists() && (memberDoc.data() as UserProfile).micSlot !== -1) {
+            const roomDoc = await getDoc(roomRef);
+            if (roomDoc.exists() && roomDoc.data().memberCount > 0) {
+              batch.update(roomRef, { memberCount: -1 });
+            }
+        }
         await batch.commit();
     } catch(e) {
         console.warn("Could not leave room properly", e);
@@ -369,6 +414,10 @@ export default function ChatAppLayout({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {incomingCall && (
+            <IncomingCall call={incomingCall} onHandled={clearIncomingCall} />
+        )}
 
       <div className="flex h-screen bg-background">
         <SidebarProvider>
