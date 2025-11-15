@@ -50,10 +50,14 @@ export default function ActiveCallPage() {
         
         if (!intervalRef.current && data.timestamp) {
             startTimeRef.current = data.timestamp.toDate();
-            setCallDuration(differenceInSeconds(new Date(), startTimeRef.current!));
+            // Ensure duration is non-negative
+            const initialDuration = differenceInSeconds(new Date(), startTimeRef.current);
+            setCallDuration(initialDuration > 0 ? initialDuration : 0);
+
             intervalRef.current = setInterval(() => {
                 if (startTimeRef.current) {
-                  setCallDuration(differenceInSeconds(new Date(), startTimeRef.current));
+                  const currentDuration = differenceInSeconds(new Date(), startTimeRef.current);
+                  setCallDuration(currentDuration > 0 ? currentDuration : 0);
                 }
             }, 1000);
         }
