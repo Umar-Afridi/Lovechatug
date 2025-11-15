@@ -50,16 +50,27 @@ export function SignupForm() {
     }
 
     const username = usernameInput.toLowerCase();
-
-    // Check if username already exists
-    const usernameQuery = query(collection(firestore, 'users'), where('username', '==', username));
-    const usernameSnapshot = await getDocs(usernameQuery);
-    if (!usernameSnapshot.empty) {
-        setError('This username is already taken. Please choose another one.');
-        return;
-    }
     
     try {
+        // Check if username already exists
+        const usersRef = collection(firestore, 'users');
+        const usernameQuery = query(usersRef, where('username', '==', username));
+        
+        try {
+            const usernameSnapshot = await getDocs(usernameQuery);
+            if (!usernameSnapshot.empty) {
+                setError('This username is already taken. Please choose another one.');
+                return;
+            }
+        } catch(serverError: any) {
+             if (serverError.code === 'permission-denied') {
+                const permissionError = new FirestorePermissionError({ path: 'users', operation: 'list' });
+                errorEmitter.emit('permission-error', permissionError);
+            }
+            // We re-throw to stop execution if username check fails
+            throw serverError;
+        }
+
         // Step 1: Create the user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
@@ -67,31 +78,46 @@ export function SignupForm() {
         // Step 2: Send verification email IMMEDIATELY after user creation
         await sendEmailVerification(user);
 
-        // Step 3: Update the user's profile in Firebase Auth and create Firestore doc in parallel
+        // Step 3: Create Firestore doc
+        const newUserProfileData = {
+            uid: user.uid,
+            displayName: fullName,
+            email: email,
+            username: username,
+            photoURL: user.photoURL ?? '',
+            friends: [],
+            bio: '',
+            isOnline: false,
+            lastSeen: serverTimestamp(),
+            blockedUsers: [],
+            blockedBy: [],
+            verifiedBadge: {
+                showBadge: false,
+                badgeColor: 'blue'
+            },
+            colorfulName: false,
+            verificationApplicationStatus: 'none',
+            isDisabled: false,
+        } as Omit<UserProfile, 'officialBadge' | 'lastColorfulNameRequestAt' | 'lastVerificationRequestAt'>;
+        
+        const userDocRef = doc(firestore, 'users', user.uid);
+        
+        // This is wrapped in a promise to handle the permission error correctly
         await Promise.all([
-            updateProfile(user, {
-                displayName: fullName,
-            }),
-            setDoc(doc(firestore, 'users', user.uid), {
-                uid: user.uid,
-                displayName: fullName,
-                email: email,
-                username: username,
-                photoURL: user.photoURL ?? '',
-                friends: [],
-                bio: '',
-                isOnline: false,
-                lastSeen: serverTimestamp(),
-                blockedUsers: [],
-                blockedBy: [],
-                verifiedBadge: {
-                    showBadge: false,
-                    badgeColor: 'blue'
-                },
-                colorfulName: false,
-                verificationApplicationStatus: 'none',
-                isDisabled: false,
-            } as Omit<UserProfile, 'officialBadge' | 'lastColorfulNameRequestAt' | 'lastVerificationRequestAt'>, { merge: true })
+            updateProfile(user, { displayName: fullName }),
+            setDoc(userDocRef, newUserProfileData, { merge: true })
+                .catch((serverError: any) => {
+                    if (serverError.code === 'permission-denied') {
+                        const permissionError = new FirestorePermissionError({
+                            path: userDocRef.path,
+                            operation: 'create',
+                            requestResourceData: newUserProfileData
+                        });
+                        errorEmitter.emit('permission-error', permissionError);
+                    }
+                    // Re-throw to make sure the outer catch block handles it
+                    throw serverError;
+                })
         ]);
         
         // Step 4: Show success message and sign the user out
@@ -102,15 +128,9 @@ export function SignupForm() {
       } catch (err: any) {
         if (err.code === 'auth/email-already-in-use') {
            setError('This email address is already in use by another account.');
-        } else if (err.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-                path: 'users collection during signup', // Simplified path
-                operation: 'create', // The intended operation was to check then create
-            });
-            errorEmitter.emit('permission-error', permissionError);
-            setError('A permission error occurred during signup. Please check your Firestore security rules.');
-        }
-        else {
+        } else if (err.code !== 'permission-denied') {
+           // We only set a generic error if it's not a permission error,
+           // because permission errors are now handled globally.
            setError(err.message || "An unknown error occurred during signup.");
         }
       }
