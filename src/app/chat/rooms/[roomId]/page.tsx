@@ -96,13 +96,13 @@ export default function RoomPage() {
   const [joinTimestamp, setJoinTimestamp] = useState<Timestamp | null>(null);
 
 
-  const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick', targetMember?: RoomMember | null }>({ isOpen: false, action: null });
+  const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick' | null, targetMember?: RoomMember | null }>({ isOpen: false, action: null });
   
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
 
- const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
+  const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
     if (!firestore || !authUser) return;
 
     setMessages([]); // Clear messages locally on leave
@@ -124,6 +124,15 @@ export default function RoomPage() {
     }
     router.push('/chat/rooms');
   }, [firestore, authUser, roomId, router]);
+
+  const handleBeforeUnload = useCallback((e: BeforeUnloadEvent) => {
+      handleLeaveRoom();
+  }, [handleLeaveRoom]);
+  
+  useEffect(() => {
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [handleBeforeUnload]);
 
   // --- Main Data Fetching and Room Joining Logic ---
   useEffect(() => {
@@ -235,7 +244,6 @@ export default function RoomPage() {
       unsubRoom();
       unsubMembers();
       contextLeaveRoom();
-      setMessages([]);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, roomId, authUser?.uid]);
@@ -264,14 +272,6 @@ export default function RoomPage() {
       unsubMessages();
     };
   }, [firestore, roomId, joinTimestamp]);
-
-    useEffect(() => {
-        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            handleLeaveRoom();
-        };
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [handleLeaveRoom]);
 
 
   const handleDeleteRoom = async () => {
@@ -388,11 +388,7 @@ export default function RoomPage() {
                             <AvatarFallback className="text-2xl">{getInitials(profile.displayName)}</AvatarFallback>
                         </Avatar>
                     ) : (
-                         isLocked ? (
-                            null
-                        ) : (
-                           <Mic className={cn("text-muted-foreground h-8 w-8")}/>
-                        )
+                        <Mic className={cn("text-muted-foreground h-8 w-8", isLocked && "hidden", isSpecial && "text-muted-foreground/50")}/>
                     )}
                     
                     {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
@@ -499,9 +495,6 @@ export default function RoomPage() {
         const senderProfile = memberProfiles[msg.senderId];
         const isNotification = msg.type === 'notification';
     
-        const totalMessages = messages.length;
-        const opacity = Math.max(0, 1 - (totalMessages - index - 1) * 0.2); // Fade out older messages
-    
         return (
           <motion.div
             key={msg.id}
@@ -509,7 +502,6 @@ export default function RoomPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10, transition: { duration: 0.3 } }}
             transition={{ duration: 0.3, delay: index * 0.05 }}
-            style={{ opacity: isNotification ? 1 : opacity }}
             className={cn("transition-opacity duration-500 w-full", isNotification && "text-center")}
           >
             {isNotification ? (
@@ -553,7 +545,7 @@ export default function RoomPage() {
           onOpenChange={setContactSheetOpen}
           userProfile={viewedProfile}
       />
-      <AlertDialog open={dialogState.isOpen} onOpenChange={(isOpen) => !isOpen && setDialogState({ isOpen: false, action: null })}>
+      <AlertDialog open={dialogState.isOpen} onOpenChange={(isOpen) => !isOpen && setDialogState({ isOpen: false, action: null, targetMember: null })}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -610,66 +602,58 @@ export default function RoomPage() {
         </header>
         
         <main className="flex-1 flex flex-col overflow-hidden p-4 md:p-6 space-y-4">
-            <div className="flex justify-center gap-x-4">
-                {renderSlot(OWNER_SLOT, true, "OWNER")}
-                {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
-            </div>
-            
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
-            </div>
-
-            <div className="w-full max-w-lg mx-auto flex-grow flex flex-col justify-end pb-4 min-h-[150px]">
-              <AnimatePresence>
-                <div className="flex flex-col-reverse justify-start gap-2 overflow-hidden">
-                    {messages.map((msg, index) => renderMessage(msg, index))}
+             {/* Mic Slots Section */}
+            <div className="space-y-4">
+                <div className="flex justify-center gap-x-4">
+                    {renderSlot(OWNER_SLOT, true, "OWNER")}
+                    {renderSlot(SUPER_ADMIN_SLOT, true, "SUPER")}
                 </div>
-              </AnimatePresence>
+                
+                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
+                </div>
+
+                <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
+                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+                </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+            {/* Chat Messages Section */}
+            <div className="flex-grow flex flex-col justify-end min-h-0 pb-4">
+                <div className="space-y-2 overflow-y-auto max-h-[150px]">
+                    <AnimatePresence initial={false}>
+                        {messages.map((msg, index) => renderMessage(msg, index))}
+                    </AnimatePresence>
+                </div>
             </div>
         </main>
-
-         <footer className="shrink-0 border-t bg-background p-3">
-            <div className="relative flex items-center gap-2">
-                 <Input 
-                    placeholder="Send a message..." 
-                    className="h-10 flex-1 bg-muted border-muted-foreground/30 focus-visible:ring-primary"
+        
+        <footer className="shrink-0 border-t bg-background p-3">
+          <div className="flex items-center gap-2">
+            <Button variant={isMuted ? 'destructive' : 'secondary'} size="icon" onClick={handleToggleMute}>
+                {isMuted ? <MicOff /> : <Mic />}
+            </Button>
+             <Button variant="secondary" size="icon" onClick={() => setIsDeafened(!isDeafened)}>
+                {isDeafened ? <VolumeX /> : <Volume2 />}
+            </Button>
+            <div className="relative flex-1">
+                <Input 
+                    placeholder="Type a message..."
+                    className="pr-10"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                 />
-                 <Button variant="ghost" size="icon" className="h-10 w-10" onClick={handleToggleMute} disabled={currentUserSlot.micSlot === null}>
-                    {isMuted ? <MicOff className="h-5 w-5"/> : <Mic className="h-5 w-5"/>}
-                </Button>
-                <Button variant="ghost" size="icon" className="h-10 w-10" onClick={handleSendMessage}>
-                    <Send className="h-5 w-5"/>
-                </Button>
-                 <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => setIsDeafened(!isDeafened)}>
-                    {isDeafened ? <VolumeX className="h-5 w-5"/> : <Volume2 className="h-5 w-5"/>}
+                <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2" onClick={handleSendMessage}>
+                    <Send className="h-5 w-5" />
                 </Button>
             </div>
+             <Button variant="secondary" size="icon">
+                <Paperclip />
+            </Button>
+          </div>
         </footer>
       </div>
     </>
   );
 }
-
-const style = document.createElement('style');
-style.innerHTML = `
-.talking-indicator {
-    animation: talking 1.5s ease-out infinite;
-}
-
-@keyframes talking {
-    0%, 100% {
-        box-shadow: 0 0 0 2px hsl(var(--primary) / 0.8), 0 0 0 4px hsl(var(--primary) / 0.4);
-    }
-    50% {
-        box-shadow: 0 0 0 4px hsl(var(--primary) / 0.8), 0 0 0 8px hsl(var(--primary) / 0.2);
-    }
-}
-`;
-document.head.appendChild(style);
