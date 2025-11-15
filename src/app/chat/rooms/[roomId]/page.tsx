@@ -415,6 +415,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
             toast({ title: "Room not found", variant: "destructive" });
             router.push('/chat/rooms');
         }
+    }, (error) => {
+        const permissionError = new FirestorePermissionError({ path: roomDocRef.path, operation: 'get' }, error);
+        errorEmitter.emit('permission-error', permissionError);
     });
     
     // --- Members Listener ---
@@ -522,6 +525,9 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
                 return aTime - bTime;
             });
         });
+    }, (error) => {
+        const permissionError = new FirestorePermissionError({ path: messagesColRef.path, operation: 'list' }, error);
+        errorEmitter.emit('permission-error', permissionError);
     });
 
     return () => {
@@ -923,3 +929,5 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     </>
   );
 }
+
+    
