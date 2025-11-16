@@ -407,11 +407,10 @@ export default function RoomPage() {
         const isOwnerSlot = slotNumber === OWNER_SLOT;
         
         const canAnyoneTakeSeat = !memberInSlot && !isLocked;
-        // User can take seat if it's available, and they are either the owner OR it's not the owner's slot
         const canUserTakeSeat = canAnyoneTakeSeat && (isOwner || !isOwnerSlot);
 
         const content = (
-             <div className="relative flex flex-col items-center justify-center space-y-1">
+             <div className="relative flex flex-col items-center justify-center space-y-1 w-24">
                 <div className="relative h-20 w-20">
                     <div className={cn("relative h-full w-full rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
                                       memberInSlot ? "ring-2 ring-offset-2 ring-offset-background" : "border-2 border-dashed border-muted-foreground/50",
@@ -473,7 +472,6 @@ export default function RoomPage() {
                     {/* --- Options for the OWNER --- */}
                     {isOwner && (
                         <>
-                             {/* On any empty slot */}
                             {canAnyoneTakeSeat && (
                                 <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                                     <Mic className="mr-2 h-4 w-4"/> Take Seat
@@ -640,8 +638,13 @@ export default function RoomPage() {
             </div>
             
             {/* Mic Slots */}
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: 8 }).map((_, i) => renderSlot(i + 1))}
+            <div className="flex flex-col items-center gap-y-6">
+                <div className="flex justify-center gap-x-4 md:gap-x-8">
+                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
+                </div>
+                <div className="flex justify-center gap-x-4 md:gap-x-8">
+                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+                </div>
             </div>
 
             {/* Chat Area */}
