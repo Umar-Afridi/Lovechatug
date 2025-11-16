@@ -139,8 +139,6 @@ export default function RoomPage() {
             const batch = writeBatch(firestore);
             batch.delete(memberRef);
 
-            // Do not decrement count if the user is a super admin (not a regular member)
-            // or if the whole room is being deleted.
             if (!isKickOrDelete && currentUserSlot.micSlot !== SUPER_ADMIN_SLOT) { 
                 const roomDoc = await getDoc(roomRef);
                 if (roomDoc.exists() && roomDoc.data().memberCount > 0) {
@@ -164,7 +162,6 @@ export default function RoomPage() {
       return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [handleBeforeUnload]);
 
-  // --- Main Data Fetching and Room Joining Logic ---
   useEffect(() => {
     if (!firestore || !roomId || !authUser) return;
     
@@ -228,16 +225,13 @@ export default function RoomPage() {
         if (!roomDoc.exists()) return;
         const currentRoomData = roomDoc.data() as Room;
         
-        // Determine the initial mic slot. Default to null (listener).
         let initialMicSlot: number | null = null;
         let isJoiningAsSuperAdmin = false;
 
-        // Only the owner gets a mic slot automatically.
         if (currentRoomData.ownerId === authUser.uid) {
             initialMicSlot = OWNER_SLOT;
         } else if (userProfile?.officialBadge?.isOfficial) {
             isJoiningAsSuperAdmin = true;
-            // Super admins also join as listeners by default.
             initialMicSlot = null;
         }
 
@@ -246,8 +240,6 @@ export default function RoomPage() {
             const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
             batch.set(memberRef, memberData);
             
-            // Only increment member count if it's not the owner joining their own room for the first time
-            // and not a super admin. Let's count super admins as regular members for simplicity unless specified otherwise.
             if (currentRoomData.ownerId !== authUser.uid) {
               batch.update(roomRef, { memberCount: increment(1) });
             }
@@ -265,7 +257,6 @@ export default function RoomPage() {
             await batch.commit();
         } else {
             const currentMemberData = memberDoc.data() as RoomMember;
-             // If the owner rejoins and isn't in the owner slot, put them there.
             if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
                 await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
             }
@@ -277,12 +268,10 @@ export default function RoomPage() {
     return () => {
       unsubRoom();
       unsubMembers();
-      setCurrentRoom(null); // Clear context on unmount
+      setCurrentRoom(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, roomId, authUser?.uid]);
+  }, [firestore, roomId, authUser?.uid, router, toast, setCurrentRoom]);
 
-  // Separate effect for messages to handle joinTimestamp
   useEffect(() => {
     if (!firestore || !roomId || !joinTimestamp) return;
 
@@ -388,6 +377,18 @@ export default function RoomPage() {
     await updateDoc(memberRef, { micSlot: null });
     toast({ title: 'User Moved', description: 'The user has been moved from the mic.' });
   };
+  
+  const handleTakeSeat = async (slotNumber: number) => {
+      if (!currentUserSlot || currentUserSlot.micSlot !== null) return;
+      const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+      await updateDoc(memberRef, { micSlot: slotNumber });
+  };
+        
+  const handleLeaveSeat = async () => {
+      if (!currentUserSlot || currentUserSlot.micSlot === null) return;
+      const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+      await updateDoc(memberRef, { micSlot: null });
+  }
 
   if (!room || !authUser || !currentUserSlot) {
     return (
@@ -404,18 +405,6 @@ export default function RoomPage() {
         const isLocked = room?.lockedSlots?.includes(slotNumber) || false;
         const isSelf = memberInSlot?.userId === authUser.uid;
         
-        const handleTakeSeat = async () => {
-            if (!currentUserSlot || currentUserSlot.micSlot !== null) return;
-            const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-            await updateDoc(memberRef, { micSlot: slotNumber });
-        };
-        
-        const handleLeaveSeat = async () => {
-            if (!currentUserSlot || !isSelf) return;
-            const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-            await updateDoc(memberRef, { micSlot: null });
-        }
-
         const officialBadgeColor = profile?.officialBadge?.badgeColor || 'gold';
         const colorClass = {
             blue: 'border-blue-500 text-blue-500',
@@ -499,14 +488,18 @@ export default function RoomPage() {
                     <div className="cursor-pointer">{content}</div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                    {/* Owner viewing another user */}
+                    {/* --- Options for Everyone --- */}
+                    {memberInSlot && (
+                        <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
+                            <View className="mr-2 h-4 w-4"/> View Profile
+                        </DropdownMenuItem>
+                    )}
+
+                    {/* --- Owner's Exclusive Options on other users --- */}
                     {isOwner && memberInSlot && !isSelf && (
                         <>
                            <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })}>
                                 <UserX className="mr-2 h-4 w-4"/> Kick User
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
-                                <View className="mr-2 h-4 w-4"/> View Profile
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleForceLeaveMic(memberInSlot)}>
                                 <MicOff className="mr-2 h-4 w-4" /> Move from Mic
@@ -514,37 +507,30 @@ export default function RoomPage() {
                         </>
                     )}
                     
-                    {/* Any user viewing another user */}
-                    {!isOwner && memberInSlot && !isSelf && (
-                         <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
-                            <View className="mr-2 h-4 w-4"/> View Profile
-                        </DropdownMenuItem>
-                    )}
-                    
-                    {/* Owner managing an empty, non-owner mic slot */}
-                    {isOwner && !memberInSlot && slotNumber >= 1 && (
+                    {/* --- Owner's options on empty slots (or Super Admin slot) --- */}
+                    {isOwner && !memberInSlot && slotNumber !== OWNER_SLOT && (
                         <>
                             <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                                 {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                                 {isLocked ? 'Unlock Mic' : 'Lock Mic'}
                             </DropdownMenuItem>
                              {!isLocked && currentUserSlot?.micSlot === null && (
-                                <DropdownMenuItem onClick={handleTakeSeat}>
+                                <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                                     <Mic className="mr-2 h-4 w-4"/> Take Seat
                                 </DropdownMenuItem>
                              )}
                         </>
                     )}
 
-                    {/* Any user wanting to take an empty, unlocked seat */}
-                    {!memberInSlot && !isLocked && currentUserSlot?.micSlot === null && (
-                         <DropdownMenuItem onClick={handleTakeSeat}>
+                    {/* --- Any user taking an empty, unlocked seat --- */}
+                    {!isOwner && !memberInSlot && !isLocked && currentUserSlot?.micSlot === null && slotNumber !== OWNER_SLOT && (
+                         <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                          </DropdownMenuItem>
                     )}
                     
-                    {/* User managing their own occupied seat (not owner's seat) */}
-                    {isSelf && slotNumber === currentUserSlot?.micSlot && currentUserSlot.micSlot >= 1 && (
+                    {/* --- User managing their own occupied seat --- */}
+                    {isSelf && slotNumber === currentUserSlot?.micSlot && currentUserSlot.micSlot !== OWNER_SLOT && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
                          </DropdownMenuItem>
@@ -588,12 +574,12 @@ export default function RoomPage() {
                     className="font-bold cursor-pointer pr-2 inline-flex items-center gap-1.5"
                     onClick={() => handleViewProfile(msg.senderId)}
                   >
-                    <span>{applyNameColor(msg.senderName, senderProfile?.nameColor)}:</span>
+                    <span>{applyNameColor(msg.senderName, senderProfile?.nameColor)}</span>
                     {senderProfile?.verifiedBadge?.showBadge && (
                         <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} className="h-4 w-4"/>
                     )}
                   </div>
-                  <span className="break-words">{msg.content}</span>
+                  <span className="break-words">: {msg.content}</span>
                 </div>
               </div>
             )}
