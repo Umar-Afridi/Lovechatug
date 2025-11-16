@@ -457,7 +457,7 @@ export default function RoomPage() {
                         ) : isOwnerSlot ? (
                             <Mic className="text-muted-foreground h-8 w-8"/>
                         ) : isSuperAdminSlot ? (
-                            <Shield className="text-muted-foreground h-8 w-8"/>
+                            <Mic className="text-muted-foreground h-8 w-8"/>
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
                         ) : (
