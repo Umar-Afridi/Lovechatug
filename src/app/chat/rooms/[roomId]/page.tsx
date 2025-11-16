@@ -27,7 +27,6 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import {
-  Crown,
   Lock,
   Mic,
   MicOff,
@@ -447,7 +446,7 @@ export default function RoomPage() {
                             </>
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
-                        ) : isOwnerSlot ? (
+                        ) : (isOwnerSlot || isSuperAdminSlot) ? (
                            <Mic className="text-muted-foreground h-8 w-8"/>
                         ) : (
                            <Mic className="text-muted-foreground h-8 w-8"/>
@@ -666,15 +665,18 @@ export default function RoomPage() {
         </header>
         
         <main className="flex-1 flex flex-col items-center overflow-hidden p-4 md:p-6 space-y-4">
-             <div className="flex justify-center gap-x-2 md:gap-x-8">
+            <div className="flex justify-center gap-x-4 md:gap-x-8">
                 {renderSlot(OWNER_SLOT)}
                 {renderSlot(SUPER_ADMIN_SLOT)}
             </div>
-            
-            <div className="w-full max-w-4xl">
-                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-4 justify-items-center">
-                    {Array.from({ length: 8 }).map((_, i) => renderSlot(i + 1))}
-                 </div>
+
+            <div className="w-full max-w-4xl space-y-4">
+                <div className="flex justify-center gap-x-2 sm:gap-x-4 md:gap-x-6 lg:gap-x-8">
+                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
+                </div>
+                <div className="flex justify-center gap-x-2 sm:gap-x-4 md:gap-x-6 lg:gap-x-8">
+                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+                </div>
             </div>
 
             {/* Chat Area */}
