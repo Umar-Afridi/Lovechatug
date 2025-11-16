@@ -239,6 +239,7 @@ export default function RoomPage() {
       if (!memberDoc.exists()) {
           // User is joining for the first time
           let initialMicSlot: number | null = null;
+          // IMPORTANT: Check for owner first, then official badge.
           if (currentRoomData.ownerId === authUser.uid) {
               initialMicSlot = OWNER_SLOT;
           } else if (userProfile?.officialBadge?.isOfficial) {
@@ -267,9 +268,11 @@ export default function RoomPage() {
       } else {
           // User is already a member, just ensure their special slot is correct
           const currentMemberData = memberDoc.data() as RoomMember;
+          // IMPORTANT: Check for owner first.
           if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
               await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
-          } else if (userProfile?.officialBadge?.isOfficial && currentMemberData.micSlot !== SUPER_ADMIN_SLOT) {
+          } else if (userProfile?.officialBadge?.isOfficial && currentRoomData.ownerId !== authUser.uid && currentMemberData.micSlot !== SUPER_ADMIN_SLOT) {
+             // Only set super admin if they are NOT the owner
               await updateDoc(memberRef, { micSlot: SUPER_ADMIN_SLOT, isMuted: true });
           }
       }
@@ -466,7 +469,7 @@ export default function RoomPage() {
                             )}
                         </div>
                     ) : slotNumber === OWNER_SLOT ? (
-                        <p className={cn("text-sm font-semibold")}>OWNER</p>
+                        <p className={cn("text-sm font-semibold")}>{isOwner ? <Mic className="h-5 w-5 text-muted-foreground" /> : 'OWNER'}</p>
                     ) : slotNumber === SUPER_ADMIN_SLOT ? (
                          <p className={cn("text-sm font-semibold")}>SUPER</p>
                     ) : (
@@ -636,7 +639,7 @@ export default function RoomPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className={cn("flex h-screen flex-col bg-background", themeClass)} style={themeStyle}>
+      <div className={cn("flex h-screen flex-col", themeClass)} style={themeStyle}>
         <header className="flex shrink-0 items-center justify-between gap-4 border-b p-3 bg-background shadow-sm">
           <div className="flex items-center gap-2 overflow-hidden">
             <Avatar className="h-10 w-10">
@@ -720,3 +723,5 @@ export default function RoomPage() {
     </>
   );
 }
+
+    
