@@ -813,7 +813,7 @@ export default function ChatIdPage() {
                 return (
                     <div className="space-y-2">
                         <p className="font-semibold">Room Invitation</p>
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-black/10">
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-black/10 dark:bg-white/10">
                             <Avatar className="h-8 w-8">
                                 <AvatarImage src={msg.roomInvite.roomPhotoURL} />
                                 <AvatarFallback>{msg.roomInvite.roomName.charAt(0)}</AvatarFallback>

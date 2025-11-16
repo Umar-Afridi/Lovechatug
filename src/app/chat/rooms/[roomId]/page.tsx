@@ -44,6 +44,7 @@ import {
   View,
   Inbox,
   Settings,
+  UserPlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -74,6 +75,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { RoomSettingsSheet } from '@/components/chat/room-settings-sheet';
+import { InviteFriendsSheet } from '@/components/chat/invite-friends-sheet';
 
 
 const MIC_SLOTS = 8;
@@ -117,6 +119,7 @@ export default function RoomPage() {
   const [isDeafened, setIsDeafened] = useState(false);
   const [isContactSheetOpen, setContactSheetOpen] = useState(false);
   const [isSettingsSheetOpen, setSettingsSheetOpen] = useState(false);
+  const [isInviteSheetOpen, setInviteSheetOpen] = useState(false);
   const [viewedProfile, setViewedProfile] = useState<UserProfile | null>(null);
   const [joinTimestamp, setJoinTimestamp] = useState<Timestamp | null>(null);
 
@@ -444,6 +447,8 @@ export default function RoomPage() {
                             </>
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
+                        ) : isOwnerSlot ? (
+                           <Mic className="text-muted-foreground h-8 w-8"/>
                         ) : (
                            <Mic className="text-muted-foreground h-8 w-8"/>
                         )}
@@ -490,7 +495,7 @@ export default function RoomPage() {
                     {isOwner && (
                         <>
                              {/* Take any free seat */}
-                             {canTakeSeat && (
+                             {canUserTakeSeat && (
                                 <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                                     <Mic className="mr-2 h-4 w-4"/> Take Seat
                                 </DropdownMenuItem>
@@ -571,7 +576,7 @@ export default function RoomPage() {
                     onClick={() => handleViewProfile(msg.senderId)}
                   >
                     <span>{applyNameColor(msg.senderName.split(' ')[0], senderProfile?.nameColor)}</span>
-                    {senderProfile?.verifiedBadge?.showBadge && (
+                     {senderProfile?.verifiedBadge?.showBadge && (
                         <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} className="h-4 w-4"/>
                     )}
                     {senderProfile?.officialBadge?.isOfficial && (
@@ -601,6 +606,11 @@ export default function RoomPage() {
         onOpenChange={setSettingsSheetOpen}
         room={room}
         isOwner={isOwner}
+      />
+      <InviteFriendsSheet
+        isOpen={isInviteSheetOpen}
+        onOpenChange={setInviteSheetOpen}
+        room={room}
       />
       <AlertDialog open={dialogState.isOpen} onOpenChange={(isOpen) => !isOpen && setDialogState({ isOpen: false, action: null })}>
         <AlertDialogContent>
@@ -641,6 +651,9 @@ export default function RoomPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => setInviteSheetOpen(true)}>
+              <UserPlus className="h-5 w-5" />
+            </Button>
             {isOwner && (
                 <Button variant="ghost" size="icon" onClick={() => setSettingsSheetOpen(true)}>
                     <Settings className="h-5 w-5" />
