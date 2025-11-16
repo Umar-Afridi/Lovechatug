@@ -404,10 +404,11 @@ export default function RoomPage() {
         
         const isLocked = room?.lockedSlots?.includes(slotNumber) || false;
         const isSelf = memberInSlot?.userId === authUser.uid;
+        const isOwnerSlot = slotNumber === OWNER_SLOT;
 
-        const canAnyoneTakeSeat = !memberInSlot && !isLocked && slotNumber !== OWNER_SLOT;
-        const canUserTakeSeat = currentUserSlot.micSlot === null && canAnyoneTakeSeat;
-        
+        const canAnyoneTakeSeat = !memberInSlot && !isLocked;
+        const canUserTakeSeat = (isOwner || !isOwnerSlot) && canAnyoneTakeSeat;
+
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1">
                 <div className="relative h-20 w-20">
@@ -429,20 +430,15 @@ export default function RoomPage() {
                         
                         {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
 
-                        {slotNumber === OWNER_SLOT && profile?.officialBadge?.isOfficial && (
-                             <div className="absolute -top-2 -right-2">
+                        {profile?.officialBadge?.isOfficial && (
+                             <div className={cn("absolute -right-2", isOwnerSlot ? "-top-2" : "-top-1")}>
                                 <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-8 w-8"/>
                              </div>
                         )}
-                         {slotNumber === OWNER_SLOT && !profile?.officialBadge?.isOfficial && (
+                         {isOwnerSlot && !profile?.officialBadge?.isOfficial && (
                            <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-yellow-500">
                              <Crown className="h-5 w-5 text-yellow-500"/>
                            </div>
-                        )}
-                        {slotNumber !== OWNER_SLOT && profile?.officialBadge?.isOfficial && (
-                             <div className="absolute -top-2 -right-2">
-                                <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-8 w-8"/>
-                             </div>
                         )}
                     </div>
                 </div>
@@ -484,7 +480,7 @@ export default function RoomPage() {
                     {isOwner && (
                         <>
                              {/* On any empty slot */}
-                            {!memberInSlot && (
+                            {canUserTakeSeat && (
                                 <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                                     <Mic className="mr-2 h-4 w-4"/> Take Seat
                                 </DropdownMenuItem>
@@ -651,14 +647,9 @@ export default function RoomPage() {
                 {renderSlot(SUPER_ADMIN_SLOT)}
             </div>
             
-            {/* Mic Slots - First Row */}
+            {/* Mic Slots */}
             <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
-            </div>
-
-             {/* Mic Slots - Second Row */}
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6 md:gap-x-8">
-                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+                {Array.from({ length: 8 }).map((_, i) => renderSlot(i + 1))}
             </div>
 
             {/* Chat Area */}
