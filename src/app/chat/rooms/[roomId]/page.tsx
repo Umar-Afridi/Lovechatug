@@ -379,7 +379,7 @@ export default function RoomPage() {
   };
   
   const handleTakeSeat = async (slotNumber: number) => {
-      if (!currentUserSlot || currentUserSlot.micSlot !== null) return;
+      if (!currentUserSlot) return;
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       await updateDoc(memberRef, { micSlot: slotNumber });
   };
@@ -407,11 +407,11 @@ export default function RoomPage() {
         
         const officialBadgeColor = profile?.officialBadge?.badgeColor || 'gold';
         const colorClass = {
-            blue: 'border-blue-500 text-blue-500',
-            gold: 'border-yellow-500 text-yellow-500',
-            green: 'border-green-500 text-green-500',
-            red: 'border-red-500 text-red-500',
-            pink: 'border-pink-500 text-pink-500',
+            blue: 'text-blue-500',
+            gold: 'text-yellow-500',
+            green: 'text-green-500',
+            red: 'text-red-500',
+            pink: 'text-pink-500',
         }[officialBadgeColor];
         
         const content = (
@@ -424,8 +424,8 @@ export default function RoomPage() {
                                     <path id="circlePath" d="M 50, 50 m -40, 0 a 40,40 0 1,1 80,0 a 40,40 0 1,1 -80,0" />
                                 </defs>
                                 <text className={cn("text-xs font-bold uppercase tracking-wider fill-current", colorClass)}>
-                                    <textPath href="#circlePath">
-                                        V Official • V Official • V Official •
+                                    <textPath href="#circlePath" startOffset="50%" textAnchor="middle">
+                                        V Official • V Official •
                                     </textPath>
                                 </text>
                             </svg>
@@ -488,49 +488,54 @@ export default function RoomPage() {
                     <div className="cursor-pointer">{content}</div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                    {/* --- Options for Everyone --- */}
+                    {/* --- Options for Everyone on an occupied slot --- */}
                     {memberInSlot && (
                         <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
                             <View className="mr-2 h-4 w-4"/> View Profile
                         </DropdownMenuItem>
                     )}
 
-                    {/* --- Owner's Exclusive Options on other users --- */}
-                    {isOwner && memberInSlot && !isSelf && (
+                    {/* --- Owner's Exclusive Options --- */}
+                    {isOwner && (
                         <>
-                           <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })}>
-                                <UserX className="mr-2 h-4 w-4"/> Kick User
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleForceLeaveMic(memberInSlot)}>
-                                <MicOff className="mr-2 h-4 w-4" /> Move from Mic
-                            </DropdownMenuItem>
+                            {/* On other users */}
+                            {memberInSlot && !isSelf && (
+                                <>
+                                   <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })}>
+                                        <UserX className="mr-2 h-4 w-4"/> Kick User
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleForceLeaveMic(memberInSlot)}>
+                                        <MicOff className="mr-2 h-4 w-4" /> Move from Mic
+                                    </DropdownMenuItem>
+                                </>
+                            )}
+                            
+                            {/* On empty slots (not owner slot) */}
+                            {!memberInSlot && slotNumber !== OWNER_SLOT && (
+                                <>
+                                    <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
+                                        {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
+                                        {isLocked ? 'Unlock Mic' : 'Lock Mic'}
+                                    </DropdownMenuItem>
+                                    {!isLocked && (
+                                        <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
+                                            <Mic className="mr-2 h-4 w-4"/> Take Seat
+                                        </DropdownMenuItem>
+                                    )}
+                                </>
+                            )}
                         </>
                     )}
                     
-                    {/* --- Owner's options on empty slots (or Super Admin slot) --- */}
-                    {isOwner && !memberInSlot && slotNumber !== OWNER_SLOT && (
-                        <>
-                            <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
-                                {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
-                                {isLocked ? 'Unlock Mic' : 'Lock Mic'}
-                            </DropdownMenuItem>
-                             {!isLocked && currentUserSlot?.micSlot === null && (
-                                <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
-                                    <Mic className="mr-2 h-4 w-4"/> Take Seat
-                                </DropdownMenuItem>
-                             )}
-                        </>
-                    )}
-
-                    {/* --- Any user taking an empty, unlocked seat --- */}
-                    {!isOwner && !memberInSlot && !isLocked && currentUserSlot?.micSlot === null && slotNumber !== OWNER_SLOT && (
+                    {/* --- Any user taking an empty, unlocked seat (not owner slot) --- */}
+                    {!isOwner && !memberInSlot && !isLocked && slotNumber !== OWNER_SLOT && currentUserSlot?.micSlot === null && (
                          <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                          </DropdownMenuItem>
                     )}
                     
-                    {/* --- User managing their own occupied seat --- */}
-                    {isSelf && slotNumber === currentUserSlot?.micSlot && currentUserSlot.micSlot !== OWNER_SLOT && (
+                    {/* --- User managing their own occupied seat (not owner slot) --- */}
+                    {isSelf && slotNumber === currentUserSlot?.micSlot && slotNumber !== OWNER_SLOT && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
                          </DropdownMenuItem>
