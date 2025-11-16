@@ -51,6 +51,37 @@ export default function ProfilePage() {
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
   const [isRemovingPhoto, setIsRemovingPhoto] = useState(false);
   
+  const canApplyForVerification = useMemo(() => {
+    if (!userProfile) return false;
+    if (userProfile.verifiedBadge?.showBadge) return false;
+    if (userProfile.verificationApplicationStatus === 'pending') return false;
+    if (!userProfile.lastVerificationRequestAt) return true;
+    const lastRequestDate = new Date(userProfile.lastVerificationRequestAt.seconds * 1000);
+    return differenceInHours(new Date(), lastRequestDate) >= 24;
+  }, [userProfile]);
+  
+  const canApplyForColorfulName = useMemo(() => {
+    if (!userProfile) return false;
+    if (userProfile.nameColor && userProfile.nameColor !== 'default') return false;
+    if (!userProfile.lastColorfulNameRequestAt) return true;
+    const lastRequestDate = new Date(userProfile.lastColorfulNameRequestAt.seconds * 1000);
+    return differenceInHours(new Date(), lastRequestDate) >= 24;
+  }, [userProfile]);
+
+    const nameColorClass = useMemo(() => {
+    if (!userProfile?.nameColor || userProfile.nameColor === 'default') return '';
+    if (userProfile.nameColor === 'gradient') return "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate";
+    
+    const colorClasses: Record<string, string> = {
+        green: 'text-green-500',
+        yellow: 'text-yellow-500',
+        pink: 'text-pink-500',
+        purple: 'text-purple-500',
+        red: 'text-red-500',
+    };
+    return cn('font-bold', colorClasses[userProfile.nameColor]);
+  }, [userProfile?.nameColor]);
+
   useEffect(() => {
     if (user && firestore) {
       // Set initial values from auth object
@@ -80,23 +111,6 @@ export default function ProfilePage() {
       return () => unsubscribe();
     }
   }, [user, firestore]);
-  
-  const canApplyForVerification = useMemo(() => {
-    if (!userProfile) return false;
-    if (userProfile.verifiedBadge?.showBadge) return false;
-    if (userProfile.verificationApplicationStatus === 'pending') return false;
-    if (!userProfile.lastVerificationRequestAt) return true;
-    const lastRequestDate = new Date(userProfile.lastVerificationRequestAt.seconds * 1000);
-    return differenceInHours(new Date(), lastRequestDate) >= 24;
-  }, [userProfile]);
-  
-  const canApplyForColorfulName = useMemo(() => {
-    if (!userProfile) return false;
-    if (userProfile.nameColor && userProfile.nameColor !== 'default') return false;
-    if (!userProfile.lastColorfulNameRequestAt) return true;
-    const lastRequestDate = new Date(userProfile.lastColorfulNameRequestAt.seconds * 1000);
-    return differenceInHours(new Date(), lastRequestDate) >= 24;
-  }, [userProfile]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -371,20 +385,6 @@ export default function ProfilePage() {
   };
 
   const displayPhoto = newPhotoPreview ?? (isRemovingPhoto ? null : photoURL);
-
-  const nameColorClass = useMemo(() => {
-    if (!userProfile?.nameColor || userProfile.nameColor === 'default') return '';
-    if (userProfile.nameColor === 'gradient') return "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate";
-    
-    const colorClasses: Record<string, string> = {
-        green: 'text-green-500',
-        yellow: 'text-yellow-500',
-        pink: 'text-pink-500',
-        purple: 'text-purple-500',
-        red: 'text-red-500',
-    };
-    return cn('font-bold', colorClasses[userProfile.nameColor]);
-  }, [userProfile?.nameColor]);
 
   return (
     <>
