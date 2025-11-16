@@ -49,7 +49,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useEffect, useState, useRef, useCallback, createContext, useContext } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit, addDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit, addDoc, deleteDoc } from 'firebase/firestore';
 import type { UserProfile, Room, Chat, Call } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -82,8 +82,11 @@ export const useRoomContext = () => {
 // Context for Call State
 interface CallContextType {
   activeCall: Call | null;
-  outgoingCall: Omit<Call, 'id' | 'timestamp' | 'participants' | 'status' | 'direction'> & { callId?: string } | null;
+  outgoingCall: (Omit<Call, 'id' | 'timestamp' | 'participants' | 'status' | 'direction'> & { callId?: string }) | null;
+  incomingCall: Call | null;
   startCall: (userId: string, type: 'audio' | 'video') => void;
+  acceptCall: (call: Call) => void;
+  declineCall: (call: Call) => void;
   endCall: () => void;
 }
 
@@ -196,118 +199,153 @@ function CallProvider({ children }: { children: React.ReactNode }) {
 
     const [incomingCall, setIncomingCall] = useState<Call | null>(null);
     const [activeCall, setActiveCall] = useState<Call | null>(null);
-    const [outgoingCall, setOutgoingCall] = useState<Omit<Call, 'id' | 'timestamp' | 'participants'| 'status' | 'direction' > & { callId?: string } | null>(null);
+    const [outgoingCall, setOutgoingCall] = useState<(Omit<Call, 'id' | 'timestamp' | 'participants'| 'status' | 'direction' > & { callId?: string }) | null>(null);
+    const callListenerUnsubscribe = useRef<() => void | null>(null);
     
-    const callStateRef = useRef({ activeCall, outgoingCall, incomingCall });
-    useEffect(() => {
-      callStateRef.current = { activeCall, outgoingCall, incomingCall };
-    }, [activeCall, outgoingCall, incomingCall]);
-
-    const endCall = useCallback(() => {
+    const endCall = useCallback(async () => {
+        const callIdToDelete = incomingCall?.id || outgoingCall?.callId || activeCall?.id;
+        
         setIncomingCall(null);
         setActiveCall(null);
         setOutgoingCall(null);
-    }, []);
 
-    // Listen for any call document this user is a part of.
-    // This is the central source of truth for the call state.
+        if (firestore && callIdToDelete) {
+            try {
+                await deleteDoc(doc(firestore, 'calls', callIdToDelete));
+            } catch (error) {
+                console.warn("Could not delete call doc, it might already be gone:", error);
+            }
+        }
+    }, [incomingCall, outgoingCall, activeCall, firestore]);
+
+    // Central listener for all call documents related to the current user
     useEffect(() => {
         if (!user || !firestore || authLoading) return;
+        
+        // Cleanup previous listener if user changes
+        if (callListenerUnsubscribe.current) {
+            callListenerUnsubscribe.current();
+            callListenerUnsubscribe.current = null;
+        }
 
         const callsRef = collection(firestore, 'calls');
         const q = query(callsRef, where('participants', 'array-contains', user.uid), limit(1));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             if (snapshot.empty) {
-                // No active call documents found, clean up all local states.
-                if (callStateRef.current.activeCall || callStateRef.current.outgoingCall || callStateRef.current.incomingCall) {
-                   endCall();
-                }
+                // No call documents found, ensure all local states are cleared.
+                endCall();
                 return;
             }
 
-            const callDoc = snapshot.docs[0];
-            const callData = { id: callDoc.id, ...callDoc.data() } as Call;
-
-            switch (callData.status) {
-                case 'outgoing':
-                    if (callData.receiverId === user.uid) {
-                        // This is an incoming call for me.
-                        if (!callStateRef.current.activeCall && !callStateRef.current.outgoingCall) {
-                           setIncomingCall(callData);
-                        }
-                    } else if (callData.callerId === user.uid) {
-                        // I am making this call.
-                        if (!callStateRef.current.activeCall && !callStateRef.current.incomingCall) {
-                             setOutgoingCall({
-                                callerId: callData.callerId,
-                                receiverId: callData.receiverId,
-                                type: callData.type,
-                                callId: callData.id,
-                            });
-                        }
-                    }
-                    break;
-                
-                case 'answered':
-                    // A call was answered. Only transition if the timestamp is present.
-                    if (callData.answeredAt && typeof callData.answeredAt.toDate === 'function') {
-                        setIncomingCall(null);
-                        setOutgoingCall(null);
-                        setActiveCall(callData);
-                    }
-                    break;
-                
-                case 'declined':
-                case 'missed':
-                     // These are terminal states. The call document will be deleted shortly after.
-                     // The `snapshot.empty` case above will handle the cleanup.
-                    break;
+            const callData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Call;
+            
+            // If the call is answered, set it as active and clear others.
+            if (callData.status === 'answered') {
+                setIncomingCall(null);
+                setOutgoingCall(null);
+                setActiveCall(callData);
+                return;
             }
+
+            // If the call is outgoing
+            if (callData.status === 'outgoing') {
+                if (callData.callerId === user.uid) {
+                    // I am the caller
+                    setIncomingCall(null);
+                    setActiveCall(null);
+                    setOutgoingCall({
+                        callerId: callData.callerId,
+                        receiverId: callData.receiverId,
+                        type: callData.type,
+                        callId: callData.id,
+                    });
+                } else {
+                    // I am the receiver
+                    setOutgoingCall(null);
+                    setActiveCall(null);
+                    setIncomingCall(callData);
+                }
+                return;
+            }
+        }, (error) => {
+            console.error("Call listener error:", error);
+            endCall();
         });
 
-        return () => unsubscribe();
+        callListenerUnsubscribe.current = unsubscribe;
 
+        return () => {
+            if (callListenerUnsubscribe.current) {
+                callListenerUnsubscribe.current();
+            }
+        };
     }, [user, firestore, authLoading, endCall]);
 
-
-    const startCall = useCallback(async (userId: string, type: 'audio' | 'video') => {
-        if (!firestore || !user || callStateRef.current.activeCall || callStateRef.current.outgoingCall || callStateRef.current.incomingCall) {
+    const startCall = useCallback(async (receiverId: string, type: 'audio' | 'video') => {
+        if (!firestore || !user || activeCall || outgoingCall || incomingCall) {
             console.warn("Cannot start call: existing call in progress or user not ready.");
             return;
         }
 
         const newCallData = {
             callerId: user.uid,
-            receiverId: userId,
-            participants: [user.uid, userId],
+            receiverId: receiverId,
+            participants: [user.uid, receiverId],
             type: type,
             status: 'outgoing' as const, 
             timestamp: serverTimestamp(),
         };
     
         try {
-            // We don't set outgoingCall state here anymore. The onSnapshot listener will do it.
+            // Add the document. The listener will automatically pick it up and set the outgoingCall state.
             await addDoc(collection(firestore, 'calls'), newCallData);
         } catch (error) {
             console.error('Error initiating call:', error);
         }
-    }, [firestore, user]);
+    }, [firestore, user, activeCall, outgoingCall, incomingCall]);
+    
+    const acceptCall = useCallback(async (call: Call) => {
+        if (!firestore) return;
+        const callDocRef = doc(firestore, 'calls', call.id);
+        try {
+            await updateDoc(callDocRef, { 
+                status: 'answered',
+                answeredAt: serverTimestamp() 
+            });
+            // The listener will handle the state transition to activeCall
+        } catch (e) {
+            console.error("Error accepting call: ", e);
+            endCall(); // Clean up state if accept fails
+        }
+    }, [firestore, endCall]);
+
+    const declineCall = useCallback(async (call: Call) => {
+        // Just end the call, which deletes the document. This is the signal for decline.
+        endCall();
+    }, [endCall]);
+
 
     const contextValue = {
         activeCall,
         outgoingCall,
+        incomingCall,
         startCall,
+        acceptCall,
+        declineCall,
         endCall
     };
     
     const renderCallScreen = () => {
+        // The active call screen takes highest priority
         if (activeCall) {
             return <div className="fixed inset-0 z-[1001]"><ActiveCallPage /></div>;
         }
+        // Then outgoing
         if (outgoingCall) {
             return <div className="fixed inset-0 z-[1001]"><OutgoingCallPage /></div>;
         }
+        // Then incoming
         if (incomingCall) {
             return <IncomingCall call={incomingCall} />;
         }

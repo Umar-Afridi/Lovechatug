@@ -1,22 +1,30 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, addDoc, collection, getDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { PhoneOff } from 'lucide-react';
 import type { UserProfile, Call } from '@/lib/types';
-import { useToast } from '@/hooks/use-toast';
 import { useCallContext } from '@/app/chat/layout';
 
 
 export default function ActiveCallPage() {
   const { activeCall, endCall } = useCallContext();
-  const callData = activeCall;
+  const router = useRouter();
+
+  // Redirect if there's no active call in context
+  useEffect(() => {
+    if (!activeCall) {
+      router.push('/chat');
+    }
+  }, [activeCall, router]);
+
   const callId = activeCall?.id;
+  const callData = activeCall;
 
   const { user: authUser } = useUser();
   const firestore = useFirestore();
@@ -27,16 +35,16 @@ export default function ActiveCallPage() {
   const hangupInitiated = useRef(false);
 
   useEffect(() => {
-    if (!callData) return;
+    if (!callData || !firestore || !authUser) return;
+    
+    let isMounted = true;
 
-    // Start the timer only once
+    // Start the timer
     if (!intervalRef.current) {
         let startTime = new Date().getTime();
-        const answeredAt = callData.answeredAt;
-        
         // Check if answeredAt is a valid Firestore Timestamp object
-        if (answeredAt && typeof answeredAt.toDate === 'function') {
-            startTime = answeredAt.toDate().getTime();
+        if (callData.answeredAt && typeof callData.answeredAt.toDate === 'function') {
+            startTime = callData.answeredAt.toDate().getTime();
         }
         
         intervalRef.current = setInterval(() => {
@@ -46,28 +54,30 @@ export default function ActiveCallPage() {
         }, 1000);
     }
     
-    // Fetch other user's data if not already fetched
-    if (!otherUser && authUser) {
-        const otherUserId = callData.callerId === authUser.uid ? callData.receiverId : callData.callerId;
-        const userDocRef = doc(firestore, 'users', otherUserId);
-        getDoc(userDocRef).then(userDocSnap => {
-             if (userDocSnap.exists()) {
+    // Fetch other user's data
+    const otherUserId = callData.callerId === authUser.uid ? callData.receiverId : callData.callerId;
+    const userDocRef = doc(firestore, 'users', otherUserId);
+    
+    getDoc(userDocRef).then(userDocSnap => {
+         if (isMounted) {
+            if (userDocSnap.exists()) {
               setOtherUser(userDocSnap.data() as UserProfile);
             } else {
               // Other user doc doesn't exist, something is wrong, end the call
               handleHangUp();
             }
-        });
-    }
+         }
+    });
 
     return () => {
+      isMounted = false;
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callData, firestore, authUser, otherUser]);
+  }, [callData, firestore, authUser]);
 
 
   const formatDuration = (totalSeconds: number) => {
@@ -88,23 +98,22 @@ export default function ActiveCallPage() {
     if (hangupInitiated.current) return;
     hangupInitiated.current = true;
 
+    // Stop the timer locally first
     if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
     }
     
+    // Use the context's endCall function which will also update Firestore
     endCall();
 
-    if (firestore && callId && callData && authUser) {
+    if (firestore && callData && authUser) {
         const finalDuration = callDuration;
-        const callDocRef = doc(firestore, 'calls', callId);
         
+        // Add a message to the chat about the call
+        const chatId = [callData.callerId, callData.receiverId].sort().join('_');
+        const messagesRef = collection(firestore, `chats/${chatId}/messages`);
         try {
-            // Deleting the document is the cleanest way to end the call for all parties
-            await deleteDoc(callDocRef);
-           
-            const chatId = [callData.callerId, callData.receiverId].sort().join('_');
-            const messagesRef = collection(firestore, `chats/${chatId}/messages`);
             await addDoc(messagesRef, {
                 senderId: authUser.uid,
                 type: 'call',
@@ -117,9 +126,8 @@ export default function ActiveCallPage() {
                     status: 'answered'
                 }
             });
-
-        } catch (error) {
-            console.error("Error hanging up call:", error);
+        } catch (e) {
+            console.error("Failed to add call-end message to chat", e);
         }
     }
   };

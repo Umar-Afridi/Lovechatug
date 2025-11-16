@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Phone, PhoneOff } from 'lucide-react';
@@ -16,7 +16,7 @@ interface IncomingCallProps {
 
 export function IncomingCall({ call }: IncomingCallProps) {
   const firestore = useFirestore();
-  const { endCall } = useCallContext();
+  const { acceptCall, declineCall } = useCallContext();
   const [caller, setCaller] = useState<UserProfile | null>(null);
 
   const { play: playIncomingCallSound, stop: stopIncomingCallSound } = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e', { loop: true });
@@ -37,41 +37,25 @@ export function IncomingCall({ call }: IncomingCallProps) {
       if (docSnap.exists()) {
         setCaller(docSnap.data() as UserProfile);
       } else {
-        handleDecline();
+        // Caller document doesn't exist, decline the call automatically
+        declineCall(call);
       }
     }, () => {
-        handleDecline();
+        declineCall(call);
     });
 
     return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, call.callerId]);
-
-  const handleAccept = useCallback(async () => {
-    stopIncomingCallSound();
-    if (!firestore || !call.id) return;
-    const callDocRef = doc(firestore, 'calls', call.id);
-    try {
-        await updateDoc(callDocRef, { status: 'answered' });
-        // The central state in layout.tsx will handle the transition to ActiveCallPage
-    } catch(e) {
-        console.error("Error accepting call: ", e);
-        endCall(); // Clean up state if accept fails
-    }
-  }, [stopIncomingCallSound, firestore, call.id, endCall]);
-
-  const handleDecline = useCallback(async () => {
-    stopIncomingCallSound();
-    endCall(); 
-    if (!firestore || !call.id) return;
-    const callDocRef = doc(firestore, 'calls', call.id);
-    try {
-       // We can just delete the doc, which signals the end of the call for everyone.
-       await deleteDoc(callDocRef);
-    } catch (e) {
-        console.error("Error declining call: ", e);
-    }
-  }, [stopIncomingCallSound, endCall, firestore, call.id]);
+  }, [firestore, call.callerId, call, declineCall]);
+  
+  const handleAccept = () => {
+      stopIncomingCallSound();
+      acceptCall(call);
+  };
+  
+  const handleDecline = () => {
+      stopIncomingCallSound();
+      declineCall(call);
+  };
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';

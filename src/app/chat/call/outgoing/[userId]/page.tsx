@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { doc, onSnapshot, deleteDoc, getDoc } from 'firebase/firestore';
@@ -14,102 +14,98 @@ import { useCallContext } from '@/app/chat/layout';
 
 export default function OutgoingCallPage() {
   const params = useParams();
-  const otherUserId = params.userId as string;
+  const router = useRouter();
   const { outgoingCall, endCall } = useCallContext();
-  const callId = outgoingCall?.callId; // Get callId from context
+  
+  // This page should not be rendered if there is no outgoing call
+  useEffect(() => {
+    if (!outgoingCall) {
+      router.push('/chat');
+    }
+  }, [outgoingCall, router]);
+  
+  const otherUserId = params.userId as string;
+  const callId = outgoingCall?.callId; 
 
   const firestore = useFirestore();
-
+  const { user } = useUser();
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [callStatusText, setCallStatusText] = useState('Ringing...');
   const [loading, setLoading] = useState(true);
 
   const { play, stop } = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e', { loop: true });
 
-
   // Fetch receiver's profile
   useEffect(() => {
     if (!firestore || !otherUserId) return;
+    let isMounted = true;
     
-    setLoading(true);
     const userDocRef = doc(firestore, 'users', otherUserId);
     
     getDoc(userDocRef).then(docSnap => {
+        if (!isMounted) return;
         if (docSnap.exists()) {
             const userData = docSnap.data() as UserProfile;
             setOtherUser(userData);
-            play();
+            play(); // Start ringing only after confirming user exists
         } else {
-            // User not found, automatically hang up.
             setCallStatusText('User not found');
-            setTimeout(handleHangUp, 1500);
+            setTimeout(() => endCall(), 1500);
         }
+        setLoading(false);
     }).catch(() => {
+        if (!isMounted) return;
         setCallStatusText('Error reaching user');
-        setTimeout(handleHangUp, 1500);
-    }).finally(() => {
-        setLoading(false); 
-    });
-
-    // Also listen for real-time changes to the user's online status
-    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const userData = docSnap.data() as UserProfile;
-        setOtherUser(userData);
-        if (callStatusText === 'Ringing...' && !userData.isOnline) {
-            setCallStatusText('Unavailable');
-        }
-      }
+        setLoading(false);
+        setTimeout(() => endCall(), 1500);
     });
 
     return () => {
+      isMounted = false;
       stop();
-      unsubscribe();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, otherUserId]);
-
-  // Listen to call document for status changes
-  useEffect(() => {
+  }, [firestore, otherUserId, endCall]);
+  
+  // This effect listens for the call document to change or disappear.
+  // It's the primary way the caller knows if the call was answered, declined, or timed out.
+   useEffect(() => {
     if (!firestore || !callId) return;
-    
+
     const callDocRef = doc(firestore, 'calls', callId);
     const unsubscribe = onSnapshot(callDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data() as Call;
-         // The transition to 'answered' is handled by the layout's central listener
-        if (data.status === 'declined') {
-            setCallStatusText('Call Declined');
-            stop();
-            setTimeout(handleHangUp, 1500);
-        }
-      } else {
-        // Document was deleted (call was cancelled, declined, or ended)
-        endCall();
+      if (!docSnap.exists()) {
+        // The document was deleted. This means the call was declined, cancelled by the caller, or timed out.
+        // The active call state will be cleared by the main layout listener.
+        // We just need to stop the sound here.
+        stop();
+        // The redirection will be handled by the main layout effect that checks for outgoingCall
+        return;
       }
+
+      const callData = docSnap.data() as Call;
+      // If the call status changes to "declined", show a message and hang up.
+      if (callData.status === 'declined') {
+        setCallStatusText('Call Declined');
+        stop();
+        // The document will be deleted by the receiver, and the !docSnap.exists() case will trigger.
+      }
+      // If the call is answered, the main layout listener will handle transitioning to the active call screen.
     });
 
-    return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, callId]);
+    return () => {
+        unsubscribe();
+        stop();
+    };
+  }, [firestore, callId, stop]);
 
 
-  const handleHangUp = useCallback(async () => {
+  const handleHangUp = useCallback(() => {
+    // This function is only for the caller to cancel the call.
+    // It simply tells the context to end the call, which handles deleting the Firestore doc.
     stop();
-    if (!firestore || !callId) {
-      endCall(); 
-      return;
-    }
-    const callDocRef = doc(firestore, 'calls', callId);
-    try {
-       // Deleting the doc is the signal for all parties to end the call
-       await deleteDoc(callDocRef);
-    } catch (error) {
-      console.warn("Could not delete call doc, it might already be gone:", error);
-    } finally {
-       endCall(); // This will clean up local state and unmount the component
-    }
-  }, [stop, endCall, firestore, callId]);
+    endCall();
+  }, [stop, endCall]);
   
   const getInitials = (name: string | null | undefined) => {
     if (!name) return '?';
@@ -119,10 +115,10 @@ export default function OutgoingCallPage() {
       .join('');
   };
 
-  if (loading) {
+  if (loading || !otherUser) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-gray-900 text-white">
-        <p>Preparing call...</p>
+        <p>{loading ? 'Preparing call...' : callStatusText}</p>
       </div>
     );
   }
@@ -130,21 +126,13 @@ export default function OutgoingCallPage() {
   return (
     <div className="flex h-screen w-full flex-col items-center justify-between bg-gray-900 text-white p-8 animate-in fade-in-0">
       <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4">
-        {otherUser ? (
-            <>
-                <Avatar className="h-32 w-32 border-4 border-gray-600">
-                <AvatarImage src={otherUser.photoURL} />
-                <AvatarFallback className="text-5xl bg-gray-700">
-                    {getInitials(otherUser.displayName)}
-                </AvatarFallback>
-                </Avatar>
-                <h1 className="text-4xl font-bold">{otherUser.displayName}</h1>
-            </>
-        ) : (
-             <div className="h-32 w-32 rounded-full bg-gray-700 flex items-center justify-center border-4 border-gray-600">
-                <p className="text-5xl">?</p>
-             </div>
-        )}
+        <Avatar className="h-32 w-32 border-4 border-gray-600">
+        <AvatarImage src={otherUser.photoURL} />
+        <AvatarFallback className="text-5xl bg-gray-700">
+            {getInitials(otherUser.displayName)}
+        </AvatarFallback>
+        </Avatar>
+        <h1 className="text-4xl font-bold">{otherUser.displayName}</h1>
         <p className="text-lg text-gray-400">{callStatusText}</p>
       </div>
 
