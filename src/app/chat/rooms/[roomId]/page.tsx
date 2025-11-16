@@ -415,37 +415,62 @@ export default function RoomPage() {
             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
             await updateDoc(memberRef, { micSlot: null });
         }
+
+        const officialBadgeColor = profile?.officialBadge?.badgeColor || 'gold';
+        const colorClass = {
+            blue: 'border-blue-500 text-blue-500',
+            gold: 'border-yellow-500 text-yellow-500',
+            green: 'border-green-500 text-green-500',
+            red: 'border-red-500 text-red-500',
+            pink: 'border-pink-500 text-pink-500',
+        }[officialBadgeColor];
         
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1 group">
-                <div className={cn("relative h-20 w-20 rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
-                                  memberInSlot ? "ring-2 ring-offset-2 ring-offset-background" : "border-2 border-dashed border-muted-foreground/50",
-                                  memberInSlot && memberInSlot.isMuted ? "ring-destructive" : "ring-primary",
-                                  isSelf && !isMuted && "talking-indicator"
-                                  )}>
-                    {profile ? (
-                        <Avatar className="h-full w-full">
-                            <AvatarImage src={profile.photoURL} />
-                            <AvatarFallback className="text-2xl">{getInitials(profile.displayName)}</AvatarFallback>
-                        </Avatar>
-                    ) : isLocked ? (
-                         <Lock className="text-muted-foreground h-8 w-8" />
-                    ): (
-                         <Mic className={cn("text-muted-foreground h-8 w-8")}/>
+                <div className="relative h-20 w-20">
+                     {profile?.officialBadge?.isOfficial && (
+                        <div className="absolute inset-0 official-badge-circle-animation">
+                            <svg viewBox="0 0 100 100" className="w-full h-full">
+                                <defs>
+                                    <path id="circlePath" d="M 50, 50 m -40, 0 a 40,40 0 1,1 80,0 a 40,40 0 1,1 -80,0" />
+                                </defs>
+                                <text className={cn("text-xs font-bold uppercase tracking-wider fill-current", colorClass)}>
+                                    <textPath href="#circlePath">
+                                        V Official • V Official • V Official •
+                                    </textPath>
+                                </text>
+                            </svg>
+                        </div>
                     )}
-                    
-                    {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
+                    <div className={cn("relative h-full w-full rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
+                                      memberInSlot ? "ring-2 ring-offset-2 ring-offset-background" : "border-2 border-dashed border-muted-foreground/50",
+                                      memberInSlot && memberInSlot.isMuted ? "ring-destructive" : "ring-primary",
+                                      isSelf && !isMuted && "talking-indicator"
+                                      )}>
+                        {profile ? (
+                            <Avatar className="h-full w-full">
+                                <AvatarImage src={profile.photoURL} />
+                                <AvatarFallback className="text-2xl">{getInitials(profile.displayName)}</AvatarFallback>
+                            </Avatar>
+                        ) : isLocked ? (
+                             <Lock className="text-muted-foreground h-8 w-8" />
+                        ): (
+                             <Mic className={cn("text-muted-foreground h-8 w-8")}/>
+                        )}
+                        
+                        {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
 
-                     {slotNumber === OWNER_SLOT && (
-                       <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-yellow-500">
-                         <Crown className="h-5 w-5 text-yellow-500"/>
-                       </div>
-                    )}
-                    {slotNumber === SUPER_ADMIN_SLOT && (
-                         <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-purple-500">
-                            <Shield className="h-5 w-5 text-purple-500"/> 
-                         </div>
-                    )}
+                         {slotNumber === OWNER_SLOT && (
+                           <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-yellow-500">
+                             <Crown className="h-5 w-5 text-yellow-500"/>
+                           </div>
+                        )}
+                        {slotNumber === SUPER_ADMIN_SLOT && (
+                             <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-purple-500">
+                                <Shield className="h-5 w-5 text-purple-500"/> 
+                             </div>
+                        )}
+                    </div>
                 </div>
                  <div className="h-5 flex items-center justify-center text-center">
                     {profile ? (
