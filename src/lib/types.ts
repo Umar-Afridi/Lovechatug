@@ -114,6 +114,8 @@ export type Room = {
     kickedUsers?: {
       [userId: string]: any; // Store server timestamp for when a user was kicked
     }
+    isLocked?: boolean;
+    theme?: 'blue' | 'green' | 'red' | 'purple' | 'pink' | 'yellow';
 };
 
 export type RoomMember = {
