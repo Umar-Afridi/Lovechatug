@@ -405,7 +405,7 @@ export default function RoomPage() {
         const isLocked = room?.lockedSlots?.includes(slotNumber) || false;
         const isSelf = memberInSlot?.userId === authUser.uid;
         const isOwnerSlot = slotNumber === OWNER_SLOT;
-
+        
         const canAnyoneTakeSeat = !memberInSlot && !isLocked;
         const canUserTakeSeat = (isOwner || !isOwnerSlot) && canAnyoneTakeSeat;
 
@@ -431,8 +431,8 @@ export default function RoomPage() {
                         {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
 
                         {profile?.officialBadge?.isOfficial && (
-                             <div className={cn("absolute -right-2", isOwnerSlot ? "-top-2" : "-top-1")}>
-                                <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-8 w-8"/>
+                             <div className={cn("absolute -right-2", (isOwnerSlot && !profile.officialBadge.isOfficial) ? "-top-2" : "-top-1")}>
+                                <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className={cn("h-8 w-8", (isOwnerSlot && profile.officialBadge.isOfficial) && 'border-2 border-yellow-500')}/>
                              </div>
                         )}
                          {isOwnerSlot && !profile?.officialBadge?.isOfficial && (
@@ -483,6 +483,12 @@ export default function RoomPage() {
                             {canUserTakeSeat && (
                                 <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                                     <Mic className="mr-2 h-4 w-4"/> Take Seat
+                                </DropdownMenuItem>
+                            )}
+                            
+                             {isSelf && currentUserSlot?.micSlot !== OWNER_SLOT && (
+                                <DropdownMenuItem onClick={() => handleTakeSeat(OWNER_SLOT)}>
+                                    <Crown className="mr-2 h-4 w-4"/> Take Owner Seat
                                 </DropdownMenuItem>
                             )}
 
