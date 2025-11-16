@@ -479,7 +479,7 @@ export default function RoomPage() {
                             )}
                         </div>
                     ) : slotNumber === OWNER_SLOT ? (
-                        <p className={cn("text-sm font-semibold")}>{isOwner ? null : 'Umar'}</p>
+                        <p className={cn("text-sm font-semibold")}>{isOwner ? null : 'Umer'}</p>
                     ) : slotNumber === SUPER_ADMIN_SLOT ? (
                          <p className={cn("text-sm font-semibold")}>Guriya</p>
                     ) : (
