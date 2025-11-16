@@ -386,7 +386,7 @@ export default function RoomPage() {
         const isSelf = memberInSlot?.userId === authUser.uid;
         
         const handleTakeSeat = async () => {
-            if (!currentUserSlot || (slotNumber === OWNER_SLOT && authUser.uid !== room.ownerId)) return;
+            if (!currentUserSlot || (isOwner && slotNumber === OWNER_SLOT && authUser.uid !== room.ownerId)) return;
             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
             await updateDoc(memberRef, { micSlot: slotNumber });
         };
@@ -448,7 +448,7 @@ export default function RoomPage() {
         
         return (
             <DropdownMenu key={slotNumber}>
-                <DropdownMenuTrigger asChild disabled={(!!memberInSlot && memberInSlot.userId !== authUser?.uid && !isOwner) || (slotNumber === OWNER_SLOT && !isOwner)}>
+                <DropdownMenuTrigger asChild disabled={(!!memberInSlot && memberInSlot.userId !== authUser?.uid && !isOwner) || (!memberInSlot && !isOwner && currentUserSlot?.micSlot !== null)}>
                     <div className="cursor-pointer">{content}</div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
@@ -466,11 +466,17 @@ export default function RoomPage() {
                         </>
                     )}
                     
-                    {isOwner && (slotNumber >= SUPER_ADMIN_SLOT) && (
+                    {isOwner && (slotNumber >= 1) && !memberInSlot && (
                         <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                             {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                             {isLocked ? 'Unlock Mic' : 'Lock Mic'}
                         </DropdownMenuItem>
+                    )}
+                    
+                    {isOwner && !memberInSlot && !isLocked && (
+                         <DropdownMenuItem onClick={handleTakeSeat}>
+                            <Mic className="mr-2 h-4 w-4"/> Take Seat
+                         </DropdownMenuItem>
                     )}
 
                     {!memberInSlot && !isLocked && currentUserSlot?.micSlot === null && (
@@ -479,10 +485,15 @@ export default function RoomPage() {
                          </DropdownMenuItem>
                     )}
                     
-                    {isSelf && slotNumber === currentUserSlot?.micSlot && currentUserSlot.micSlot >= 0 && (
+                    {isSelf && slotNumber === currentUserSlot?.micSlot && currentUserSlot.micSlot >= 1 && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
                          </DropdownMenuItem>
+                    )}
+                     {memberInSlot && !isSelf && (
+                        <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
+                            <View className="mr-2 h-4 w-4"/> View Profile
+                        </DropdownMenuItem>
                     )}
                 </DropdownMenuContent>
             </DropdownMenu>
