@@ -386,7 +386,7 @@ export default function RoomPage() {
         const isSelf = memberInSlot?.userId === authUser.uid;
         
         const handleTakeSeat = async () => {
-            if (!currentUserSlot || (isOwner && slotNumber === OWNER_SLOT && authUser.uid !== room.ownerId)) return;
+            if (!currentUserSlot) return;
             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
             await updateDoc(memberRef, { micSlot: slotNumber });
         };
@@ -448,11 +448,12 @@ export default function RoomPage() {
         
         return (
             <DropdownMenu key={slotNumber}>
-                <DropdownMenuTrigger asChild disabled={(!!memberInSlot && memberInSlot.userId !== authUser?.uid && !isOwner) || (!memberInSlot && !isOwner && currentUserSlot?.micSlot !== null)}>
+                <DropdownMenuTrigger asChild>
                     <div className="cursor-pointer">{content}</div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  {isOwner && memberInSlot && !isSelf && (
+                    {/* Owner viewing another user */}
+                    {isOwner && memberInSlot && !isSelf && (
                         <>
                            <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })}>
                                 <UserX className="mr-2 h-4 w-4"/> Kick User
@@ -461,39 +462,45 @@ export default function RoomPage() {
                                 <View className="mr-2 h-4 w-4"/> View Profile
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleForceLeaveMic(memberInSlot)}>
-                                <MicOff className="mr-2 h-4 w-4" /> Leave Mic
+                                <MicOff className="mr-2 h-4 w-4" /> Move from Mic
                             </DropdownMenuItem>
                         </>
                     )}
                     
-                    {isOwner && (slotNumber >= 1) && !memberInSlot && (
-                        <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
-                            {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
-                            {isLocked ? 'Unlock Mic' : 'Lock Mic'}
+                    {/* Any user viewing another user */}
+                    {!isOwner && memberInSlot && !isSelf && (
+                         <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
+                            <View className="mr-2 h-4 w-4"/> View Profile
                         </DropdownMenuItem>
                     )}
                     
-                    {isOwner && !memberInSlot && !isLocked && (
-                         <DropdownMenuItem onClick={handleTakeSeat}>
-                            <Mic className="mr-2 h-4 w-4"/> Take Seat
-                         </DropdownMenuItem>
+                    {/* Owner managing an empty, non-owner mic slot */}
+                    {isOwner && !memberInSlot && slotNumber >= 1 && (
+                        <>
+                            <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
+                                {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
+                                {isLocked ? 'Unlock Mic' : 'Lock Mic'}
+                            </DropdownMenuItem>
+                             {!isLocked && (
+                                <DropdownMenuItem onClick={handleTakeSeat}>
+                                    <Mic className="mr-2 h-4 w-4"/> Take Seat
+                                </DropdownMenuItem>
+                             )}
+                        </>
                     )}
 
+                    {/* Any user wanting to take an empty, unlocked seat */}
                     {!memberInSlot && !isLocked && currentUserSlot?.micSlot === null && (
                          <DropdownMenuItem onClick={handleTakeSeat}>
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                          </DropdownMenuItem>
                     )}
                     
+                    {/* User managing their own occupied seat (not owner's seat) */}
                     {isSelf && slotNumber === currentUserSlot?.micSlot && currentUserSlot.micSlot >= 1 && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
                          </DropdownMenuItem>
-                    )}
-                     {memberInSlot && !isSelf && (
-                        <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
-                            <View className="mr-2 h-4 w-4"/> View Profile
-                        </DropdownMenuItem>
                     )}
                 </DropdownMenuContent>
             </DropdownMenu>
