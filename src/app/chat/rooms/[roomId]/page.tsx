@@ -409,7 +409,7 @@ export default function RoomPage() {
         const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
 
         const canAnyoneTakeSeat = !memberInSlot && !isLocked;
-        const canUserTakeSeat = canAnyoneTakeSeat && (!isOwnerSlot || isOwner);
+        const canUserTakeSeat = canAnyoneTakeSeat && (!isOwnerSlot || isOwner) && (!isSuperAdminSlot || isOwner);
 
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1 w-24">
@@ -427,17 +427,17 @@ export default function RoomPage() {
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
                         ) : isOwnerSlot ? (
-                             null
+                             <Mic className={cn("text-muted-foreground h-8 w-8")}/>
                         ): (
                              <Mic className={cn("text-muted-foreground h-8 w-8")}/>
                         )}
                         
                         {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
 
-                         {(profile?.officialBadge?.isOfficial || (isOwnerSlot && isOwner && memberProfiles[room.ownerId]?.officialBadge?.isOfficial)) && (
-                             <div className={cn("absolute -top-1 -right-1")}>
-                                <OfficialBadge color={(profile || memberProfiles[room.ownerId])?.officialBadge.badgeColor} size="icon" className="h-6 w-6"/>
-                             </div>
+                         {((profile?.officialBadge?.isOfficial) || (isOwnerSlot && isOwner && memberProfiles[room.ownerId]?.officialBadge?.isOfficial)) && (
+                            <div className="absolute -top-1 -right-1">
+                                <OfficialBadge color={(profile || memberProfiles[room.ownerId])?.officialBadge?.badgeColor} size="icon" className="h-6 w-6"/>
+                            </div>
                         )}
                     </div>
                 </div>
