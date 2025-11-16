@@ -52,7 +52,7 @@ export function LoginForm() {
         const docSnap = await getDoc(userDocRef);
 
         if (!docSnap.exists()) {
-             const newUserProfile: Omit<UserProfile, 'officialBadge' | 'lastColorfulNameRequestAt' | 'lastVerificationRequestAt' | 'verificationApplicationStatus' | 'colorfulName'> = {
+             const newUserProfile: Omit<UserProfile, 'officialBadge' | 'lastColorfulNameRequestAt' | 'lastVerificationRequestAt' | 'verificationApplicationStatus' | 'nameColor'> = {
                 uid: user.uid,
                 displayName: user.displayName || 'Anonymous User',
                 email: user.email || '',
