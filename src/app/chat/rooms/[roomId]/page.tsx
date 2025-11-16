@@ -279,9 +279,8 @@ export default function RoomPage() {
     return () => {
       unsubRoom();
       unsubMembers();
-      setCurrentRoom(null);
     };
-  }, [firestore, roomId, authUser?.uid, router, toast, setCurrentRoom]);
+  }, [firestore, roomId, authUser?.uid, router, toast, setCurrentRoom, memberProfiles]);
 
   useEffect(() => {
     if (!firestore || !roomId || !joinTimestamp) return;
@@ -574,7 +573,7 @@ export default function RoomPage() {
                     className="font-bold cursor-pointer pr-2 inline-flex items-center gap-1.5"
                     onClick={() => handleViewProfile(msg.senderId)}
                   >
-                    <span>{applyNameColor(msg.senderName.split(' ')[0], senderProfile?.nameColor)}</span>
+                    <span>{applyNameColor(senderProfile?.displayName, senderProfile?.nameColor)}</span>
                      {senderProfile?.verifiedBadge?.showBadge && (
                         <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} className="h-4 w-4"/>
                     )}
