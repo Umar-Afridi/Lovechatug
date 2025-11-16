@@ -404,6 +404,9 @@ export default function RoomPage() {
         
         const isLocked = room?.lockedSlots?.includes(slotNumber) || false;
         const isSelf = memberInSlot?.userId === authUser.uid;
+
+        const canAnyoneTakeSeat = !memberInSlot && !isLocked && slotNumber !== OWNER_SLOT;
+        const canUserTakeSeat = currentUserSlot.micSlot === null && canAnyoneTakeSeat;
         
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1">
@@ -426,12 +429,17 @@ export default function RoomPage() {
                         
                         {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
 
-                        {slotNumber === OWNER_SLOT && (
+                        {slotNumber === OWNER_SLOT && profile?.officialBadge?.isOfficial && (
+                             <div className="absolute -top-2 -right-2">
+                                <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-8 w-8"/>
+                             </div>
+                        )}
+                         {slotNumber === OWNER_SLOT && !profile?.officialBadge?.isOfficial && (
                            <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-yellow-500">
                              <Crown className="h-5 w-5 text-yellow-500"/>
                            </div>
                         )}
-                        {profile?.officialBadge?.isOfficial && (
+                        {slotNumber !== OWNER_SLOT && profile?.officialBadge?.isOfficial && (
                              <div className="absolute -top-2 -right-2">
                                 <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-8 w-8"/>
                              </div>
@@ -465,28 +473,23 @@ export default function RoomPage() {
                     <div className="cursor-pointer">{content}</div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                    {/* --- Options for Everyone on any slot --- */}
-                    {memberInSlot ? (
-                        <DropdownMenuItem onClick={() => profile && handleViewProfile(profile.uid)}>
+                    {/* --- Options for ANY user --- */}
+                    {memberInSlot && (
+                        <DropdownMenuItem onClick={() => handleViewProfile(memberInSlot.userId)}>
                             <View className="mr-2 h-4 w-4"/> View Profile
                         </DropdownMenuItem>
-                    ) : (
-                       isOwner ? (
-                         <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
-                             <Mic className="mr-2 h-4 w-4"/> Take Seat
-                         </DropdownMenuItem>
-                       ) : (
-                         currentUserSlot.micSlot === null && !isLocked && slotNumber !== OWNER_SLOT && (
-                            <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
-                                <Mic className="mr-2 h-4 w-4"/> Take Seat
-                            </DropdownMenuItem>
-                         )
-                       )
                     )}
 
-                    {/* --- Owner's Exclusive Options --- */}
+                    {/* --- Options for the OWNER --- */}
                     {isOwner && (
                         <>
+                             {/* On any empty slot */}
+                            {!memberInSlot && (
+                                <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
+                                    <Mic className="mr-2 h-4 w-4"/> Take Seat
+                                </DropdownMenuItem>
+                            )}
+
                             {/* On other users */}
                             {memberInSlot && !isSelf && (
                                 <>
@@ -499,12 +502,21 @@ export default function RoomPage() {
                                 </>
                             )}
                             
-                            {/* On any empty slots or own other seats */}
-                           <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
-                                {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
-                                {isLocked ? 'Unlock Mic' : 'Lock Mic'}
-                            </DropdownMenuItem>
+                            {/* On any slot that is not the OWNER slot */}
+                           {slotNumber !== OWNER_SLOT && (
+                               <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
+                                    {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
+                                    {isLocked ? 'Unlock Mic' : 'Lock Mic'}
+                                </DropdownMenuItem>
+                           )}
                         </>
+                    )}
+                    
+                    {/* --- Options for NON-OWNERS --- */}
+                    {!isOwner && canUserTakeSeat && (
+                        <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
+                            <Mic className="mr-2 h-4 w-4"/> Take Seat
+                        </DropdownMenuItem>
                     )}
                     
                     {/* --- User managing their own occupied seat --- */}
