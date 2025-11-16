@@ -28,6 +28,26 @@ const getInitials = (name: string | null | undefined) => {
       .join('');
 };
 
+function applyNameColor(name: string, color?: UserProfile['nameColor']) {
+    if (!color || color === 'default') {
+        return name;
+    }
+    if (color === 'gradient') {
+        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
+    }
+    
+    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
+        green: 'text-green-500',
+        yellow: 'text-yellow-500',
+        pink: 'text-pink-500',
+        purple: 'text-purple-500',
+        red: 'text-red-500',
+    };
+
+    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
+}
+
+
 export function ContactProfileSheet({
   isOpen,
   onOpenChange,
@@ -56,11 +76,8 @@ export function ContactProfileSheet({
                     <OfficialBadge color={userProfile.officialBadge.badgeColor} />
                 </div>
             )}
-          <SheetTitle className={cn(
-            "text-2xl font-bold flex items-center justify-center gap-2",
-            userProfile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
-            )}>
-            {userProfile.displayName}
+          <SheetTitle className="text-2xl font-bold flex items-center justify-center gap-2">
+            {applyNameColor(userProfile.displayName, userProfile.nameColor)}
             {userProfile.verifiedBadge?.showBadge && (
                 <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-6 w-6"/>
             )}

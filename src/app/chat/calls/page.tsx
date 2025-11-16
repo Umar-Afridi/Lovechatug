@@ -44,6 +44,25 @@ interface CallWithUser extends Call {
   otherUser?: UserProfile;
 }
 
+function applyNameColor(name: string, color?: UserProfile['nameColor']) {
+    if (!color || color === 'default') {
+        return name;
+    }
+    if (color === 'gradient') {
+        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
+    }
+    
+    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
+        green: 'text-green-500',
+        yellow: 'text-yellow-500',
+        pink: 'text-pink-500',
+        purple: 'text-purple-500',
+        red: 'text-red-500',
+    };
+
+    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
+}
+
 const CallItem = ({ call }: { call: CallWithUser }) => {
   if (!call.otherUser) return null;
 
@@ -85,10 +104,9 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
                 <div className="flex items-center gap-2">
                     <p className={cn(
                         "font-semibold",
-                        call.status === 'missed' || call.status === 'declined' ? 'text-destructive' : '',
-                        call.otherUser.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
+                        call.status === 'missed' || call.status === 'declined' ? 'text-destructive' : ''
                     )}>
-                        {call.otherUser?.displayName}
+                        {applyNameColor(call.otherUser?.displayName, call.otherUser?.nameColor)}
                     </p>
                 </div>
                 <p className="text-sm text-muted-foreground flex items-center gap-1">

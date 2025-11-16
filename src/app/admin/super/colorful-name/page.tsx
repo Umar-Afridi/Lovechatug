@@ -14,18 +14,52 @@ import {
 import {
   Sparkles,
   Search,
-  CheckCircle,
+  MoreVertical,
+  Palette,
+  XCircle,
+  Paintbrush,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { VerifiedBadge } from '@/components/ui/verified-badge';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
+
+type NameColor = NonNullable<UserProfile['nameColor']>;
+const NAME_COLORS: NameColor[] = ['gradient', 'green', 'yellow', 'pink', 'purple', 'red'];
+
+function applyNameColor(name: string, color?: NameColor) {
+    if (!color || color === 'default') {
+        return name;
+    }
+    if (color === 'gradient') {
+        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
+    }
+    
+    const colorClasses: Record<NameColor, string> = {
+        default: '',
+        gradient: '',
+        green: 'text-green-500',
+        yellow: 'text-yellow-500',
+        pink: 'text-pink-500',
+        purple: 'text-purple-500',
+        red: 'text-red-500',
+    };
+
+    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
+}
 
 export default function ManageColorfulNamePage() {
   const router = useRouter();
@@ -87,23 +121,40 @@ export default function ManageColorfulNamePage() {
     );
   }, [searchQuery, allUsers]);
 
-  const handleToggleColorfulName = async (targetUser: UserProfile) => {
+  const handleUpdateNameColor = async (targetUser: UserProfile, color: NameColor | 'default') => {
     if (!firestore) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
-    const newState = !targetUser.colorfulName;
     try {
-      await updateDoc(userRef, { colorfulName: newState });
+      await updateDoc(userRef, { nameColor: color });
       toast({
-        title: `Colorful Name ${newState ? 'Activated' : 'Deactivated'}`,
-        description: `${targetUser.displayName}'s name will now be ${newState ? 'colorful' : 'plain'}.`,
+        title: `Name Color Updated`,
+        description: `${targetUser.displayName}'s name color has been set to ${color}.`,
       });
     } catch (error) {
-       toast({ title: 'Error', description: 'Could not update colorful name status.', variant: 'destructive'});
-       console.error("Error updating colorful name:", error);
+       toast({ title: 'Error', description: 'Could not update name color.', variant: 'destructive'});
+       console.error("Error updating name color:", error);
     }
   };
 
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
+  
+  const getColorBadge = (color: NameColor | undefined) => {
+     if (!color || color === 'default') {
+         return <Badge variant="outline">Default</Badge>
+     }
+     
+     const badgeStyle: Record<NameColor, string> = {
+         default: '',
+         gradient: 'bg-gradient-to-r from-green-400 to-purple-500 text-white border-transparent',
+         green: 'bg-green-500/20 text-green-700 border-green-500/50',
+         yellow: 'bg-yellow-500/20 text-yellow-700 border-yellow-500/50',
+         pink: 'bg-pink-500/20 text-pink-700 border-pink-500/50',
+         purple: 'bg-purple-500/20 text-purple-700 border-purple-500/50',
+         red: 'bg-red-500/20 text-red-700 border-red-500/50',
+     }
+
+     return <Badge className={cn('capitalize', badgeStyle[color])}>{color}</Badge>
+  }
 
   if (loading || !currentUserProfile?.officialBadge?.isOfficial) {
     return (
@@ -118,7 +169,7 @@ export default function ManageColorfulNamePage() {
       <div className="p-4 border-b space-y-4">
         <div className="flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-primary" />
-            <h2 className="text-lg font-semibold">Manage Colorful Names</h2>
+            <h2 className="text-lg font-semibold">Manage Name Colors</h2>
         </div>
         <div className="relative">
             <Input 
@@ -141,26 +192,41 @@ export default function ManageColorfulNamePage() {
                                 <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
                             </Avatar>
                             <div className="overflow-hidden">
-                                <p className={cn("font-semibold truncate", user.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}>{user.displayName}</p>
+                                <p className="font-semibold truncate">{applyNameColor(user.displayName, user.nameColor)}</p>
                                 <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-4">
-                           {user.colorfulName && <Badge variant="secondary" className="text-green-600 border-green-600/50"><CheckCircle className="mr-1 h-3 w-3" /> Active</Badge>}
-                           <Button 
-                             size="sm" 
-                             variant={user.colorfulName ? "destructive" : "default"}
-                             onClick={() => handleToggleColorfulName(user)}
-                           >
-                             {user.colorfulName ? 'Deactivate' : 'Activate'}
-                           </Button>
+                           {getColorBadge(user.nameColor)}
+                           <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon">
+                                        <MoreVertical className="h-5 w-5" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuLabel>Set Name Color</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {NAME_COLORS.map(color => (
+                                         <DropdownMenuItem key={color} onClick={() => handleUpdateNameColor(user, color)}>
+                                             <Palette className="mr-2 h-4 w-4" />
+                                             <span className="capitalize">{color}</span>
+                                         </DropdownMenuItem>
+                                    ))}
+                                    <DropdownMenuSeparator />
+                                     <DropdownMenuItem onClick={() => handleUpdateNameColor(user, 'default')}>
+                                        <XCircle className="mr-2 h-4 w-4" />
+                                        <span>Reset to Default</span>
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                           </DropdownMenu>
                         </div>
                     </div>
                 ))}
             </div>
         ) : (
             <div className="flex flex-1 items-center justify-center text-muted-foreground p-8 h-full">
-                <p>{searchQuery ? "No users found." : "Search for a user to manage their colorful name."}</p>
+                <p>{searchQuery ? "No users found." : "Search for a user to manage their name color."}</p>
             </div>
         )}
       </ScrollArea>

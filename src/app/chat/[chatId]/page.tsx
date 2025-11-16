@@ -65,6 +65,25 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { useCallContext } from '../layout';
 
+function applyNameColor(name: string, color?: UserProfile['nameColor']) {
+    if (!color || color === 'default') {
+        return name;
+    }
+    if (color === 'gradient') {
+        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
+    }
+    
+    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
+        green: 'text-green-500',
+        yellow: 'text-yellow-500',
+        pink: 'text-pink-500',
+        purple: 'text-purple-500',
+        red: 'text-red-500',
+    };
+
+    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
+}
+
 
 export default function ChatIdPage() {
   const params = useParams();
@@ -861,11 +880,8 @@ export default function ChatIdPage() {
                   </div>
                   <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <p className={cn(
-                      "font-semibold",
-                      otherUser.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
-                    )}>
-                      {otherUser.displayName.split(' ')[0]}
+                    <p className={"font-semibold"}>
+                      {applyNameColor(otherUser.displayName.split(' ')[0], otherUser.nameColor)}
                     </p>
                     {otherUser.verifiedBadge?.showBadge && (
                          <VerifiedBadge color={otherUser.verifiedBadge.badgeColor} />

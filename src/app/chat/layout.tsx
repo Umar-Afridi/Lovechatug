@@ -241,7 +241,7 @@ function CallProvider({ children }: { children: React.ReactNode }) {
             const callData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Call;
             
             // If the call is answered, set it as active and clear others.
-            if (callData.status === 'answered') {
+            if (callData.status === 'answered' && callData.answeredAt) {
                 setIncomingCall(null);
                 setOutgoingCall(null);
                 setActiveCall(callData);
@@ -358,6 +358,25 @@ function CallProvider({ children }: { children: React.ReactNode }) {
             {children}
         </CallContext.Provider>
     );
+}
+
+function applyNameColor(name: string, color?: UserProfile['nameColor']) {
+    if (!color || color === 'default') {
+        return name;
+    }
+    if (color === 'gradient') {
+        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
+    }
+    
+    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
+        green: 'text-green-500',
+        yellow: 'text-yellow-500',
+        pink: 'text-pink-500',
+        purple: 'text-purple-500',
+        red: 'text-red-500',
+    };
+
+    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
 }
 
 function ChatAppLayout({
@@ -583,11 +602,8 @@ function ChatAppLayout({
                         </AvatarFallback>
                         </Avatar>
                         <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
-                        <span className={cn(
-                          "truncate text-sm font-medium",
-                          profile?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
-                        )}>
-                            {profile?.displayName ?? 'User'}
+                        <span className={"truncate text-sm font-medium"}>
+                            {applyNameColor(profile?.displayName ?? 'User', profile?.nameColor)}
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
                             {profile?.email ?? 'No email'}

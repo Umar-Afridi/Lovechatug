@@ -18,6 +18,25 @@ interface FriendRequestWithUser extends FriendRequestType {
     fromUser?: UserProfile;
 }
 
+function applyNameColor(name: string, color?: UserProfile['nameColor']) {
+    if (!color || color === 'default') {
+        return name;
+    }
+    if (color === 'gradient') {
+        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
+    }
+    
+    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
+        green: 'text-green-500',
+        yellow: 'text-yellow-500',
+        pink: 'text-pink-500',
+        purple: 'text-purple-500',
+        red: 'text-red-500',
+    };
+
+    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
+}
+
 export default function FriendsPage() {
   const { user } = useUser();
   const firestore = useFirestore();
@@ -196,11 +215,8 @@ export default function FriendsPage() {
                             </div>
                             <div>
                                 <div className="flex items-center gap-2">
-                                    <p className={cn(
-                                      "font-semibold",
-                                      request.fromUser.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
-                                    )}>
-                                      {request.fromUser.displayName ?? 'Loading...'}
+                                    <p className={"font-semibold"}>
+                                      {applyNameColor(request.fromUser.displayName ?? 'Loading...', request.fromUser.nameColor)}
                                     </p>
                                     {request.fromUser.verifiedBadge?.showBadge && (
                                         <VerifiedBadge color={request.fromUser.verifiedBadge.badgeColor} />

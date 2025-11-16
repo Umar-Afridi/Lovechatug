@@ -22,7 +22,7 @@ export type UserProfile = {
     isOfficial: boolean;
     badgeColor: 'blue' | 'gold' | 'green' | 'red' | 'pink';
   }
-  colorfulName?: boolean;
+  nameColor?: 'default' | 'gradient' | 'green' | 'yellow' | 'pink' | 'purple' | 'red';
   verificationApplicationStatus?: 'none' | 'pending' | 'approved' | 'rejected';
   lastVerificationRequestAt?: any; // Firestore ServerTimestamp
   lastColorfulNameRequestAt?: any; // Firestore ServerTimestamp

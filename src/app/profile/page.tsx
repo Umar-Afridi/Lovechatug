@@ -92,7 +92,7 @@ export default function ProfilePage() {
   
   const canApplyForColorfulName = useMemo(() => {
     if (!userProfile) return false;
-    if (userProfile.colorfulName) return false;
+    if (userProfile.nameColor && userProfile.nameColor !== 'default') return false;
     if (!userProfile.lastColorfulNameRequestAt) return true;
     const lastRequestDate = new Date(userProfile.lastColorfulNameRequestAt.seconds * 1000);
     return differenceInHours(new Date(), lastRequestDate) >= 24;
@@ -372,6 +372,20 @@ export default function ProfilePage() {
 
   const displayPhoto = newPhotoPreview ?? (isRemovingPhoto ? null : photoURL);
 
+  const nameColorClass = useMemo(() => {
+    if (!userProfile?.nameColor || userProfile.nameColor === 'default') return '';
+    if (userProfile.nameColor === 'gradient') return "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate";
+    
+    const colorClasses: Record<string, string> = {
+        green: 'text-green-500',
+        yellow: 'text-yellow-500',
+        pink: 'text-pink-500',
+        purple: 'text-purple-500',
+        red: 'text-red-500',
+    };
+    return cn('font-bold', colorClasses[userProfile.nameColor]);
+  }, [userProfile?.nameColor]);
+
   return (
     <>
         <ProfilePictureDialog 
@@ -435,7 +449,7 @@ export default function ProfilePage() {
                                     id="displayName" 
                                     value={displayName} 
                                     onChange={(e) => setDisplayName(e.target.value)} 
-                                    className={cn(userProfile?.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate")}
+                                    className={nameColorClass}
                                 />
                             </div>
                         </div>
@@ -478,14 +492,14 @@ export default function ProfilePage() {
                     
                     <Separator />
 
-                    {userProfile?.colorfulName ? (
+                    {userProfile?.nameColor && userProfile.nameColor !== 'default' ? (
                         <div className="space-y-2 text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
                             <h3 className="text-lg font-semibold flex items-center justify-center gap-2 text-purple-700 dark:text-purple-400">
                                 <Palette className="h-5 w-5" />
-                                Colorful Name Activated
+                                Special Name Color Activated
                             </h3>
-                             <p className="text-sm text-purple-600 dark:text-purple-500">
-                                Your name is already colorful.
+                             <p className="text-sm text-purple-600 dark:text-purple-500 capitalize">
+                                Your name color is set to {userProfile.nameColor}.
                             </p>
                         </div>
                     ) : !canApplyForColorfulName ? (

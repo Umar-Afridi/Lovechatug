@@ -99,9 +99,10 @@
             }
           }
         },
-        "colorfulName": {
-            "type": "boolean",
-            "description": "Whether to display the user's name with a colorful gradient animation."
+        "nameColor": {
+          "type": "string",
+          "enum": ["default", "gradient", "green", "yellow", "pink", "purple", "red"],
+          "description": "The special color or effect for the user's name."
         },
         "verificationApplicationStatus": {
           "type": "string",
@@ -123,7 +124,7 @@
           "description": "Whether the user's account is disabled by an administrator."
         }
       },
-      "required": ["uid", "displayName", "email", "username", "verifiedBadge", "colorfulName", "verificationApplicationStatus"]
+      "required": ["uid", "displayName", "email", "username", "verifiedBadge", "nameColor", "verificationApplicationStatus"]
     },
     "FriendRequest": {
       "title": "Friend Request",
