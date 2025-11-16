@@ -132,7 +132,6 @@ export default function RoomPage() {
  const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
     if (!firestore || !authUser || !currentUserSlot) return;
 
-    setMessages([]); 
     contextLeaveRoom();
     
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
@@ -184,10 +183,12 @@ export default function RoomPage() {
         }
       } else {
         toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
+        contextLeaveRoom();
         router.push('/chat/rooms');
       }
     }, (error) => {
       console.error("Error fetching room:", error);
+      contextLeaveRoom();
       router.push('/chat/rooms');
     });
 
@@ -428,7 +429,7 @@ export default function RoomPage() {
         const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
 
         const canTakeSeat = !memberInSlot && !isLocked;
-        const canUserTakeSeat = canTakeSeat && (!isOwnerSlot || isOwner) && (!isSuperAdminSlot || isOwner);
+        const canUserTakeSeat = canTakeSeat && !isOwnerSlot;
 
 
         const content = (
@@ -502,7 +503,7 @@ export default function RoomPage() {
                     {isOwner && (
                         <>
                              {/* Take any free seat */}
-                             {canUserTakeSeat && (
+                             {canTakeSeat && (
                                 <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                                     <Mic className="mr-2 h-4 w-4"/> Take Seat
                                 </DropdownMenuItem>
@@ -679,10 +680,10 @@ export default function RoomPage() {
             </div>
 
             <div className="w-full max-w-4xl space-y-4">
-                <div className="flex justify-center gap-x-2 sm:gap-x-4 md:gap-x-6 lg:gap-x-8">
+                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 justify-items-center">
                     {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
                 </div>
-                <div className="flex justify-center gap-x-2 sm:gap-x-4 md:gap-x-6 lg:gap-x-8">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 justify-items-center">
                     {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
                 </div>
             </div>
