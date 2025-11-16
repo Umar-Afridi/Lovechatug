@@ -231,7 +231,7 @@ export default function RoomPage() {
 
       if (currentRoomData.isLocked && currentRoomData.ownerId !== authUser.uid) {
           toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
-          router.push('/chat');
+          router.push('/chat/rooms');
           return;
       }
       
@@ -479,7 +479,7 @@ export default function RoomPage() {
                             )}
                         </div>
                     ) : slotNumber === OWNER_SLOT ? (
-                        <p className={cn("text-sm font-semibold")}>{isOwner ? null : 'Umar'}</p>
+                        <p className={cn("text-sm font-semibold")}>Umar</p>
                     ) : slotNumber === SUPER_ADMIN_SLOT ? (
                          <p className={cn("text-sm font-semibold")}>Guriya</p>
                     ) : (
