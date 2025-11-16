@@ -56,16 +56,15 @@ export default function RoomsPage() {
     const roomsRef = collection(firestore, 'rooms');
     const q = query(
       roomsRef,
-      where('memberCount', '>', 0), // Only show rooms with at least one person
-      orderBy('memberCount', 'desc'), 
+      orderBy('memberCount', 'desc'),
       orderBy('createdAt', 'desc')
     );
 
     const unsubPublicRooms = onSnapshot(q, (snapshot) => {
       const allRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
       const myRoomIds = myRooms.map(room => room.id);
-      // Filter out user's own room from the public list to avoid duplication
-      const filteredPublicRooms = allRooms.filter(room => !myRoomIds.includes(room.id));
+      // Filter out user's own room from the public list to avoid duplication, and rooms with no one in them.
+      const filteredPublicRooms = allRooms.filter(room => !myRoomIds.includes(room.id) && room.memberCount > 0);
       
       setPublicRooms(filteredPublicRooms);
       setLoading(false);
