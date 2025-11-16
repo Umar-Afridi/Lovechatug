@@ -271,10 +271,14 @@ export default function RoomPage() {
           await batch.commit();
       } else {
           const currentMemberData = memberDoc.data() as RoomMember;
-          if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
-              await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
-          } else if (userProfile?.officialBadge?.isOfficial && currentRoomData.ownerId !== authUser.uid && currentMemberData.micSlot !== SUPER_ADMIN_SLOT) {
-              await updateDoc(memberRef, { micSlot: SUPER_ADMIN_SLOT, isMuted: true });
+           if (currentRoomData.ownerId === authUser.uid) {
+              if (currentMemberData.micSlot !== OWNER_SLOT) {
+                await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
+              }
+          } else if (userProfile?.officialBadge?.isOfficial) {
+              if (currentMemberData.micSlot !== SUPER_ADMIN_SLOT) {
+                await updateDoc(memberRef, { micSlot: SUPER_ADMIN_SLOT, isMuted: true });
+              }
           }
       }
       setStatus('joined');
@@ -426,7 +430,7 @@ export default function RoomPage() {
         const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
 
         const canTakeSeat = !memberInSlot && !isLocked;
-        const canUserTakeSeat = canTakeSeat && !isOwner;
+        const canUserTakeSeat = canTakeSeat;
 
 
         const content = (
@@ -475,9 +479,9 @@ export default function RoomPage() {
                             )}
                         </div>
                     ) : slotNumber === OWNER_SLOT ? (
-                        <p className={cn("text-sm font-semibold")}>{isOwner ? null : 'OWNER'}</p>
+                        <p className={cn("text-sm font-semibold")}>{isOwner ? null : 'Umar'}</p>
                     ) : slotNumber === SUPER_ADMIN_SLOT ? (
-                         <p className={cn("text-sm font-semibold")}>SUPER</p>
+                         <p className={cn("text-sm font-semibold")}>Guriya</p>
                     ) : (
                          !isLocked && <p className="text-sm text-muted-foreground">{slotNumber}</p>
                     )}
@@ -531,7 +535,7 @@ export default function RoomPage() {
                     )}
                     
                     {/* --- Options for NON-OWNERS --- */}
-                    {!isOwner && canUserTakeSeat && (
+                    {canUserTakeSeat && (
                         <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                         </DropdownMenuItem>
