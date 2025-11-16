@@ -58,7 +58,7 @@ export default function CreateRoomPage() {
             photoURL: photoURL,
             createdAt: serverTimestamp(),
             members: [],
-            memberCount: 0,
+            memberCount: 1, // Start member count at 1 so it appears in popular list
             kickedUsers: {},
             lockedSlots: [],
         };
