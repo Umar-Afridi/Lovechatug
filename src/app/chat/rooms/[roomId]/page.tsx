@@ -435,11 +435,7 @@ export default function RoomPage() {
                     )}
                     
                     {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
-                     {profile?.verifiedBadge?.showBadge && (
-                        <div className="absolute bottom-0 left-0">
-                            <VerifiedBadge color={profile.verifiedBadge.badgeColor} className="h-5 w-5"/>
-                        </div>
-                    )}
+
                      {slotNumber === OWNER_SLOT && (
                        <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-yellow-500">
                          <Crown className="h-5 w-5 text-yellow-500"/>
@@ -453,9 +449,14 @@ export default function RoomPage() {
                 </div>
                  <div className="h-5 flex items-center justify-center text-center">
                     {profile ? (
-                         <div className="text-sm font-medium truncate max-w-[80px]">
-                           {applyNameColor(profile.displayName, profile.nameColor)}
-                         </div>
+                        <div className="flex items-center gap-1.5">
+                            <div className="text-sm font-medium truncate max-w-[80px]">
+                                {applyNameColor(profile.displayName, profile.nameColor)}
+                            </div>
+                            {profile.verifiedBadge?.showBadge && (
+                                <VerifiedBadge color={profile.verifiedBadge.badgeColor} className="h-4 w-4" />
+                            )}
+                        </div>
                     ) : slotNumber === OWNER_SLOT ? (
                         <p className={cn("text-sm font-semibold")}>OWNER</p>
                     ) : slotNumber === SUPER_ADMIN_SLOT ? (
@@ -558,16 +559,15 @@ export default function RoomPage() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 text-sm">
-                  <span
-                    className={cn(
-                      "font-bold cursor-pointer pr-2",
-                      senderProfile?.colorfulName &&
-                        "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
-                    )}
+                  <div
+                    className="font-bold cursor-pointer pr-2 inline-flex items-center gap-1.5"
                     onClick={() => handleViewProfile(msg.senderId)}
                   >
-                    {msg.senderName}:
-                  </span>
+                    <span>{applyNameColor(msg.senderName, senderProfile?.nameColor)}:</span>
+                    {senderProfile?.verifiedBadge?.showBadge && (
+                        <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} className="h-4 w-4"/>
+                    )}
+                  </div>
                   <span className="break-words">{msg.content}</span>
                 </div>
               </div>
