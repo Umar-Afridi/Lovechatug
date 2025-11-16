@@ -24,6 +24,13 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 142.1 76.2% 36.3%;
     --radius: 0.5rem;
+    
+    --theme-blue: 221 83% 53%;
+    --theme-green: 142.1 76.2% 36.3%;
+    --theme-red: 0 72% 51%;
+    --theme-purple: 262 84% 59%;
+    --theme-pink: 339 80% 59%;
+    --theme-yellow: 48 96% 50%;
   }
 
   .dark {
@@ -46,6 +53,13 @@
     --border: 215 27.9% 16.9%;
     --input: 215 27.9% 16.9%;
     --ring: 142.1 76.2% 36.3%;
+
+    --theme-blue: 221 83% 53%;
+    --theme-green: 142.1 76.2% 36.3%;
+    --theme-red: 0 72% 51%;
+    --theme-purple: 262 84% 59%;
+    --theme-pink: 339 80% 59%;
+    --theme-yellow: 48 96% 50%;
   }
 }
 
@@ -58,6 +72,12 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  .theme-blue { @apply bg-blue-500/10; .dark & { @apply bg-blue-900/20; } }
+  .theme-green { @apply bg-green-500/10; .dark & { @apply bg-green-900/20; } }
+  .theme-red { @apply bg-red-500/10; .dark & { @apply bg-red-900/20; } }
+  .theme-purple { @apply bg-purple-500/10; .dark & { @apply bg-purple-900/20; } }
+  .theme-pink { @apply bg-pink-500/10; .dark & { @apply bg-pink-900/20; } }
+  .theme-yellow { @apply bg-yellow-500/10; .dark & { @apply bg-yellow-900/20; } }
 }
 
 @layer utilities {
@@ -86,10 +106,10 @@
 
   @keyframes talking {
     0%, 100% {
-      box-shadow: 0 0 0 2px hsl(var(--primary) / 0.8), 0 0 0 4px hsl(var(--primary) / 0.4);
+      box-shadow: 0 0 0 2px hsl(var(--theme-color, var(--primary)) / 0.8), 0 0 0 4px hsl(var(--theme-color, var(--primary)) / 0.4);
     }
     50% {
-       box-shadow: 0 0 0 4px hsl(var(--primary) / 0.8), 0 0 0 8px hsl(var(--primary) / 0.2);
+       box-shadow: 0 0 0 4px hsl(var(--theme-color, var(--primary)) / 0.8), 0 0 0 8px hsl(var(--theme-color, var(--primary)) / 0.2);
     }
   }
   

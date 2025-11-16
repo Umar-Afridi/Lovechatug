@@ -418,15 +418,14 @@ export default function RoomPage() {
         const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
 
         const canTakeSeat = !memberInSlot && !isLocked;
-        const canAnyoneTakeSeat = !memberInSlot && !isLocked;
-        const canUserTakeSeat = canAnyoneTakeSeat && (!isOwnerSlot || isOwner) && (!isSuperAdminSlot || isOwner);
+        const canUserTakeSeat = canTakeSeat && (!isOwnerSlot || isOwner) && (!isSuperAdminSlot || isOwner);
 
 
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1 w-24">
                 <div className="relative h-20 w-20">
                     <div className={cn("relative h-full w-full rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
-                                      memberInSlot ? `ring-2 ring-offset-2 ring-offset-background ${room.theme ? `ring-[${room.theme}]` : 'ring-primary'}` : "border-2 border-dashed border-muted-foreground/50",
+                                      memberInSlot ? `ring-2 ring-offset-2 ring-offset-background ${room.theme ? `ring-[var(--theme-color)]` : 'ring-primary'}` : "border-2 border-dashed border-muted-foreground/50",
                                       memberInSlot && memberInSlot.isMuted && "ring-destructive",
                                       isSelf && !isMuted && "talking-indicator"
                                       )}>
@@ -438,14 +437,14 @@ export default function RoomPage() {
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
                         ) : (
-                             <Mic className={cn("text-muted-foreground h-8 w-8")}/>
+                             <Mic className={cn("text-muted-foreground h-8 w-8", isOwnerSlot && "text-muted-foreground")}/>
                         )}
                         
                         {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
 
                         {profile?.officialBadge?.isOfficial && (
                              <div className="absolute -top-1 -right-1">
-                                <OfficialBadge color={(profile || memberProfiles[room.ownerId])?.officialBadge?.badgeColor} size="icon" className="h-6 w-6"/>
+                                <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-6 w-6"/>
                             </div>
                         )}
                     </div>
@@ -524,7 +523,7 @@ export default function RoomPage() {
                     )}
                     
                     {/* --- User managing their own occupied seat --- */}
-                    {isSelf && currentUserSlot?.micSlot !== null && !isOwnerSlot && (
+                    {isSelf && currentUserSlot?.micSlot !== null && !isOwnerSlot && !isSuperAdminSlot && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
                          </DropdownMenuItem>
@@ -584,7 +583,7 @@ export default function RoomPage() {
         );
       };
 
-    const themeStyle = room?.theme ? { '--primary-room-theme': room.theme } as React.CSSProperties : {};
+    const themeStyle = room?.theme ? { '--theme-color': `var(--theme-${room.theme})` } as React.CSSProperties : {};
     const themeClass = room?.theme ? `theme-${room.theme}` : '';
 
   return (
@@ -626,7 +625,7 @@ export default function RoomPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className={cn("flex h-screen flex-col bg-gray-100 dark:bg-gray-900", themeClass)} style={themeStyle}>
+      <div className={cn("flex h-screen flex-col", themeClass)} style={themeStyle}>
         <header className="flex shrink-0 items-center justify-between gap-4 border-b p-3 bg-background shadow-sm">
           <div className="flex items-center gap-2 overflow-hidden">
             <Avatar className="h-10 w-10">
@@ -651,7 +650,7 @@ export default function RoomPage() {
         </header>
         
         <main className="flex-1 flex flex-col items-center overflow-hidden p-4 md:p-6 space-y-6">
-            <div className="flex justify-center gap-x-4 md:gap-x-8">
+             <div className="flex justify-center gap-x-4 md:gap-x-8">
                 {renderSlot(OWNER_SLOT)}
                 {renderSlot(SUPER_ADMIN_SLOT)}
             </div>
