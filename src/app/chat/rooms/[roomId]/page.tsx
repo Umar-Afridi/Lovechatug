@@ -154,7 +154,7 @@ export default function RoomPage() {
     } catch(e) {
         console.warn("Could not leave room properly, room might be deleted.", e);
     }
-    router.push('/chat/rooms');
+    router.push('/chat');
   }, [firestore, authUser, roomId, router, contextLeaveRoom, currentUserSlot]);
   
   const handleBeforeUnload = useCallback((e: BeforeUnloadEvent) => {
@@ -429,7 +429,7 @@ export default function RoomPage() {
         const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
 
         const canTakeSeat = !memberInSlot && !isLocked;
-        const canUserTakeSeat = canTakeSeat && !isOwnerSlot;
+        const canUserTakeSeat = canTakeSeat;
 
 
         const content = (
@@ -680,10 +680,10 @@ export default function RoomPage() {
             </div>
 
             <div className="w-full max-w-4xl space-y-4">
-                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 justify-items-center">
+                 <div className="flex justify-center gap-4">
                     {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 justify-items-center">
+                <div className="flex justify-center gap-4">
                     {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
                 </div>
             </div>
