@@ -218,28 +218,32 @@ export default function RoomPage() {
     });
     
     const joinRoom = async () => {
+      const roomDoc = await getDoc(roomRef);
+      if (!roomDoc.exists()) {
+          toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
+          router.push('/chat/rooms');
+          return;
+      }
+      const currentRoomData = roomDoc.data() as Room;
+
+      // Check if room is locked BEFORE trying to join
+      if (currentRoomData.isLocked && currentRoomData.ownerId !== authUser.uid) {
+          toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
+          router.push('/chat/rooms');
+          return;
+      }
+      
       const userProfileDoc = await getDoc(doc(firestore, 'users', authUser.uid));
       if (!userProfileDoc.exists()) return;
       const userProfile = userProfileDoc.data() as UserProfile;
 
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-      const roomRef = doc(firestore, 'rooms', roomId);
-      
-      const roomDoc = await getDoc(roomRef);
-      if (!roomDoc.exists()) return;
-      const currentRoomData = roomDoc.data() as Room;
-
-      if (currentRoomData.isLocked && currentRoomData.ownerId !== authUser.uid) {
-          toast({ title: "Room is Locked", description: "The owner has locked this room.", variant: "destructive" });
-          router.push('/chat/rooms');
-          return;
-      }
-      
       const memberDoc = await getDoc(memberRef);
+      
       if (!memberDoc.exists()) {
           // User is joining for the first time
           let initialMicSlot: number | null = null;
-          // IMPORTANT: Check for owner first, then official badge.
+          // IMPORTANT: Check for owner first.
           if (currentRoomData.ownerId === authUser.uid) {
               initialMicSlot = OWNER_SLOT;
           } else if (userProfile?.officialBadge?.isOfficial) {
@@ -250,7 +254,7 @@ export default function RoomPage() {
           const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
           batch.set(memberRef, memberData);
           
-          if (currentRoomData.ownerId !== authUser.uid) {
+          if (initialMicSlot !== OWNER_SLOT && initialMicSlot !== SUPER_ADMIN_SLOT) {
             batch.update(roomRef, { memberCount: increment(1) });
           }
           
@@ -266,7 +270,7 @@ export default function RoomPage() {
           
           await batch.commit();
       } else {
-          // User is already a member, just ensure their special slot is correct
+          // User is re-joining or already a member, just ensure their special slot is correct
           const currentMemberData = memberDoc.data() as RoomMember;
           // IMPORTANT: Check for owner first.
           if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
@@ -448,6 +452,8 @@ export default function RoomPage() {
                                     </div>
                                 )}
                             </>
+                        ) : isOwnerSlot ? (
+                            <Mic className="text-muted-foreground h-8 w-8"/>
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
                         ) : (
@@ -469,7 +475,7 @@ export default function RoomPage() {
                             )}
                         </div>
                     ) : slotNumber === OWNER_SLOT ? (
-                        <p className={cn("text-sm font-semibold")}>{isOwner ? <Mic className="h-5 w-5 text-muted-foreground" /> : 'OWNER'}</p>
+                        <p className={cn("text-sm font-semibold")}>{isOwner ? null : 'OWNER'}</p>
                     ) : slotNumber === SUPER_ADMIN_SLOT ? (
                          <p className={cn("text-sm font-semibold")}>SUPER</p>
                     ) : (

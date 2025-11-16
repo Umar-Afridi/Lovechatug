@@ -56,6 +56,8 @@ export default function RoomsPage() {
     const roomsRef = collection(firestore, 'rooms');
     const q = query(
       roomsRef,
+      where('isLocked', '!=', true), // Exclude locked rooms from popular list
+      orderBy('isLocked', 'asc'), // This is needed for the inequality filter
       orderBy('memberCount', 'desc'),
       orderBy('createdAt', 'desc')
     );
