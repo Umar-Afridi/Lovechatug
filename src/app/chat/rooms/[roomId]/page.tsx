@@ -226,13 +226,11 @@ export default function RoomPage() {
         const currentRoomData = roomDoc.data() as Room;
         
         let initialMicSlot: number | null = null;
-        let isJoiningAsSuperAdmin = false;
 
         if (currentRoomData.ownerId === authUser.uid) {
             initialMicSlot = OWNER_SLOT;
         } else if (userProfile?.officialBadge?.isOfficial) {
-            isJoiningAsSuperAdmin = true;
-            initialMicSlot = null;
+            initialMicSlot = SUPER_ADMIN_SLOT;
         }
 
         if (!memberDoc.exists()) {
@@ -257,8 +255,10 @@ export default function RoomPage() {
             await batch.commit();
         } else {
             const currentMemberData = memberDoc.data() as RoomMember;
-            if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
+             if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
                 await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
+            } else if (userProfile?.officialBadge?.isOfficial && currentMemberData.micSlot !== SUPER_ADMIN_SLOT) {
+                 await updateDoc(memberRef, { micSlot: SUPER_ADMIN_SLOT, isMuted: true });
             }
         }
     };
@@ -405,32 +405,9 @@ export default function RoomPage() {
         const isLocked = room?.lockedSlots?.includes(slotNumber) || false;
         const isSelf = memberInSlot?.userId === authUser.uid;
         
-        const officialBadgeColor = profile?.officialBadge?.badgeColor || 'gold';
-        const colorClass = {
-            blue: 'text-blue-500',
-            gold: 'text-yellow-500',
-            green: 'text-green-500',
-            red: 'text-red-500',
-            pink: 'text-pink-500',
-        }[officialBadgeColor];
-        
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1 group">
                 <div className="relative h-20 w-20">
-                     {profile?.officialBadge?.isOfficial && (
-                        <div className="absolute inset-0 official-badge-circle-animation">
-                            <svg viewBox="0 0 100 100" className="w-full h-full">
-                                <defs>
-                                    <path id="circlePath" d="M 50, 50 m -40, 0 a 40,40 0 1,1 80,0 a 40,40 0 1,1 -80,0" />
-                                </defs>
-                                <text className={cn("text-xs font-bold uppercase tracking-wider fill-current", colorClass)}>
-                                    <textPath href="#circlePath" startOffset="50%" textAnchor="middle">
-                                        V Official • V Official •
-                                    </textPath>
-                                </text>
-                            </svg>
-                        </div>
-                    )}
                     <div className={cn("relative h-full w-full rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
                                       memberInSlot ? "ring-2 ring-offset-2 ring-offset-background" : "border-2 border-dashed border-muted-foreground/50",
                                       memberInSlot && memberInSlot.isMuted ? "ring-destructive" : "ring-primary",
@@ -454,9 +431,9 @@ export default function RoomPage() {
                              <Crown className="h-5 w-5 text-yellow-500"/>
                            </div>
                         )}
-                        {slotNumber === SUPER_ADMIN_SLOT && (
+                        {slotNumber === SUPER_ADMIN_SLOT && profile?.officialBadge?.isOfficial && (
                              <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-purple-500">
-                                <Shield className="h-5 w-5 text-purple-500"/> 
+                                <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-6 w-6"/>
                              </div>
                         )}
                     </div>
@@ -510,8 +487,8 @@ export default function RoomPage() {
                                 </>
                             )}
                             
-                            {/* On empty slots (not owner slot) */}
-                            {!memberInSlot && slotNumber !== OWNER_SLOT && (
+                            {/* On any empty slots */}
+                            {!memberInSlot && (
                                 <>
                                     <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                                         {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
@@ -527,14 +504,14 @@ export default function RoomPage() {
                         </>
                     )}
                     
-                    {/* --- Any user taking an empty, unlocked seat (not owner slot) --- */}
-                    {!isOwner && !memberInSlot && !isLocked && slotNumber !== OWNER_SLOT && currentUserSlot?.micSlot === null && (
+                    {/* --- Any user taking an empty, unlocked seat --- */}
+                    {!isOwner && !memberInSlot && !isLocked && currentUserSlot?.micSlot === null && slotNumber !== OWNER_SLOT && (
                          <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                          </DropdownMenuItem>
                     )}
                     
-                    {/* --- User managing their own occupied seat (not owner slot) --- */}
+                    {/* --- User managing their own occupied seat --- */}
                     {isSelf && slotNumber === currentUserSlot?.micSlot && slotNumber !== OWNER_SLOT && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
@@ -582,6 +559,9 @@ export default function RoomPage() {
                     <span>{applyNameColor(msg.senderName, senderProfile?.nameColor)}</span>
                     {senderProfile?.verifiedBadge?.showBadge && (
                         <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} className="h-4 w-4"/>
+                    )}
+                    {senderProfile?.officialBadge?.isOfficial && (
+                        <OfficialBadge color={senderProfile.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>
                     )}
                   </div>
                   <span className="break-words">: {msg.content}</span>
