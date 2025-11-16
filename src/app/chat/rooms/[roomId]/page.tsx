@@ -407,7 +407,8 @@ export default function RoomPage() {
         const isOwnerSlot = slotNumber === OWNER_SLOT;
         
         const canAnyoneTakeSeat = !memberInSlot && !isLocked;
-        const canUserTakeSeat = (isOwner || !isOwnerSlot) && canAnyoneTakeSeat;
+        // User can take seat if it's available, and they are either the owner OR it's not the owner's slot
+        const canUserTakeSeat = canAnyoneTakeSeat && (isOwner || !isOwnerSlot);
 
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1">
@@ -430,15 +431,15 @@ export default function RoomPage() {
                         
                         {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
 
-                        {profile?.officialBadge?.isOfficial && (
-                             <div className={cn("absolute -right-2", (isOwnerSlot && !profile.officialBadge.isOfficial) ? "-top-2" : "-top-1")}>
-                                <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className={cn("h-8 w-8", (isOwnerSlot && profile.officialBadge.isOfficial) && 'border-2 border-yellow-500')}/>
-                             </div>
-                        )}
-                         {isOwnerSlot && !profile?.officialBadge?.isOfficial && (
+                         {isOwnerSlot && (
                            <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-yellow-500">
                              <Crown className="h-5 w-5 text-yellow-500"/>
                            </div>
+                        )}
+                         {profile?.officialBadge?.isOfficial && (
+                             <div className={cn("absolute -top-1 -right-1")}>
+                                <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-6 w-6"/>
+                             </div>
                         )}
                     </div>
                 </div>
@@ -486,12 +487,6 @@ export default function RoomPage() {
                                 </DropdownMenuItem>
                             )}
                             
-                             {isSelf && currentUserSlot?.micSlot !== OWNER_SLOT && (
-                                <DropdownMenuItem onClick={() => handleTakeSeat(OWNER_SLOT)}>
-                                    <Crown className="mr-2 h-4 w-4"/> Take Owner Seat
-                                </DropdownMenuItem>
-                            )}
-
                             {/* On other users */}
                             {memberInSlot && !isSelf && (
                                 <>
@@ -567,11 +562,11 @@ export default function RoomPage() {
                     onClick={() => handleViewProfile(msg.senderId)}
                   >
                     <span>{applyNameColor(msg.senderName, senderProfile?.nameColor)}</span>
-                     {senderProfile?.officialBadge?.isOfficial && (
-                        <OfficialBadge color={senderProfile.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>
-                    )}
                     {senderProfile?.verifiedBadge?.showBadge && (
                         <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} className="h-4 w-4"/>
+                    )}
+                     {senderProfile?.officialBadge?.isOfficial && (
+                        <OfficialBadge color={senderProfile.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>
                     )}
                   </div>
                   <span className="break-words">: {msg.content}</span>
@@ -647,7 +642,7 @@ export default function RoomPage() {
         </header>
         
         <main className="flex-1 flex flex-col items-center overflow-hidden p-4 md:p-6 space-y-6">
-             {/* Top Row: Owner and Super */}
+            {/* Top Row: Owner and Super */}
             <div className="flex justify-center gap-x-4 md:gap-x-8">
                 {renderSlot(OWNER_SLOT)}
                 {renderSlot(SUPER_ADMIN_SLOT)}
