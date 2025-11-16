@@ -404,10 +404,12 @@ export default function RoomPage() {
         
         const isLocked = room?.lockedSlots?.includes(slotNumber) || false;
         const isSelf = memberInSlot?.userId === authUser.uid;
-        const isOwnerSlot = slotNumber === OWNER_SLOT;
         
+        const isOwnerSlot = slotNumber === OWNER_SLOT;
+        const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
+
         const canAnyoneTakeSeat = !memberInSlot && !isLocked;
-        const canUserTakeSeat = canAnyoneTakeSeat && (isOwner || !isOwnerSlot);
+        const canUserTakeSeat = canAnyoneTakeSeat && (!isOwnerSlot || isOwner);
 
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1 w-24">
@@ -424,15 +426,17 @@ export default function RoomPage() {
                             </Avatar>
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
+                        ) : isOwnerSlot ? (
+                             null
                         ): (
                              <Mic className={cn("text-muted-foreground h-8 w-8")}/>
                         )}
                         
                         {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
 
-                         {profile?.officialBadge?.isOfficial && (
+                         {(profile?.officialBadge?.isOfficial || (isOwnerSlot && isOwner && memberProfiles[room.ownerId]?.officialBadge?.isOfficial)) && (
                              <div className={cn("absolute -top-1 -right-1")}>
-                                <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-6 w-6"/>
+                                <OfficialBadge color={(profile || memberProfiles[room.ownerId])?.officialBadge.badgeColor} size="icon" className="h-6 w-6"/>
                              </div>
                         )}
                     </div>
@@ -441,9 +445,11 @@ export default function RoomPage() {
                     {profile ? (
                         <div className="flex items-center gap-1.5">
                             <div className="text-sm font-medium truncate max-w-[80px]">
-                                {applyNameColor(profile.displayName, profile.nameColor)}
+                                {applyNameColor(profile.displayName.split(' ')[0], profile.nameColor)}
                             </div>
-                            <VerifiedBadge color={profile.verifiedBadge?.badgeColor} className="h-4 w-4"/>
+                            {profile.verifiedBadge?.showBadge && (
+                                <VerifiedBadge color={profile.verifiedBadge.badgeColor} className="h-4 w-4"/>
+                            )}
                         </div>
                     ) : slotNumber === OWNER_SLOT ? (
                         <p className={cn("text-sm font-semibold")}>OWNER</p>
@@ -472,7 +478,7 @@ export default function RoomPage() {
                     {/* --- Options for the OWNER --- */}
                     {isOwner && (
                         <>
-                            {canAnyoneTakeSeat && (
+                            {(canUserTakeSeat || (memberInSlot && !isSelf)) && (
                                 <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                                     <Mic className="mr-2 h-4 w-4"/> Take Seat
                                 </DropdownMenuItem>
@@ -491,7 +497,7 @@ export default function RoomPage() {
                             )}
                             
                             {/* On any slot that is not the OWNER slot */}
-                           {slotNumber !== OWNER_SLOT && (
+                           {!isOwnerSlot && (
                                <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                                     {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                                     {isLocked ? 'Unlock Mic' : 'Lock Mic'}
@@ -508,7 +514,7 @@ export default function RoomPage() {
                     )}
                     
                     {/* --- User managing their own occupied seat --- */}
-                    {isSelf && currentUserSlot?.micSlot !== null && currentUserSlot.micSlot !== OWNER_SLOT && (
+                    {isSelf && currentUserSlot?.micSlot !== null && !isOwnerSlot && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
                          </DropdownMenuItem>
@@ -553,8 +559,10 @@ export default function RoomPage() {
                     onClick={() => handleViewProfile(msg.senderId)}
                   >
                     <span>{applyNameColor(msg.senderName, senderProfile?.nameColor)}</span>
-                    <VerifiedBadge color={senderProfile?.verifiedBadge?.badgeColor} className="h-4 w-4"/>
-                     {senderProfile?.officialBadge?.isOfficial && (
+                    {senderProfile?.verifiedBadge?.showBadge && (
+                        <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} className="h-4 w-4"/>
+                    )}
+                    {senderProfile?.officialBadge?.isOfficial && (
                         <OfficialBadge color={senderProfile.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>
                     )}
                   </div>
@@ -638,13 +646,8 @@ export default function RoomPage() {
             </div>
             
             {/* Mic Slots */}
-            <div className="flex flex-col items-center gap-y-6">
-                <div className="flex justify-center gap-x-4 md:gap-x-8">
-                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
-                </div>
-                <div className="flex justify-center gap-x-4 md:gap-x-8">
-                    {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
-                </div>
+            <div className="flex justify-center flex-wrap gap-x-4 md:gap-x-8 gap-y-6">
+                 {Array.from({ length: 8 }).map((_, i) => renderSlot(i + 1))}
             </div>
 
             {/* Chat Area */}
