@@ -72,12 +72,12 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  .theme-blue { @apply bg-blue-500/10; .dark & { @apply bg-blue-900/20; } }
-  .theme-green { @apply bg-green-500/10; .dark & { @apply bg-green-900/20; } }
-  .theme-red { @apply bg-red-500/10; .dark & { @apply bg-red-900/20; } }
-  .theme-purple { @apply bg-purple-500/10; .dark & { @apply bg-purple-900/20; } }
-  .theme-pink { @apply bg-pink-500/10; .dark & { @apply bg-pink-900/20; } }
-  .theme-yellow { @apply bg-yellow-500/10; .dark & { @apply bg-yellow-900/20; } }
+  .theme-blue { @apply bg-blue-500/20; .dark & { @apply bg-blue-900/40; } }
+  .theme-green { @apply bg-green-500/20; .dark & { @apply bg-green-900/40; } }
+  .theme-red { @apply bg-red-500/20; .dark & { @apply bg-red-900/40; } }
+  .theme-purple { @apply bg-purple-500/20; .dark & { @apply bg-purple-900/40; } }
+  .theme-pink { @apply bg-pink-500/20; .dark & { @apply bg-pink-900/40; } }
+  .theme-yellow { @apply bg-yellow-500/20; .dark & { @apply bg-yellow-900/40; } }
 }
 
 @layer utilities {

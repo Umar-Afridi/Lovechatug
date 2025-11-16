@@ -401,7 +401,7 @@ export default function RoomPage() {
 
   if (!room || !authUser || !currentUserSlot) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-900 text-white">
+      <div className="flex h-screen items-center justify-center bg-background">
         <p>Joining room...</p>
       </div>
     );
@@ -445,7 +445,7 @@ export default function RoomPage() {
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
                         ) : (
-                            isOwnerSlot ? <Mic className="text-muted-foreground h-8 w-8"/> : <Mic className="text-muted-foreground h-8 w-8"/>
+                           <Mic className="text-muted-foreground h-8 w-8"/>
                         )}
                         
                         {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
@@ -570,7 +570,7 @@ export default function RoomPage() {
                     className="font-bold cursor-pointer pr-2 inline-flex items-center gap-1.5"
                     onClick={() => handleViewProfile(msg.senderId)}
                   >
-                    <span>{applyNameColor(msg.senderName, senderProfile?.nameColor)}</span>
+                    <span>{applyNameColor(msg.senderName.split(' ')[0], senderProfile?.nameColor)}</span>
                     {senderProfile?.verifiedBadge?.showBadge && (
                         <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} className="h-4 w-4"/>
                     )}
@@ -628,7 +628,7 @@ export default function RoomPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className={cn("flex h-screen flex-col", themeClass)} style={themeStyle}>
+      <div className={cn("flex h-screen flex-col bg-background", themeClass)} style={themeStyle}>
         <header className="flex shrink-0 items-center justify-between gap-4 border-b p-3 bg-background shadow-sm">
           <div className="flex items-center gap-2 overflow-hidden">
             <Avatar className="h-10 w-10">
@@ -658,14 +658,14 @@ export default function RoomPage() {
                 {renderSlot(SUPER_ADMIN_SLOT)}
             </div>
             
-             <div className="w-full max-w-md md:max-w-lg lg:max-w-xl">
-                 <div className="grid grid-cols-4 gap-2 md:gap-4 justify-items-center">
+            <div className="w-full max-w-4xl">
+                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-4 justify-items-center">
                     {Array.from({ length: 8 }).map((_, i) => renderSlot(i + 1))}
                  </div>
             </div>
 
             {/* Chat Area */}
-            <div className="w-full flex-1 flex flex-col-reverse items-start gap-2 overflow-y-auto overflow-x-hidden p-2 rounded-lg bg-black/10">
+            <div className="w-full flex-1 flex flex-col-reverse items-start gap-2 overflow-y-auto overflow-x-hidden p-2 rounded-lg">
                 <AnimatePresence>
                     {messages.slice().reverse().map((msg, index) => renderMessage(msg, index))}
                 </AnimatePresence>
