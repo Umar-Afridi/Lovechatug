@@ -431,11 +431,6 @@ export default function RoomPage() {
                         
                         {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
 
-                         {isOwnerSlot && (
-                           <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-yellow-500">
-                             <Crown className="h-5 w-5 text-yellow-500"/>
-                           </div>
-                        )}
                          {profile?.officialBadge?.isOfficial && (
                              <div className={cn("absolute -top-1 -right-1")}>
                                 <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-6 w-6"/>
@@ -449,9 +444,7 @@ export default function RoomPage() {
                             <div className="text-sm font-medium truncate max-w-[80px]">
                                 {applyNameColor(profile.displayName, profile.nameColor)}
                             </div>
-                            {profile.verifiedBadge?.showBadge && (
-                                <VerifiedBadge color={profile.verifiedBadge.badgeColor} className="h-4 w-4" />
-                            )}
+                            <VerifiedBadge color={profile.verifiedBadge?.badgeColor} className="h-4 w-4"/>
                         </div>
                     ) : slotNumber === OWNER_SLOT ? (
                         <p className={cn("text-sm font-semibold")}>OWNER</p>
@@ -481,7 +474,7 @@ export default function RoomPage() {
                     {isOwner && (
                         <>
                              {/* On any empty slot */}
-                            {canUserTakeSeat && (
+                            {canAnyoneTakeSeat && (
                                 <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                                     <Mic className="mr-2 h-4 w-4"/> Take Seat
                                 </DropdownMenuItem>
@@ -562,9 +555,7 @@ export default function RoomPage() {
                     onClick={() => handleViewProfile(msg.senderId)}
                   >
                     <span>{applyNameColor(msg.senderName, senderProfile?.nameColor)}</span>
-                    {senderProfile?.verifiedBadge?.showBadge && (
-                        <VerifiedBadge color={senderProfile.verifiedBadge.badgeColor} className="h-4 w-4"/>
-                    )}
+                    <VerifiedBadge color={senderProfile?.verifiedBadge?.badgeColor} className="h-4 w-4"/>
                      {senderProfile?.officialBadge?.isOfficial && (
                         <OfficialBadge color={senderProfile.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>
                     )}
