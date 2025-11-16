@@ -121,6 +121,7 @@ export default function RoomPage() {
   const [isInviteSheetOpen, setInviteSheetOpen] = useState(false);
   const [viewedProfile, setViewedProfile] = useState<UserProfile | null>(null);
   const [joinTimestamp, setJoinTimestamp] = useState<Timestamp | null>(null);
+  const [status, setStatus] = useState<'joining' | 'joined' | 'leaving'>('joining');
 
 
   const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick' | null, targetMember?: RoomMember | null }>({ isOpen: false, action: null });
@@ -132,6 +133,7 @@ export default function RoomPage() {
  const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
     if (!firestore || !authUser || !currentUserSlot) return;
 
+    setStatus('leaving');
     contextLeaveRoom();
     
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
@@ -222,15 +224,14 @@ export default function RoomPage() {
       const roomDoc = await getDoc(roomRef);
       if (!roomDoc.exists()) {
           toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
-          router.push('/chat/rooms');
+          router.push('/chat');
           return;
       }
       const currentRoomData = roomDoc.data() as Room;
 
-      // Check if room is locked BEFORE trying to join
       if (currentRoomData.isLocked && currentRoomData.ownerId !== authUser.uid) {
           toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
-          router.push('/chat/rooms');
+          router.push('/chat');
           return;
       }
       
@@ -241,16 +242,14 @@ export default function RoomPage() {
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       const memberDoc = await getDoc(memberRef);
       
-      if (!memberDoc.exists()) {
-          // User is joining for the first time
-          let initialMicSlot: number | null = null;
-          // IMPORTANT: Check for owner first.
-          if (currentRoomData.ownerId === authUser.uid) {
-              initialMicSlot = OWNER_SLOT;
-          } else if (userProfile?.officialBadge?.isOfficial) {
-              initialMicSlot = SUPER_ADMIN_SLOT;
-          }
+      let initialMicSlot: number | null = null;
+      if (currentRoomData.ownerId === authUser.uid) {
+          initialMicSlot = OWNER_SLOT;
+      } else if (userProfile?.officialBadge?.isOfficial) {
+          initialMicSlot = SUPER_ADMIN_SLOT;
+      }
 
+      if (!memberDoc.exists()) {
           const batch = writeBatch(firestore);
           const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
           batch.set(memberRef, memberData);
@@ -271,16 +270,14 @@ export default function RoomPage() {
           
           await batch.commit();
       } else {
-          // User is re-joining or already a member, just ensure their special slot is correct
           const currentMemberData = memberDoc.data() as RoomMember;
-          // IMPORTANT: Check for owner first.
           if (currentRoomData.ownerId === authUser.uid && currentMemberData.micSlot !== OWNER_SLOT) {
               await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
           } else if (userProfile?.officialBadge?.isOfficial && currentRoomData.ownerId !== authUser.uid && currentMemberData.micSlot !== SUPER_ADMIN_SLOT) {
-             // Only set super admin if they are NOT the owner
               await updateDoc(memberRef, { micSlot: SUPER_ADMIN_SLOT, isMuted: true });
           }
       }
+      setStatus('joined');
     };
     
     joinRoom();
@@ -290,7 +287,7 @@ export default function RoomPage() {
       unsubMembers();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, roomId, authUser?.uid, router, toast, setCurrentRoom]);
+  }, [firestore, roomId, authUser?.uid, router, toast]);
 
   useEffect(() => {
     if (!firestore || !roomId || !joinTimestamp) return;
@@ -410,10 +407,10 @@ export default function RoomPage() {
       await updateDoc(memberRef, { micSlot: null });
   }
 
-  if (!room || !authUser || !currentUserSlot) {
+  if (status !== 'joined' || !room || !authUser || !currentUserSlot) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
-        <p>Joining room...</p>
+        <p>{status === 'leaving' ? 'Leaving room...' : 'Joining room...'}</p>
       </div>
     );
   }
@@ -429,7 +426,7 @@ export default function RoomPage() {
         const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
 
         const canTakeSeat = !memberInSlot && !isLocked;
-        const canUserTakeSeat = canTakeSeat;
+        const canUserTakeSeat = canTakeSeat && !isOwner;
 
 
         const content = (
@@ -455,6 +452,8 @@ export default function RoomPage() {
                             </>
                         ) : isOwnerSlot ? (
                             <Mic className="text-muted-foreground h-8 w-8"/>
+                        ) : isSuperAdminSlot ? (
+                            <Shield className="text-muted-foreground h-8 w-8"/>
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
                         ) : (
@@ -730,5 +729,3 @@ export default function RoomPage() {
     </>
   );
 }
-
-    
