@@ -422,31 +422,34 @@ export default function RoomPage() {
 
 
         const content = (
-             <div className="relative flex flex-col items-center justify-center space-y-1 w-24">
-                <div className="relative h-20 w-20">
-                    <div className={cn("relative h-full w-full rounded-full bg-muted flex items-center justify-center transition-all duration-200", 
+             <div className="relative flex flex-col items-center justify-center space-y-1 w-20 md:w-24">
+                <div className="relative h-20 w-20 md:h-24 md:w-24">
+                    <div className={cn("relative h-full w-full rounded-full flex items-center justify-center transition-all duration-200", 
                                       memberInSlot ? `ring-2 ring-offset-2 ring-offset-background ${room.theme ? `ring-[var(--theme-color)]` : 'ring-primary'}` : "border-2 border-dashed border-muted-foreground/50",
                                       memberInSlot && memberInSlot.isMuted && "ring-destructive",
-                                      isSelf && !isMuted && "talking-indicator"
+                                      isSelf && !isMuted && "talking-indicator",
+                                      isLocked ? 'bg-muted/50' : 'bg-muted'
                                       )}>
                         {profile ? (
-                            <Avatar className="h-full w-full">
-                                <AvatarImage src={profile.photoURL} />
-                                <AvatarFallback className="text-2xl">{getInitials(profile.displayName)}</AvatarFallback>
-                            </Avatar>
+                            <>
+                                <Avatar className="h-full w-full">
+                                    <AvatarImage src={profile.photoURL} />
+                                    <AvatarFallback className="text-2xl">{getInitials(profile.displayName)}</AvatarFallback>
+                                </Avatar>
+                                {profile.officialBadge?.isOfficial && (
+                                    <div className="absolute -top-1 -right-1">
+                                        <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-6 w-6"/>
+                                    </div>
+                                )}
+                            </>
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
                         ) : (
-                             <Mic className={cn("text-muted-foreground h-8 w-8", isOwnerSlot && "text-muted-foreground")}/>
+                            isOwnerSlot ? <Mic className="text-muted-foreground h-8 w-8"/> : <Mic className="text-muted-foreground h-8 w-8"/>
                         )}
                         
                         {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
 
-                        {profile?.officialBadge?.isOfficial && (
-                             <div className="absolute -top-1 -right-1">
-                                <OfficialBadge color={profile.officialBadge.badgeColor} size="icon" className="h-6 w-6"/>
-                            </div>
-                        )}
                     </div>
                 </div>
                  <div className="h-5 flex items-center justify-center text-center">
@@ -649,17 +652,16 @@ export default function RoomPage() {
           </div>
         </header>
         
-        <main className="flex-1 flex flex-col items-center overflow-hidden p-4 md:p-6 space-y-6">
-             <div className="flex justify-center gap-x-4 md:gap-x-8">
+        <main className="flex-1 flex flex-col items-center overflow-hidden p-4 md:p-6 space-y-4">
+             <div className="flex justify-center gap-x-2 md:gap-x-8">
                 {renderSlot(OWNER_SLOT)}
                 {renderSlot(SUPER_ADMIN_SLOT)}
             </div>
             
-             <div className="flex justify-center flex-wrap gap-x-4 md:gap-x-8 gap-y-6">
-                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 1))}
-            </div>
-             <div className="flex justify-center flex-wrap gap-x-4 md:gap-x-8 gap-y-6">
-                {Array.from({ length: 4 }).map((_, i) => renderSlot(i + 5))}
+             <div className="w-full max-w-md md:max-w-lg lg:max-w-xl">
+                 <div className="grid grid-cols-4 gap-2 md:gap-4 justify-items-center">
+                    {Array.from({ length: 8 }).map((_, i) => renderSlot(i + 1))}
+                 </div>
             </div>
 
             {/* Chat Area */}
