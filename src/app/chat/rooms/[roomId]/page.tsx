@@ -78,6 +78,25 @@ const MIC_SLOTS = 8;
 const SUPER_ADMIN_SLOT = -1;
 const OWNER_SLOT = 0;
 
+function applyNameColor(name: string, color?: UserProfile['nameColor']) {
+    if (!color || color === 'default') {
+        return name;
+    }
+    if (color === 'gradient') {
+        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
+    }
+    
+    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
+        green: 'text-green-500',
+        yellow: 'text-yellow-500',
+        pink: 'text-pink-500',
+        purple: 'text-purple-500',
+        red: 'text-red-500',
+    };
+
+    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
+}
+
 export default function RoomPage() {
   const params = useParams();
   const roomId = params.roomId as string;
@@ -386,13 +405,13 @@ export default function RoomPage() {
         const isSelf = memberInSlot?.userId === authUser.uid;
         
         const handleTakeSeat = async () => {
-            if (!currentUserSlot) return;
+            if (!currentUserSlot || currentUserSlot.micSlot !== null) return;
             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
             await updateDoc(memberRef, { micSlot: slotNumber });
         };
         
         const handleLeaveSeat = async () => {
-            if (!currentUserSlot) return;
+            if (!currentUserSlot || !isSelf) return;
             const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
             await updateDoc(memberRef, { micSlot: null });
         }
@@ -416,6 +435,11 @@ export default function RoomPage() {
                     )}
                     
                     {memberInSlot && memberInSlot.isMuted && <div className="absolute bottom-0 right-0 bg-destructive rounded-full p-1"><MicOff className="h-3 w-3 text-white"/></div>}
+                     {profile?.verifiedBadge?.showBadge && (
+                        <div className="absolute bottom-0 left-0">
+                            <VerifiedBadge color={profile.verifiedBadge.badgeColor} className="h-5 w-5"/>
+                        </div>
+                    )}
                      {slotNumber === OWNER_SLOT && (
                        <div className="absolute -top-2 -right-2 h-8 w-8 bg-background rounded-full p-1 border-2 flex items-center justify-center border-yellow-500">
                          <Crown className="h-5 w-5 text-yellow-500"/>
@@ -427,14 +451,11 @@ export default function RoomPage() {
                          </div>
                     )}
                 </div>
-                 <div className="h-5 flex items-center justify-center">
+                 <div className="h-5 flex items-center justify-center text-center">
                     {profile ? (
-                         <p className={cn(
-                            "text-sm font-medium truncate max-w-[80px] text-center", 
-                            profile.colorfulName && "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate"
-                         )}>
-                           {profile.displayName}
-                         </p>
+                         <div className="text-sm font-medium truncate max-w-[80px]">
+                           {applyNameColor(profile.displayName, profile.nameColor)}
+                         </div>
                     ) : slotNumber === OWNER_SLOT ? (
                         <p className={cn("text-sm font-semibold")}>OWNER</p>
                     ) : slotNumber === SUPER_ADMIN_SLOT ? (
@@ -481,7 +502,7 @@ export default function RoomPage() {
                                 {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                                 {isLocked ? 'Unlock Mic' : 'Lock Mic'}
                             </DropdownMenuItem>
-                             {!isLocked && (
+                             {!isLocked && currentUserSlot?.micSlot === null && (
                                 <DropdownMenuItem onClick={handleTakeSeat}>
                                     <Mic className="mr-2 h-4 w-4"/> Take Seat
                                 </DropdownMenuItem>
