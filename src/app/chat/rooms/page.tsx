@@ -55,7 +55,6 @@ export default function RoomsPage() {
     const roomsRef = collection(firestore, 'rooms');
     const q = query(
       roomsRef, 
-      where('memberCount', '>', 0), // Only show rooms with members
       orderBy('memberCount', 'desc'), 
       orderBy('createdAt', 'desc')
     );
