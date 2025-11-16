@@ -32,6 +32,7 @@ export default function RoomsPage() {
 
     const unsubMyRooms = onSnapshot(q, (snapshot) => {
       let userRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+      // Logic to only show the single most relevant room for the user (e.g., official or latest)
       if (userRooms.length > 1) {
           const officialRoom = userRooms.find(r => r.ownerIsOfficial);
           if (officialRoom) {
@@ -54,7 +55,8 @@ export default function RoomsPage() {
     setLoading(true);
     const roomsRef = collection(firestore, 'rooms');
     const q = query(
-      roomsRef, 
+      roomsRef,
+      where('memberCount', '>', 0), // Only show rooms with at least one person
       orderBy('memberCount', 'desc'), 
       orderBy('createdAt', 'desc')
     );
@@ -62,6 +64,7 @@ export default function RoomsPage() {
     const unsubPublicRooms = onSnapshot(q, (snapshot) => {
       const allRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
       const myRoomIds = myRooms.map(room => room.id);
+      // Filter out user's own room from the public list to avoid duplication
       const filteredPublicRooms = allRooms.filter(room => !myRoomIds.includes(room.id));
       
       setPublicRooms(filteredPublicRooms);
@@ -79,42 +82,41 @@ export default function RoomsPage() {
   const filteredRooms = publicRooms.filter(room => 
       room.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const renderRoomList = (title: string, rooms: Room[], icon?: React.ReactNode, emptyMessage?: string) => (
+  
+    const renderRoomList = (title: string, rooms: Room[], icon?: React.ReactNode, emptyMessage?: string) => (
     <div className="space-y-3">
         <h2 className="text-xl font-bold flex items-center gap-2 px-4">{icon}{title}</h2>
         {rooms.length === 0 ? (
             <p className="text-muted-foreground px-4 text-sm">{emptyMessage || "No rooms found."}</p>
         ) : (
-            <div className="relative">
-                <div className="flex space-x-4 overflow-x-auto p-4 scrollbar-hide">
-                    {rooms.map(room => (
-                         <Link key={room.id} href={`/chat/rooms/${room.id}`} className="block flex-shrink-0 w-40">
-                             <div className="space-y-2 group">
-                                 <div className="relative">
-                                     <Avatar className="w-40 h-40 rounded-xl shadow-md group-hover:ring-2 group-hover:ring-primary transition-all">
-                                         <AvatarImage src={room.photoURL} />
-                                         <AvatarFallback className="text-3xl rounded-xl">{getInitials(room.name)}</AvatarFallback>
-                                     </Avatar>
-                                     <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs font-bold p-1 rounded-md flex items-center gap-1">
-                                         <Users className="h-3 w-3" />
-                                         <span>{room.memberCount || 0}</span>
-                                     </div>
-                                     {room.ownerIsOfficial && (
-                                         <div className="absolute top-2 left-2">
-                                            <OfficialBadge color="gold" size="icon" className="h-6 w-6"/>
-                                         </div>
-                                     )}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 px-4">
+                {rooms.map(room => (
+                     <Link key={room.id} href={`/chat/rooms/${room.id}`} className="block">
+                         <div className="space-y-2 group">
+                             <div className="relative">
+                                 <Avatar className="w-full h-auto aspect-square rounded-xl shadow-md group-hover:ring-2 group-hover:ring-primary transition-all">
+                                     <AvatarImage src={room.photoURL} />
+                                     <AvatarFallback className="text-3xl rounded-xl">{getInitials(room.name)}</AvatarFallback>
+                                 </Avatar>
+                                 <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs font-bold p-1 rounded-md flex items-center gap-1">
+                                     <Users className="h-3 w-3" />
+                                     <span>{room.memberCount || 0}</span>
                                  </div>
-                                 <p className="font-semibold truncate text-center">{room.name}</p>
+                                 {room.ownerIsOfficial && (
+                                     <div className="absolute top-2 left-2">
+                                        <OfficialBadge color="gold" size="icon" className="h-6 w-6"/>
+                                     </div>
+                                 )}
                              </div>
-                        </Link>
-                    ))}
-                </div>
+                             <p className="font-semibold truncate text-center">{room.name}</p>
+                         </div>
+                    </Link>
+                ))}
             </div>
         )}
     </div>
   );
+
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -145,11 +147,11 @@ export default function RoomsPage() {
         {loading ? (
              <div className="p-4 space-y-4">
                  <div className="h-8 w-1/3 bg-muted rounded-md animate-pulse"></div>
-                 <div className="flex space-x-4">
-                     {[...Array(3)].map((_, i) => (
+                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                     {[...Array(4)].map((_, i) => (
                         <div key={i} className="space-y-2">
-                           <div className="w-40 h-40 bg-muted rounded-xl animate-pulse"></div>
-                           <div className="h-5 w-32 bg-muted rounded-md animate-pulse mx-auto"></div>
+                           <div className="w-full aspect-square bg-muted rounded-xl animate-pulse"></div>
+                           <div className="h-5 w-3/4 bg-muted rounded-md animate-pulse mx-auto"></div>
                         </div>
                      ))}
                  </div>
@@ -166,7 +168,3 @@ export default function RoomsPage() {
     </div>
   );
 }
-
-const style = document.createElement('style');
-style.innerHTML = `.scrollbar-hide::-webkit-scrollbar { display: none; } .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }`;
-document.head.appendChild(style);
