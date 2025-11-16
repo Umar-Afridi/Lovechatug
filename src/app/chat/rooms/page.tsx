@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where, getDoc, doc } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,11 +13,13 @@ import { Plus, Users, Search as SearchIcon, Star, Tv } from 'lucide-react';
 import type { Room } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { OfficialBadge } from '@/components/ui/official-badge';
+import { useToast } from '@/hooks/use-toast';
 
 export default function RoomsPage() {
   const { user } = useUser();
   const firestore = useFirestore();
   const router = useRouter();
+  const { toast } = useToast();
 
   const [publicRooms, setPublicRooms] = useState<Room[]>([]);
   const [myRooms, setMyRooms] = useState<Room[]>([]);
@@ -57,7 +59,7 @@ export default function RoomsPage() {
     const q = query(
       roomsRef,
       where('isLocked', '!=', true), // Exclude locked rooms from popular list
-      orderBy('isLocked', 'asc'), // This is needed for the inequality filter
+      orderBy('isLocked', 'asc'), 
       orderBy('memberCount', 'desc'),
       orderBy('createdAt', 'desc')
     );
@@ -84,6 +86,30 @@ export default function RoomsPage() {
       room.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
   
+  const handleJoinRoom = async (roomId: string) => {
+    if (!firestore) return;
+    const roomRef = doc(firestore, 'rooms', roomId);
+    try {
+      const roomSnap = await getDoc(roomRef);
+      if (roomSnap.exists()) {
+        const roomData = roomSnap.data() as Room;
+        if (roomData.isLocked && roomData.ownerId !== user?.uid) {
+          toast({
+            title: "Room is Locked",
+            description: "This room is currently locked by the owner.",
+            variant: "destructive"
+          });
+        } else {
+          router.push(`/chat/rooms/${roomId}`);
+        }
+      } else {
+         toast({ title: "Room not found", variant: "destructive" });
+      }
+    } catch (error) {
+       toast({ title: "Error", description: "Could not check room status.", variant: "destructive" });
+    }
+  };
+
     const renderRoomList = (title: string, rooms: Room[], icon?: React.ReactNode, emptyMessage?: string) => (
     <div className="space-y-3">
         <h2 className="text-xl font-bold flex items-center gap-2 px-4">{icon}{title}</h2>
@@ -92,7 +118,7 @@ export default function RoomsPage() {
         ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 px-4">
                 {rooms.map(room => (
-                     <Link key={room.id} href={`/chat/rooms/${room.id}`} className="block">
+                     <div key={room.id} onClick={() => handleJoinRoom(room.id)} className="block cursor-pointer">
                          <div className="space-y-2 group">
                              <div className="relative">
                                  <Avatar className="w-full h-auto aspect-square rounded-xl shadow-md group-hover:ring-2 group-hover:ring-primary transition-all">
@@ -111,7 +137,7 @@ export default function RoomsPage() {
                              </div>
                              <p className="font-semibold truncate text-center">{room.name}</p>
                          </div>
-                    </Link>
+                    </div>
                 ))}
             </div>
         )}
