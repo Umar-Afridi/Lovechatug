@@ -94,7 +94,7 @@ export default function ManageColorfulNamePage() {
 
   // Fetch all users
   useEffect(() => {
-    if (!currentUserProfile?.officialBadge?.isOfficial || !firestore) return;
+    if (!currentUserProfile?.officialBadge?.isOfficial || !firestore || !authUser) return;
 
     const usersRef = collection(firestore, 'users');
     const q = query(usersRef);
@@ -102,7 +102,8 @@ export default function ManageColorfulNamePage() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const usersList = snapshot.docs
         .map((d) => d.data() as UserProfile)
-        .filter(u => !u.officialBadge?.isOfficial);
+        // Exclude other official users, but keep self in the list
+        .filter(u => u.uid === authUser.uid || !u.officialBadge?.isOfficial);
       setAllUsers(usersList);
       setLoading(false);
     }, (error) => {
@@ -111,7 +112,7 @@ export default function ManageColorfulNamePage() {
     });
 
     return () => unsubscribe();
-  }, [currentUserProfile?.officialBadge?.isOfficial, firestore]);
+  }, [currentUserProfile?.officialBadge?.isOfficial, firestore, authUser]);
 
   const filteredUsers = useMemo(() => {
     if (!searchQuery) return []; // Don't show any users if search is empty

@@ -90,7 +90,7 @@ export default function ManageUsersPage() {
 
   // 2. Fetch all users, excluding other official users
   useEffect(() => {
-    if (!currentUserProfile?.officialBadge?.isOfficial || !firestore) return;
+    if (!currentUserProfile?.officialBadge?.isOfficial || !firestore || !authUser) return;
 
     const usersRef = collection(firestore, 'users');
     const q = query(usersRef);
@@ -98,8 +98,8 @@ export default function ManageUsersPage() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const usersList = snapshot.docs
         .map((d) => d.data() as UserProfile)
-        // Exclude self and all other official users from the management list
-        .filter(u => !u.officialBadge?.isOfficial); 
+        // Exclude other official users, but keep self in the list
+        .filter(u => u.uid === authUser.uid || !u.officialBadge?.isOfficial); 
       setAllUsers(usersList);
       setLoading(false);
     }, (error) => {
@@ -108,7 +108,7 @@ export default function ManageUsersPage() {
     });
 
     return () => unsubscribe();
-  }, [currentUserProfile?.officialBadge?.isOfficial, firestore, authUser?.uid]);
+  }, [currentUserProfile?.officialBadge?.isOfficial, firestore, authUser]);
 
   const filteredUsers = useMemo(() => {
     if (!searchQuery) return []; // Don't show any users if search is empty
