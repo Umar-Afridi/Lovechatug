@@ -125,11 +125,13 @@ export default function ManageColorfulNamePage() {
   }, [searchQuery, allUsers]);
 
   const sendNotification = async (targetUser: UserProfile, color: NameColor) => {
-    if (!firestore) return;
+    if (!firestore || !currentUserProfile) return;
+    const adminName = currentUserProfile.displayName;
+
     const notification = {
         userId: targetUser.uid,
         title: 'Colorful Name Granted!',
-        message: `Congratulations! You have been granted the '${color}' name color.`,
+        message: `Congratulations! You have been granted the '${color}' name color by ${adminName}.`,
         type: 'colorful_name_granted' as const,
         isRead: false,
         createdAt: serverTimestamp(),

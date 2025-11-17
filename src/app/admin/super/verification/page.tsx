@@ -109,14 +109,15 @@ export default function ManageVerificationPage() {
   }, [searchQuery, allUsers]);
 
   const sendNotification = async (targetUser: UserProfile, status: 'approved' | 'rejected') => {
-    if (!firestore) return;
+    if (!firestore || !currentUserProfile) return;
+    const adminName = currentUserProfile.displayName;
 
     const notification = {
         userId: targetUser.uid,
         title: status === 'approved' ? 'Profile Verified!' : 'Verification Update',
         message: status === 'approved' 
-            ? 'Congratulations! Your profile has been verified by the Love Chat team.'
-            : 'Your verification request was not approved at this time. Please ensure your profile information is complete and try again later.',
+            ? `Congratulations! ${adminName} has verified your profile.`
+            : `Your verification request was not approved by ${adminName} at this time. Please ensure your profile information is complete and try again later.`,
         type: status === 'approved' ? 'verification_approved' as const : 'verification_rejected' as const,
         isRead: false,
         createdAt: serverTimestamp(),
