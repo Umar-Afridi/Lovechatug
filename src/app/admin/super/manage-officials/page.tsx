@@ -11,8 +11,6 @@ import {
   onSnapshot,
   doc,
   updateDoc,
-  addDoc,
-  serverTimestamp,
 } from 'firebase/firestore';
 import {
   Shield,
@@ -27,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile, Notification } from '@/lib/types';
+import type { UserProfile } from '@/lib/types';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,10 +43,6 @@ import { OfficialBadge } from '@/components/ui/official-badge';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 
 const BadgeColors: Array<NonNullable<UserProfile['officialBadge']>['badgeColor']> = ['blue', 'gold', 'green', 'red', 'pink'];
-const SYSTEM_SENDER_ID = 'system_lovechat';
-const SYSTEM_SENDER_NAME = 'Love Chat';
-const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/system-avatars%2FUG_LOGO.png?alt=media&token=1c2a7153-6623-4522-8616-200903333346';
-
 
 function applyNameColor(name: string, color?: UserProfile['nameColor']) {
     if (!color || color === 'default') {
@@ -130,43 +124,9 @@ export default function ManageOfficialsPage() {
     );
   }, [searchQuery, allUsers]);
 
-  const sendNotification = async (targetUser: UserProfile, type: 'granted' | 'removed') => {
-    if (!firestore || !currentUserProfile) return;
-
-    let message = '';
-    let notifType: Notification['type'];
-
-    if (type === 'granted') {
-      message = "Congratulations! You have been promoted to an Official user. Please use your new status to help and guide the community.";
-      notifType = 'official_badge_granted';
-    } else {
-      message = "Your Official user status has been revoked as it was not used in the intended way. We are sorry for this action.";
-      notifType = 'official_badge_removed';
-    }
-
-    const notification: any = {
-        userId: targetUser.uid,
-        title: SYSTEM_SENDER_NAME,
-        message,
-        type: notifType,
-        isRead: false,
-        createdAt: serverTimestamp(),
-        senderId: SYSTEM_SENDER_ID,
-        senderName: SYSTEM_SENDER_NAME,
-        senderPhotoURL: SYSTEM_SENDER_PHOTO_URL,
-    };
-
-    try {
-        await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
-    } catch(e) {
-        console.error("Failed to send notification: ", e);
-    }
-  };
-
   const handleUpdateOfficialStatus = async (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => {
     if (!firestore) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
-    const wasPreviouslyOfficial = targetUser.officialBadge?.isOfficial === true;
     
     let updatePayload: any = {
       'officialBadge.isOfficial': isOfficial,
@@ -179,13 +139,6 @@ export default function ManageOfficialsPage() {
     try {
       await updateDoc(userRef, updatePayload);
       
-      // Send notification based on the change
-      if (isOfficial && !wasPreviouslyOfficial) {
-        await sendNotification(targetUser, 'granted');
-      } else if (!isOfficial && wasPreviouslyOfficial) {
-        await sendNotification(targetUser, 'removed');
-      }
-
       toast({
         title: 'Official Status Updated',
         description: `${targetUser.displayName} is ${isOfficial ? 'now an official user' : 'no longer an official user'}.`,
