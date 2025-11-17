@@ -182,6 +182,10 @@ export default function RoomPage() {
   useEffect(() => {
     if (!firestore || !roomId || !authUser) return;
 
+    // Immediately update UI to 'joined' to provide a faster user experience
+    setStatus('joined');
+    setJoinTimestamp(Timestamp.now());
+
     const joinRoomBackend = async () => {
         const roomRef = doc(firestore, 'rooms', roomId);
         const userRef = doc(firestore, 'users', authUser.uid);
@@ -235,7 +239,6 @@ export default function RoomPage() {
                 const messageDocRef = doc(collection(firestore, 'rooms', roomId, 'messages'));
                 batch.set(messageDocRef, notificationMessage);
             } else {
-                // If user is already a member, ensure their slot is correct
                 const currentMemberData = memberSnap.data() as RoomMember;
                 if (currentMemberData.micSlot !== memberData.micSlot) {
                     batch.update(memberRef, { micSlot: memberData.micSlot });
@@ -244,9 +247,6 @@ export default function RoomPage() {
 
             batch.update(userRef, { currentRoomId: roomId });
             await batch.commit();
-
-            setStatus('joined');
-            setJoinTimestamp(Timestamp.now());
 
         } catch (e) {
             console.error("Error joining room backend", e);
