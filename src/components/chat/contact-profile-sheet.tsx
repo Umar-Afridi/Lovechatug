@@ -79,32 +79,36 @@ export function ContactProfileSheet({
 
   // Determine friendship status
   useEffect(() => {
-    if (!currentUserProfile || !userProfile || !authUser) return;
+    if (!currentUserProfile || !userProfile || !authUser || !firestore) return;
 
     if (currentUserProfile.uid === userProfile.uid) {
         setFriendshipStatus('self');
-    } else if (currentUserProfile.friends?.includes(userProfile.uid)) {
-        setFriendshipStatus('friends');
-    } else {
-        // Check if a request has been sent
-        const checkRequest = async () => {
-            const requestsRef = collection(firestore, 'friendRequests');
-            const q = query(
-                requestsRef, 
-                where('senderId', '==', authUser.uid),
-                where('receiverId', '==', userProfile.uid)
-            );
-            const querySnapshot = await getDocs(q);
-            if (!querySnapshot.empty) {
-                setFriendshipStatus('request_sent');
-                setSentRequest({id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data()} as FriendRequest);
-            } else {
-                setFriendshipStatus('not_friends');
-                setSentRequest(null);
-            }
-        };
-        checkRequest();
+        return;
     }
+    if (currentUserProfile.friends?.includes(userProfile.uid)) {
+        setFriendshipStatus('friends');
+        return;
+    }
+
+    // Check if a request has been sent
+    const requestsRef = collection(firestore, 'friendRequests');
+    const q = query(
+        requestsRef, 
+        where('senderId', '==', authUser.uid),
+        where('receiverId', '==', userProfile.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        if (!querySnapshot.empty) {
+            setFriendshipStatus('request_sent');
+            setSentRequest({id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data()} as FriendRequest);
+        } else {
+            setFriendshipStatus('not_friends');
+            setSentRequest(null);
+        }
+    });
+
+    return () => unsubscribe();
   }, [currentUserProfile, userProfile, authUser, firestore]);
 
   const handleSendRequest = async () => {

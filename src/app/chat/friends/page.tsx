@@ -52,22 +52,19 @@ export default function FriendsPage() {
       .join('');
   };
   
-  const requestsQuery = useMemo(() => {
-    if (!user || !firestore) return null;
-    return query(
-        collection(firestore, 'friendRequests'), 
-        where('receiverId', '==', user.uid), 
-        where('status', '==', 'pending')
-    );
-  }, [user, firestore]);
-  
   useEffect(() => {
-    if (!requestsQuery || !firestore) {
+    if (!user || !firestore) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
+
+    const requestsQuery = query(
+        collection(firestore, 'friendRequests'), 
+        where('receiverId', '==', user.uid), 
+        where('status', '==', 'pending')
+    );
 
     const unsubscribe = onSnapshot(requestsQuery, async (querySnapshot) => {
         if (querySnapshot.empty) {
@@ -111,7 +108,7 @@ export default function FriendsPage() {
 
     return () => unsubscribe();
 
-  }, [requestsQuery, firestore]);
+  }, [user, firestore]);
 
   const handleAccept = async (request: FriendRequestWithUser) => {
     if (!firestore || !user || !request.fromUser) return;
