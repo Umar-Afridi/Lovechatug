@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { OfficialBadge } from '@/components/ui/official-badge';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 
@@ -271,6 +272,7 @@ export default function ManageVerificationPage() {
                                 <div className="flex items-center gap-2">
                                     <p className="font-semibold truncate">{applyNameColor(user.displayName, user.nameColor)}</p>
                                     {user.verifiedBadge?.showBadge && <VerifiedBadge color={user.verifiedBadge.badgeColor}/>}
+                                    {user.officialBadge?.isOfficial && <OfficialBadge color={user.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>}
                                 </div>
                                 <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
                             </div>
