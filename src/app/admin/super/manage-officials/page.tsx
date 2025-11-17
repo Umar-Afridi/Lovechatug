@@ -130,16 +130,16 @@ export default function ManageOfficialsPage() {
   }, [searchQuery, allUsers]);
 
   const sendNotification = async (targetUser: UserProfile, type: 'granted' | 'removed') => {
-    if (!firestore) return;
+    if (!firestore || !currentUserProfile) return;
 
     let message = '';
     let notifType: Notification['type'];
 
     if (type === 'granted') {
-      message = "Congratulations! You have been promoted to an Official user. Please use your new status to help and guide the community.";
+      message = `Congratulations! You have been promoted to an Official user by ${currentUserProfile.displayName}. Please use your new status to help and guide the community.`;
       notifType = 'official_badge_granted';
     } else {
-      message = "Your Official user status has been revoked because it was not used in the intended way. We are sorry for this action.";
+      message = `Your Official user status has been revoked by ${currentUserProfile.displayName} because it was not used in the intended way. We are sorry for this action.`;
       notifType = 'official_badge_removed';
     }
 
