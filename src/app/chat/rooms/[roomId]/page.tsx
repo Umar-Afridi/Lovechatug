@@ -175,129 +175,129 @@ export default function RoomPage() {
 
   useEffect(() => {
     if (!firestore || !roomId || !authUser) return;
-    
-    setJoinTimestamp(Timestamp.now());
 
-    const joinRoomAndListen = async () => {
+    const joinRoomBackend = async () => {
         const roomRef = doc(firestore, 'rooms', roomId);
-        
-        const initialRoomSnap = await getDoc(roomRef);
-        if (!initialRoomSnap.exists()) {
-            toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
-            router.push('/chat/rooms');
-            return;
-        }
-        const initialRoomData = initialRoomSnap.data() as Room;
-
-        if (initialRoomData.isLocked && initialRoomData.ownerId !== authUser.uid) {
-            toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
-            router.push('/chat/rooms');
-            return;
-        }
-
-        const userProfileDoc = await getDoc(doc(firestore, 'users', authUser.uid));
-        if (!userProfileDoc.exists()) return;
-        const userProfile = userProfileDoc.data() as UserProfile;
-
-        // Determine initial mic slot
-        let initialMicSlot: number | null = null;
-        if (initialRoomData.ownerId === authUser.uid) {
-            initialMicSlot = OWNER_SLOT;
-        } else if (userProfile?.officialBadge?.isOfficial) {
-            initialMicSlot = SUPER_ADMIN_SLOT;
-        }
-
-        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
         const userRef = doc(firestore, 'users', authUser.uid);
-        const memberDoc = await getDoc(memberRef);
+        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
 
-        const batch = writeBatch(firestore);
-        if (!memberDoc.exists()) {
-            batch.set(memberRef, { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true });
-            if (initialMicSlot !== OWNER_SLOT && initialMicSlot !== SUPER_ADMIN_SLOT) {
-                batch.update(roomRef, { memberCount: increment(1) });
-            }
-            batch.update(userRef, { currentRoomId: roomId });
-            
-             const notificationMessage = {
-                senderId: 'system',
-                senderName: 'System',
-                content: `${userProfile.displayName} joined the room.`,
-                timestamp: serverTimestamp(),
-                type: 'notification' as const,
-            };
-            const messageDocRef = doc(collection(firestore, 'rooms', roomId, 'messages'));
-            batch.set(messageDocRef, notificationMessage);
-        } else {
-             const currentMemberData = memberDoc.data() as RoomMember;
-             if (currentMemberData.micSlot !== initialMicSlot) {
-                 batch.update(memberRef, { micSlot: initialMicSlot, isMuted: true });
-             }
-        }
-        await batch.commit();
-        
-        setStatus('joined');
+        try {
+            const [roomSnap, userSnap, memberSnap] = await Promise.all([
+                getDoc(roomRef),
+                getDoc(userRef),
+                getDoc(memberRef)
+            ]);
 
-        const unsubRoom = onSnapshot(roomRef, (docSnap) => {
-          if (docSnap.exists()) {
-            const roomData = { id: docSnap.id, ...docSnap.data() } as Room;
-            setRoom(roomData);
-            setCurrentRoom(roomData);
-            if (roomData.isLocked && roomData.ownerId !== authUser.uid) {
-              toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
-              handleLeaveRoom();
-              return;
-            }
-            if (roomData.kickedUsers && roomData.kickedUsers[authUser.uid]) {
-                toast({ title: "You've been kicked", description: "You have been removed from this room by the owner.", variant: 'destructive'});
-                handleLeaveRoom();
+            if (!roomSnap.exists()) {
+                toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
+                router.push('/chat/rooms');
                 return;
             }
-          } else {
-            toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
-            contextLeaveRoom();
-            router.push('/chat/rooms');
-          }
-        }, (error) => {
-          console.error("Error fetching room:", error);
-          contextLeaveRoom();
-          router.push('/chat/rooms');
-        });
+            const roomData = roomSnap.data() as Room;
 
-        const membersRef = collection(firestore, 'rooms', roomId, 'members');
-        const qMembers = query(membersRef);
-        const unsubMembers = onSnapshot(qMembers, async (snapshot) => {
-            const membersList = snapshot.docs.map(d => d.data() as RoomMember);
-            setMembers(membersList);
-
-            const newMemberIds = membersList.map(m => m.userId).filter(id => !memberProfiles[id]);
-            if (newMemberIds.length > 0) {
-                const profilesRef = collection(firestore, 'users');
-                const chunks = [];
-                for (let i = 0; i < newMemberIds.length; i += 30) {
-                    chunks.push(newMemberIds.slice(i, i + 30));
-                }
-
-                const newProfiles: Record<string, UserProfile> = {};
-                for (const chunk of chunks) {
-                    const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
-                    const profilesSnapshot = await getDocs(profilesQuery);
-                    profilesSnapshot.forEach(doc => {
-                        newProfiles[doc.id] = doc.data() as UserProfile;
-                    });
-                }
-                setMemberProfiles(prev => ({...prev, ...newProfiles}));
+            if (roomData.isLocked && roomData.ownerId !== authUser.uid) {
+                toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
+                router.push('/chat/rooms');
+                return;
             }
-        });
-        
-        return () => {
-          unsubRoom();
-          unsubMembers();
-        };
+
+            const userProfile = userSnap.data() as UserProfile;
+            let initialMicSlot: number | null = null;
+            if (roomData.ownerId === authUser.uid) {
+                initialMicSlot = OWNER_SLOT;
+            } else if (userProfile?.officialBadge?.isOfficial) {
+                initialMicSlot = SUPER_ADMIN_SLOT;
+            }
+
+            const batch = writeBatch(firestore);
+            if (!memberSnap.exists()) {
+                batch.set(memberRef, { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true });
+                if (initialMicSlot !== OWNER_SLOT && initialMicSlot !== SUPER_ADMIN_SLOT) {
+                    batch.update(roomRef, { memberCount: increment(1) });
+                }
+                const notificationMessage = {
+                    senderId: 'system',
+                    senderName: 'System',
+                    content: `${userProfile.displayName} joined the room.`,
+                    timestamp: serverTimestamp(),
+                    type: 'notification' as const,
+                };
+                const messageDocRef = doc(collection(firestore, 'rooms', roomId, 'messages'));
+                batch.set(messageDocRef, notificationMessage);
+            } else {
+                 const currentMemberData = memberSnap.data() as RoomMember;
+                 if (currentMemberData.micSlot !== initialMicSlot) {
+                     batch.update(memberRef, { micSlot: initialMicSlot, isMuted: true });
+                 }
+            }
+            batch.update(userRef, { currentRoomId: roomId });
+            await batch.commit();
+            
+            setStatus('joined');
+            setJoinTimestamp(Timestamp.now());
+
+        } catch (e) {
+            console.error("Error joining room backend", e);
+            toast({ title: 'Error', description: 'Could not join the room.', variant: 'destructive' });
+            router.push('/chat/rooms');
+        }
     };
     
-    joinRoomAndListen();
-  }, [firestore, roomId, authUser?.uid, router, toast]);
+    joinRoomBackend();
+
+    const roomRef = doc(firestore, 'rooms', roomId);
+    const unsubRoom = onSnapshot(roomRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const roomData = { id: docSnap.id, ...docSnap.data() } as Room;
+        setRoom(roomData);
+        setCurrentRoom(roomData);
+        if (roomData.kickedUsers && roomData.kickedUsers[authUser.uid]) {
+            toast({ title: "You've been kicked", description: "You have been removed from this room by the owner.", variant: 'destructive'});
+            handleLeaveRoom(true);
+            return;
+        }
+      } else {
+        toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
+        contextLeaveRoom();
+        router.push('/chat/rooms');
+      }
+    }, (error) => {
+      console.error("Error fetching room:", error);
+      contextLeaveRoom();
+      router.push('/chat/rooms');
+    });
+
+    const membersRef = collection(firestore, 'rooms', roomId, 'members');
+    const qMembers = query(membersRef);
+    const unsubMembers = onSnapshot(qMembers, async (snapshot) => {
+        const membersList = snapshot.docs.map(d => d.data() as RoomMember);
+        setMembers(membersList);
+
+        const newMemberIds = membersList.map(m => m.userId).filter(id => !memberProfiles[id]);
+        if (newMemberIds.length > 0) {
+            const profilesRef = collection(firestore, 'users');
+            const chunks = [];
+            for (let i = 0; i < newMemberIds.length; i += 30) {
+                chunks.push(newMemberIds.slice(i, i + 30));
+            }
+
+            const newProfiles: Record<string, UserProfile> = {};
+            for (const chunk of chunks) {
+                const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
+                const profilesSnapshot = await getDocs(profilesQuery);
+                profilesSnapshot.forEach(doc => {
+                    newProfiles[doc.id] = doc.data() as UserProfile;
+                });
+            }
+            setMemberProfiles(prev => ({...prev, ...newProfiles}));
+        }
+    });
+    
+    return () => {
+      unsubRoom();
+      unsubMembers();
+    };
+  }, [firestore, roomId, authUser?.uid]);
 
   useEffect(() => {
     if (!firestore || !roomId || !joinTimestamp || status !== 'joined') return;
@@ -482,6 +482,10 @@ export default function RoomPage() {
                                 <VerifiedBadge color={profile.verifiedBadge.badgeColor} className="h-4 w-4"/>
                             )}
                         </div>
+                    ) : isOwnerSlot ? (
+                       <p className="text-sm font-semibold text-muted-foreground">Umar</p>
+                    ) : isSuperAdminSlot ? (
+                       <p className="text-sm font-semibold text-muted-foreground">Guriya</p>
                     ) : (
                          !isLocked && <p className="text-sm text-muted-foreground">{slotNumber}</p>
                     )}
