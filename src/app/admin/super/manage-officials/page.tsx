@@ -45,6 +45,10 @@ import { OfficialBadge } from '@/components/ui/official-badge';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 
 const BadgeColors: Array<NonNullable<UserProfile['officialBadge']>['badgeColor']> = ['blue', 'gold', 'green', 'red', 'pink'];
+const SYSTEM_SENDER_ID = 'system_lovechat';
+const SYSTEM_SENDER_NAME = 'Love Chat';
+const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/system-avatars%2FHEART_ICON.png?alt=media&token=c875d1d6-8419-49c3-986c-5b31273907c1';
+
 
 function applyNameColor(name: string, color?: UserProfile['nameColor']) {
     if (!color || color === 'default') {
@@ -127,31 +131,28 @@ export default function ManageOfficialsPage() {
 
   const sendNotification = async (targetUser: UserProfile, type: 'granted' | 'removed') => {
     if (!firestore || !currentUserProfile) return;
-    const adminName = currentUserProfile.displayName;
 
     let message = '';
     let notifType: Notification['type'];
 
     if (type === 'granted') {
-      message = `Congratulations! You have been promoted to an Official user by ${adminName}. Please use your new status to help and guide the community.`;
+      message = "Congratulations! You have been promoted to an Official user. Please use your new status to help and guide the community.";
       notifType = 'official_badge_granted';
     } else {
-      message = `Your Official user status has been revoked by ${adminName} because it was not used in the intended way. We are sorry for this action.`;
+      message = "Your Official user status has been revoked as it was not used in the intended way. We are sorry for this action.";
       notifType = 'official_badge_removed';
     }
 
     const notification: any = {
         userId: targetUser.uid,
-        title: adminName,
+        title: SYSTEM_SENDER_NAME,
         message,
         type: notifType,
         isRead: false,
         createdAt: serverTimestamp(),
-        senderId: currentUserProfile.uid,
-        senderName: currentUserProfile.displayName,
-        senderPhotoURL: currentUserProfile.photoURL,
-        senderOfficialBadge: currentUserProfile.officialBadge,
-        senderNameColor: currentUserProfile.nameColor,
+        senderId: SYSTEM_SENDER_ID,
+        senderName: SYSTEM_SENDER_NAME,
+        senderPhotoURL: SYSTEM_SENDER_PHOTO_URL,
     };
 
     await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
