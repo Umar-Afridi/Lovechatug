@@ -45,16 +45,17 @@ function applyNameColor(name: string, color?: UserProfile['nameColor']) {
 const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
     switch (type) {
         case 'verification_approved':
+            return <CheckCheck className="h-4 w-4 text-blue-500" />;
         case 'verification_rejected':
-            return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><CheckCheck className="h-4 w-4 text-blue-500" /></div>;
+             return <ShieldOff className="h-4 w-4 text-destructive" />;
         case 'colorful_name_granted':
-             return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><Palette className="h-4 w-4 text-pink-500" /></div>;
+             return <Palette className="h-4 w-4 text-pink-500" />;
         case 'verified_badge_removed':
-             return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><ShieldOff className="h-4 w-4 text-destructive" /></div>;
+             return <ShieldOff className="h-4 w-4 text-destructive" />;
         case 'colorful_name_removed':
-             return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><Palette className="h-4 w-4 text-destructive" /></div>;
+             return <Palette className="h-4 w-4 text-destructive" />;
         default:
-             return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><BellRing className="h-4 w-4 text-gray-500" /></div>;
+             return <BellRing className="h-4 w-4 text-gray-500" />;
     }
 }
 
@@ -146,7 +147,6 @@ export default function NotificationsPage() {
                         <AvatarImage src={n.senderPhotoURL} />
                         <AvatarFallback>{getInitials(n.senderName)}</AvatarFallback>
                     </Avatar>
-                     <NotificationIcon type={n.type} />
                 </div>
 
                 <div className="flex-1">
@@ -156,7 +156,10 @@ export default function NotificationsPage() {
                             <OfficialBadge color={n.senderOfficialBadge.badgeColor} size="icon" className="h-4 w-4" />
                         )}
                    </div>
-                  <p className="text-sm text-muted-foreground">{n.message}</p>
+                   <div className="flex items-center gap-2 mt-1">
+                        <span className="flex-shrink-0 text-muted-foreground"><NotificationIcon type={n.type} /></span>
+                        <p className="text-sm text-muted-foreground">{n.message}</p>
+                   </div>
                   <p className="text-xs text-muted-foreground/80 mt-1">{formatTimestamp(n.createdAt)}</p>
                 </div>
               </div>
