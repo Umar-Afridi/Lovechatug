@@ -189,7 +189,7 @@ export default function ChatPage() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [requestCount, setRequestCount] = useState(0);
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
-  const [notifications, setNotifications] = useState<NotificationType[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const { toast } = useToast();
 
   const touchStartX = useRef(0);
@@ -202,9 +202,6 @@ export default function ChatPage() {
     { name: 'Calls', icon: Phone, content: 'calls' },
   ];
   const tabOrder = navigationItems.map(item => item.content);
-
-
-  const unreadNotificationCount = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
 
   const handleTabSelect = useCallback((tabContent: string) => {
     setActiveTab(tabContent);
@@ -289,11 +286,10 @@ export default function ChatPage() {
     });
 
     const notificationsRef = collection(firestore, 'users', user.uid, 'notifications');
-    const qNotifications = query(notificationsRef, orderBy('createdAt', 'desc'));
+    const qNotifications = query(notificationsRef, where('isRead', '==', false));
 
     const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
-        const notifs = snapshot.docs.map(d => ({id: d.id, ...d.data()}) as NotificationType);
-        setNotifications(notifs);
+        setUnreadNotificationCount(snapshot.size);
     }, (error) => {
         console.error("Error fetching notifications:", error);
     });
@@ -388,18 +384,6 @@ export default function ChatPage() {
       .join('');
   };
   
-  const handleMarkNotificationsAsRead = () => {
-    if (!firestore || !user || unreadNotificationCount === 0) return;
-    const batch = writeBatch(firestore);
-    notifications.forEach(n => {
-        if (!n.isRead) {
-            const notifRef = doc(firestore, 'users', user.uid, 'notifications', n.id);
-            batch.update(notifRef, { isRead: true });
-        }
-    });
-    batch.commit().catch(err => console.error("Error marking notifications as read", err));
-  }
-  
   const renderContent = () => {
     if (searchQuery.trim() !== '') {
       if (searchResults.length === 0) {
@@ -473,16 +457,6 @@ export default function ChatPage() {
     }
   }
 
-  const formatNotificationTime = (timestamp: any) => {
-    if (!timestamp) return '';
-    try {
-      const date = timestamp.toDate();
-      return formatDistanceToNow(date, { addSuffix: true });
-    } catch (e) {
-      return '';
-    }
-  };
-
   return (
     <div className="flex h-screen flex-col bg-background">
       <div className="w-full border-r flex flex-col h-full">
@@ -493,39 +467,15 @@ export default function ChatPage() {
                 <span>Love Chat</span>
             </h1>
             <div className="flex items-center gap-2">
-                 <DropdownMenu onOpenChange={(open) => { if(open) handleMarkNotificationsAsRead() }}>
-                    <DropdownMenuTrigger asChild>
-                       <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full">
-                         <Bell className="h-5 w-5" />
-                         {unreadNotificationCount > 0 && (
-                            <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{unreadNotificationCount}</Badge>
-                         )}
-                         <span className="sr-only">Notifications</span>
-                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-80">
-                         <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-                         <DropdownMenuSeparator />
-                         {notifications.length > 0 ? (
-                            <ScrollArea className="max-h-96">
-                                {notifications.map(n => (
-                                    <React.Fragment key={n.id}>
-                                        <DropdownMenuItem className="flex flex-col items-start gap-1 whitespace-normal">
-                                            <p className="font-bold">{n.title}</p>
-                                            <p className="text-xs text-muted-foreground">{n.message}</p>
-                                            <p className="text-xs text-muted-foreground/80 self-end">{formatNotificationTime(n.createdAt)}</p>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                    </React.Fragment>
-                                ))}
-                            </ScrollArea>
-                         ) : (
-                            <div className="p-4 text-center text-sm text-muted-foreground">
-                                You have no new notifications.
-                            </div>
-                         )}
-                    </DropdownMenuContent>
-                 </DropdownMenu>
+                 <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full" asChild>
+                    <Link href="/chat/notifications">
+                      <Bell className="h-5 w-5" />
+                      {unreadNotificationCount > 0 && (
+                          <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{unreadNotificationCount}</Badge>
+                      )}
+                      <span className="sr-only">Notifications</span>
+                    </Link>
+                 </Button>
                  <ThemeToggle />
                  <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
                     <Link href="/settings">
