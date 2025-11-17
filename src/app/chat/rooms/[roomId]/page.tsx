@@ -132,7 +132,7 @@ export default function RoomPage() {
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
-
+  
   const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
     if (!firestore || !authUser || status === 'leaving') return;
 
@@ -169,14 +169,13 @@ export default function RoomPage() {
     router.push('/chat/rooms');
   }, [router]);
   
+  // Effect for joining the room and setting up the room listener
   useEffect(() => {
     if (!firestore || !roomId || !authUser?.uid) return;
 
     let unsubRoom: (() => void) | undefined;
-    let unsubMembers: (() => void) | undefined;
-    let unsubMessages: (() => void) | undefined;
 
-    const joinRoom = async () => {
+    const joinAndListenRoom = async () => {
         try {
             const roomRef = doc(firestore, 'rooms', roomId);
             const userRef = doc(firestore, 'users', authUser.uid);
@@ -189,7 +188,7 @@ export default function RoomPage() {
                 router.push('/chat/rooms');
                 return;
             }
-            
+
             const roomData = { id: roomSnap.id, ...roomSnap.data() } as Room;
             const isRoomOwner = roomData.ownerId === authUser.uid;
 
@@ -231,37 +230,8 @@ export default function RoomPage() {
                 console.error("Room listener error:", error);
                 setStatus('error');
             });
+            setStatus('joined');
 
-            unsubMembers = onSnapshot(query(collection(firestore, 'rooms', roomId, 'members')), (snapshot) => {
-                const membersList = snapshot.docs.map(d => d.data() as RoomMember);
-                setMembers(membersList);
-                
-                const currentProfileIds = Object.keys(memberProfiles);
-                const newMemberIds = membersList.map(m => m.userId).filter(id => !currentProfileIds.includes(id));
-
-                if (newMemberIds.length > 0) {
-                    const profilesRef = collection(firestore, 'users');
-                    const newProfiles: Record<string, UserProfile> = {};
-                    const fetchPromises = [];
-
-                    for (let i = 0; i < newMemberIds.length; i += 30) {
-                        const chunk = newMemberIds.slice(i, i + 30);
-                        const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
-                        fetchPromises.push(getDocs(profilesQuery));
-                    }
-                    
-                    Promise.all(fetchPromises).then(snapshots => {
-                        snapshots.forEach(profilesSnapshot => {
-                            profilesSnapshot.forEach(doc => newProfiles[doc.id] = doc.data() as UserProfile);
-                        });
-                        setMemberProfiles(prev => ({...prev, ...newProfiles}));
-                    });
-                }
-                setStatus('joined');
-            }, (error) => {
-                console.error("Members listener error:", error);
-                setStatus('error');
-            });
         } catch (error) {
             console.error("Error joining room:", error);
             toast({ title: 'Error joining room', variant: 'destructive' });
@@ -270,18 +240,54 @@ export default function RoomPage() {
         }
     };
 
-    joinRoom();
+    joinAndListenRoom();
 
     return () => {
         if (unsubRoom) unsubRoom();
-        if (unsubMembers) unsubMembers();
-        if (unsubMessages) unsubMessages();
     };
-  }, [roomId, authUser?.uid, firestore, router, toast, setCurrentRoom, contextLeaveRoom, handleLeaveRoom]);
+  }, [roomId, authUser?.uid, firestore]);
 
-
+  // Effect for members listener
   useEffect(() => {
-    if (!firestore || !roomId || !joinTimestamp || status !== 'joined') return;
+    if (status !== 'joined' || !firestore || !roomId) return;
+
+    const membersQuery = query(collection(firestore, 'rooms', roomId, 'members'));
+    const unsubMembers = onSnapshot(membersQuery, (snapshot) => {
+        const membersList = snapshot.docs.map(d => d.data() as RoomMember);
+        setMembers(membersList);
+
+        const currentProfileIds = Object.keys(memberProfiles);
+        const newMemberIds = membersList.map(m => m.userId).filter(id => !currentProfileIds.includes(id));
+
+        if (newMemberIds.length > 0) {
+            const profilesRef = collection(firestore, 'users');
+            const newProfiles: Record<string, UserProfile> = {};
+            const fetchPromises = [];
+
+            for (let i = 0; i < newMemberIds.length; i += 30) {
+                const chunk = newMemberIds.slice(i, i + 30);
+                const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
+                fetchPromises.push(getDocs(profilesQuery));
+            }
+            
+            Promise.all(fetchPromises).then(snapshots => {
+                snapshots.forEach(profilesSnapshot => {
+                    profilesSnapshot.forEach(doc => newProfiles[doc.id] = doc.data() as UserProfile);
+                });
+                setMemberProfiles(prev => ({...prev, ...newProfiles}));
+            });
+        }
+    }, (error) => {
+        console.error("Members listener error:", error);
+    });
+
+    return () => unsubMembers();
+  }, [status, firestore, roomId]);
+
+
+  // Effect for messages listener
+  useEffect(() => {
+    if (status !== 'joined' || !firestore || !roomId || !joinTimestamp) return;
 
     const messagesRef = collection(firestore, 'rooms', roomId, 'messages');
     const qMessages = query(
@@ -291,22 +297,20 @@ export default function RoomPage() {
     );
 
     const unsubMessages = onSnapshot(qMessages, (snapshot) => {
-      setMessages(prevMessages => {
-          const newMsgs = snapshot.docs
-              .map(d => ({ id: d.id, ...d.data() } as RoomMessage))
-              .filter(newMsg => !prevMessages.some(prevMsg => prevMsg.id === newMsg.id));
-          
-          if (newMsgs.length > 0) {
-              return [...prevMessages, ...newMsgs];
-          }
-          return prevMessages;
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const newMsg = { id: change.doc.id, ...change.doc.data() } as RoomMessage;
+          setMessages(prev => [...prev, newMsg]);
+        }
       });
+    }, (error) => {
+        console.error("Messages listener error:", error);
     });
 
     return () => {
       unsubMessages();
     };
-  }, [firestore, roomId, joinTimestamp, status]);
+  }, [status, firestore, roomId, joinTimestamp]);
 
 
   const handleDeleteRoom = async () => {
