@@ -11,6 +11,7 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import {
   Shield,
@@ -19,6 +20,7 @@ import {
   Palette,
   ShieldCheck,
   ShieldOff,
+  Crown,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -41,6 +43,7 @@ import {
 import { cn } from '@/lib/utils';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { Separator } from '@/components/ui/separator';
 
 const BadgeColors: Array<NonNullable<UserProfile['officialBadge']>['badgeColor']> = ['blue', 'gold', 'green', 'red', 'pink'];
 
@@ -63,6 +66,69 @@ function applyNameColor(name: string, color?: UserProfile['nameColor']) {
     return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
 }
 
+const UserListItem = ({ user, onUpdate }: { user: UserProfile, onUpdate: (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => void }) => {
+    const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
+    
+    return (
+        <div className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
+            <div className="flex items-center gap-3 overflow-hidden">
+                <Avatar className="h-10 w-10">
+                    <AvatarImage src={user.photoURL} />
+                    <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+                </Avatar>
+                <div className="overflow-hidden">
+                    <div className="flex items-center gap-2">
+                        <p className="font-semibold truncate">{applyNameColor(user.displayName, user.nameColor)}</p>
+                        {user.verifiedBadge?.showBadge && <VerifiedBadge color={user.verifiedBadge.badgeColor}/>}
+                        {user.officialBadge?.isOfficial && <OfficialBadge color={user.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
+                </div>
+            </div>
+            <div className="flex items-center gap-4">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                            <MoreVertical className="h-5 w-5" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Manage Official Status</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                         <DropdownMenuSub>
+                            <DropdownMenuSubTrigger disabled={user.officialBadge?.isOfficial}>
+                                <ShieldCheck className="mr-2 h-4 w-4 text-green-500" />
+                                <span>Make Official</span>
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuPortal>
+                                <DropdownMenuSubContent>
+                                    <DropdownMenuLabel>Choose Badge Color</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {BadgeColors.map(color => (
+                                        <DropdownMenuItem 
+                                            key={color} 
+                                            onClick={() => onUpdate(user, true, color)}
+                                            className="capitalize flex items-center gap-2"
+                                        >
+                                            <Palette className="h-4 w-4" style={{ color }}/>
+                                            {color}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuSubContent>
+                            </DropdownMenuPortal>
+                        </DropdownMenuSub>
+                        <DropdownMenuItem onClick={() => onUpdate(user, false)} disabled={!user.officialBadge?.isOfficial} className="text-destructive focus:text-destructive">
+                            <ShieldOff className="mr-2 h-4 w-4" />
+                            <span>Remove Official</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+        </div>
+    );
+};
+
+
 export default function ManageOfficialsPage() {
   const router = useRouter();
   const { user: authUser } = useUser();
@@ -71,6 +137,7 @@ export default function ManageOfficialsPage() {
 
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [officialUsers, setOfficialUsers] = useState<UserProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -82,7 +149,6 @@ export default function ManageOfficialsPage() {
       if (docSnap.exists()) {
         const profile = docSnap.data() as UserProfile;
         setCurrentUserProfile(profile);
-        // User must be an official AND have the explicit permission to manage others.
         if (!profile.officialBadge?.isOfficial || !profile.canManageOfficials) {
           router.push('/chat');
         }
@@ -103,10 +169,13 @@ export default function ManageOfficialsPage() {
     const q = query(usersRef);
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const usersList = snapshot.docs
-        .map((d) => d.data() as UserProfile)
-        .filter(u => u.uid !== authUser.uid);
-      setAllUsers(usersList);
+      const usersList = snapshot.docs.map((d) => d.data() as UserProfile);
+      
+      const officials = usersList.filter(u => u.officialBadge?.isOfficial && u.uid !== authUser.uid);
+      const others = usersList.filter(u => !u.officialBadge?.isOfficial);
+
+      setOfficialUsers(officials);
+      setAllUsers(others); // `allUsers` will now only contain non-officials for searching
       setLoading(false);
     }, (error) => {
         console.error("Error fetching users:", error);
@@ -149,8 +218,6 @@ export default function ManageOfficialsPage() {
     }
   };
 
-  const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
-
   if (loading || !currentUserProfile?.canManageOfficials) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -166,82 +233,48 @@ export default function ManageOfficialsPage() {
             <Shield className="h-6 w-6 text-primary" />
             <h2 className="text-lg font-semibold">Manage Officials</h2>
         </div>
-        <div className="relative">
-            <Input 
-                placeholder="Search users..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-        </div>
       </div>
       <ScrollArea className="flex-1">
-        {searchQuery && filteredUsers.length > 0 ? (
-            <div className="space-y-2 p-2">
-                {filteredUsers.map((user) => (
-                    <div key={user.uid} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
-                        <div className="flex items-center gap-3 overflow-hidden">
-                            <Avatar className="h-10 w-10">
-                                <AvatarImage src={user.photoURL} />
-                                <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
-                            </Avatar>
-                            <div className="overflow-hidden">
-                                <div className="flex items-center gap-2">
-                                    <p className="font-semibold truncate">{applyNameColor(user.displayName, user.nameColor)}</p>
-                                    {user.verifiedBadge?.showBadge && <VerifiedBadge color={user.verifiedBadge.badgeColor}/>}
-                                    {user.officialBadge?.isOfficial && <OfficialBadge color={user.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>}
-                                </div>
-                                <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon">
-                                        <MoreVertical className="h-5 w-5" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuLabel>Manage Official Status</DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                     <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger disabled={user.officialBadge?.isOfficial}>
-                                            <ShieldCheck className="mr-2 h-4 w-4 text-green-500" />
-                                            <span>Make Official</span>
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuPortal>
-                                            <DropdownMenuSubContent>
-                                                <DropdownMenuLabel>Choose Badge Color</DropdownMenuLabel>
-                                                <DropdownMenuSeparator />
-                                                {BadgeColors.map(color => (
-                                                    <DropdownMenuItem 
-                                                        key={color} 
-                                                        onClick={() => handleUpdateOfficialStatus(user, true, color)}
-                                                        className="capitalize flex items-center gap-2"
-                                                    >
-                                                        <Palette className="h-4 w-4" style={{ color }}/>
-                                                        {color}
-                                                    </DropdownMenuItem>
-                                                ))}
-                                            </DropdownMenuSubContent>
-                                        </DropdownMenuPortal>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuItem onClick={() => handleUpdateOfficialStatus(user, false)} disabled={!user.officialBadge?.isOfficial} className="text-destructive focus:text-destructive">
-                                        <ShieldOff className="mr-2 h-4 w-4" />
-                                        <span>Remove Official</span>
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
-                    </div>
-                ))}
+         <div className="p-4">
+            <h3 className="text-md font-semibold mb-2 flex items-center gap-2 text-muted-foreground"><Crown className="h-5 w-5 text-yellow-500" /> Current Officials</h3>
+            {officialUsers.length > 0 ? (
+                <div className="space-y-2 rounded-lg border p-2">
+                    {officialUsers.map((user) => (
+                        <UserListItem key={user.uid} user={user} onUpdate={handleUpdateOfficialStatus} />
+                    ))}
+                </div>
+            ) : (
+                <div className="text-center text-muted-foreground p-4 border rounded-lg border-dashed">
+                    <p>No other official users found.</p>
+                </div>
+            )}
+        </div>
+        
+        <Separator className="my-4" />
+
+        <div className="p-4 space-y-4">
+             <h3 className="text-md font-semibold text-muted-foreground">Add New Official</h3>
+            <div className="relative">
+                <Input 
+                    placeholder="Search users to make official..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             </div>
-        ) : (
-            <div className="flex flex-1 items-center justify-center text-muted-foreground p-8 h-full">
-                <p>{searchQuery ? "No users found." : "Search for a user to manage their official status."}</p>
-            </div>
-        )}
+            {searchQuery && filteredUsers.length > 0 ? (
+                <div className="space-y-2">
+                    {filteredUsers.map((user) => (
+                       <UserListItem key={user.uid} user={user} onUpdate={handleUpdateOfficialStatus} />
+                    ))}
+                </div>
+            ) : (
+                <div className="flex flex-1 items-center justify-center text-muted-foreground p-8 h-full">
+                    <p>{searchQuery ? "No users found." : "Search for a user to manage their official status."}</p>
+                </div>
+            )}
+        </div>
       </ScrollArea>
        <div className="p-4 border-t">
           <Button variant="outline" asChild>
