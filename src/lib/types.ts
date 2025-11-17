@@ -146,4 +146,5 @@ export type Notification = {
   senderName?: string;
   senderPhotoURL?: string;
   senderOfficialBadge?: UserProfile['officialBadge'];
+  senderNameColor?: UserProfile['nameColor'];
 };

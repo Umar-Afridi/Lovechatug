@@ -16,12 +16,31 @@ import { ArrowLeft, BellRing, CheckCheck, Palette, ShieldOff } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import type { Notification } from '@/lib/types';
+import type { Notification, UserProfile } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { OfficialBadge } from '@/components/ui/official-badge';
 
+
+function applyNameColor(name: string, color?: UserProfile['nameColor']) {
+    if (!color || color === 'default') {
+        return name;
+    }
+    if (color === 'gradient') {
+        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
+    }
+    
+    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
+        green: 'text-green-500',
+        yellow: 'text-yellow-500',
+        pink: 'text-pink-500',
+        purple: 'text-purple-500',
+        red: 'text-red-500',
+    };
+
+    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
+}
 
 const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
     switch (type) {
@@ -132,7 +151,7 @@ export default function NotificationsPage() {
 
                 <div className="flex-1">
                    <div className="flex items-center gap-2">
-                        <p className="font-bold">{n.senderName}</p>
+                        <p className="font-bold">{applyNameColor(n.senderName ?? 'System', n.senderNameColor)}</p>
                         {n.senderOfficialBadge?.isOfficial && (
                             <OfficialBadge color={n.senderOfficialBadge.badgeColor} size="icon" className="h-4 w-4" />
                         )}

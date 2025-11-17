@@ -45,7 +45,26 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 
-const BadgeColors: Array<UserProfile['verifiedBadge']['badgeColor']> = ['blue', 'gold', 'green', 'red', 'pink'];
+const BadgeColors: Array<NonNullable<UserProfile['verifiedBadge']>['badgeColor']> = ['blue', 'gold', 'green', 'red', 'pink'];
+
+function applyNameColor(name: string, color?: UserProfile['nameColor']) {
+    if (!color || color === 'default') {
+        return name;
+    }
+    if (color === 'gradient') {
+        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
+    }
+    
+    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
+        green: 'text-green-500',
+        yellow: 'text-yellow-500',
+        pink: 'text-pink-500',
+        purple: 'text-purple-500',
+        red: 'text-red-500',
+    };
+
+    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
+}
 
 export default function ManageVerificationPage() {
   const router = useRouter();
@@ -134,7 +153,7 @@ export default function ManageVerificationPage() {
             break;
     }
 
-    const notification = {
+    const notification: any = {
         userId: targetUser.uid,
         title: adminName,
         message: message,
@@ -145,6 +164,7 @@ export default function ManageVerificationPage() {
         senderName: currentUserProfile.displayName,
         senderPhotoURL: currentUserProfile.photoURL,
         senderOfficialBadge: currentUserProfile.officialBadge,
+        senderNameColor: currentUserProfile.nameColor,
     };
 
     await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
@@ -246,7 +266,7 @@ export default function ManageVerificationPage() {
                             </Avatar>
                             <div className="overflow-hidden">
                                 <div className="flex items-center gap-2">
-                                    <p className="font-semibold truncate">{user.displayName}</p>
+                                    <p className="font-semibold truncate">{applyNameColor(user.displayName, user.nameColor)}</p>
                                     {user.verifiedBadge?.showBadge && <VerifiedBadge color={user.verifiedBadge.badgeColor}/>}
                                 </div>
                                 <p className="text-xs text-muted-foreground truncate">@{user.username}</p>

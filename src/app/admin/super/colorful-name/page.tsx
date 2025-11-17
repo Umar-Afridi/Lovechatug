@@ -50,9 +50,7 @@ function applyNameColor(name: string, color?: NameColor) {
         return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
     }
     
-    const colorClasses: Record<NameColor, string> = {
-        default: '',
-        gradient: '',
+    const colorClasses: Record<Exclude<NameColor, 'default' | 'gradient'>, string> = {
         green: 'text-green-500',
         yellow: 'text-yellow-500',
         pink: 'text-pink-500',
@@ -128,7 +126,7 @@ export default function ManageColorfulNamePage() {
     if (!firestore || !currentUserProfile) return;
     const adminName = currentUserProfile.displayName;
 
-    const notification = {
+    const notification: any = {
         userId: targetUser.uid,
         title: adminName,
         message: `Congratulations! You have been granted the '${color}' name color by ${adminName}.`,
@@ -139,6 +137,7 @@ export default function ManageColorfulNamePage() {
         senderName: currentUserProfile.displayName,
         senderPhotoURL: currentUserProfile.photoURL,
         senderOfficialBadge: currentUserProfile.officialBadge,
+        senderNameColor: currentUserProfile.nameColor,
     };
     await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
   }
@@ -147,7 +146,7 @@ export default function ManageColorfulNamePage() {
      if (!firestore || !currentUserProfile) return;
       const adminName = currentUserProfile.displayName;
       
-      const notification = {
+      const notification: any = {
         userId: targetUser.uid,
         title: adminName,
         message: `Your special name color has been reset by ${adminName}.`,
@@ -158,6 +157,7 @@ export default function ManageColorfulNamePage() {
         senderName: currentUserProfile.displayName,
         senderPhotoURL: currentUserProfile.photoURL,
         senderOfficialBadge: currentUserProfile.officialBadge,
+        senderNameColor: currentUserProfile.nameColor,
     };
     await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
   }
