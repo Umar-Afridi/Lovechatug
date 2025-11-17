@@ -203,6 +203,8 @@ export default function ManageOfficialsPage() {
     if (!firestore) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
     
+    const wasOfficial = targetUser.officialBadge?.isOfficial;
+
     let updatePayload: any = {
       'officialBadge.isOfficial': isOfficial,
     };
@@ -218,6 +220,7 @@ export default function ManageOfficialsPage() {
         title: 'Official Status Updated',
         description: `${targetUser.displayName} is ${isOfficial ? 'now an official user' : 'no longer an official user'}.`,
       });
+
     } catch (error) {
        toast({ title: 'Error', description: 'Could not update official status.', variant: 'destructive'});
        console.error("Error updating official status:", error);
@@ -243,7 +246,6 @@ export default function ManageOfficialsPage() {
       </div>
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
-             <h3 className="text-md font-semibold text-muted-foreground">Add New Official</h3>
             <div className="relative">
                 <Input 
                     placeholder="Search users to make official..."
