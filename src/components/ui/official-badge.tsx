@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { VariantProps, cva } from 'class-variance-authority';
+import { Crown } from 'lucide-react';
 
 const badgeVariants = cva(
   'inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold',
@@ -16,7 +17,7 @@ const badgeVariants = cva(
       },
       size: {
         default: 'px-3 py-1 text-sm',
-        icon: 'h-6 w-6 p-0 justify-center',
+        icon: 'p-0 justify-center',
       },
     },
     defaultVariants: {
@@ -51,7 +52,11 @@ export function OfficialBadge({ color, size, className, isOwner = false }: Offic
            size === 'icon' ? 'h-full w-full' : 'h-5 w-5'
         )}
       >
-        <span className={cn('text-sm font-bold', colorClass)}>V</span>
+        {isOwner ? (
+            <Crown className={cn("h-3 w-3", colorClass)} />
+        ) : (
+            <span className={cn('text-sm font-bold', colorClass)}>V</span>
+        )}
       </div>
       {size !== 'icon' && <span>{badgeText}</span>}
     </div>
