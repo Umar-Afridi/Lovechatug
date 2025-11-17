@@ -136,7 +136,6 @@ export default function RoomPage() {
     setStatus('leaving');
     contextLeaveRoom();
     
-    // We get the current user slot from the state at the moment of leaving
     const slotAtTimeOfLeave = members.find(m => m.userId === authUser.uid);
 
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
@@ -182,10 +181,9 @@ export default function RoomPage() {
         const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
 
         try {
-            const [roomSnap, userSnap, memberSnap] = await Promise.all([
+            const [roomSnap, userSnap] = await Promise.all([
                 getDoc(roomRef),
-                getDoc(userRef),
-                getDoc(memberRef)
+                getDoc(userRef)
             ]);
 
             if (!roomSnap.exists()) {
@@ -202,19 +200,24 @@ export default function RoomPage() {
             }
 
             const userProfile = userSnap.data() as UserProfile;
-            let initialMicSlot: number | null = null;
-            if (roomData.ownerId === authUser.uid) {
-                initialMicSlot = OWNER_SLOT;
-            } else if (userProfile?.officialBadge?.isOfficial) {
-                initialMicSlot = SUPER_ADMIN_SLOT;
-            }
+            const isRoomOwner = roomData.ownerId === authUser.uid;
+            const isSuperAdmin = userProfile?.officialBadge?.isOfficial || false;
+
+            const memberData: RoomMember = {
+                userId: authUser.uid,
+                micSlot: isRoomOwner ? OWNER_SLOT : isSuperAdmin ? SUPER_ADMIN_SLOT : null,
+                isMuted: true,
+            };
 
             const batch = writeBatch(firestore);
+
+            const memberSnap = await getDoc(memberRef);
             if (!memberSnap.exists()) {
-                batch.set(memberRef, { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true });
-                if (initialMicSlot !== OWNER_SLOT && initialMicSlot !== SUPER_ADMIN_SLOT) {
+                batch.set(memberRef, memberData);
+                if (!isRoomOwner && !isSuperAdmin) {
                     batch.update(roomRef, { memberCount: increment(1) });
                 }
+                
                 const notificationMessage = {
                     senderId: 'system',
                     senderName: 'System',
@@ -225,14 +228,16 @@ export default function RoomPage() {
                 const messageDocRef = doc(collection(firestore, 'rooms', roomId, 'messages'));
                 batch.set(messageDocRef, notificationMessage);
             } else {
-                 const currentMemberData = memberSnap.data() as RoomMember;
-                 if (currentMemberData.micSlot !== initialMicSlot) {
-                     batch.update(memberRef, { micSlot: initialMicSlot, isMuted: true });
-                 }
+                // If user is already a member, ensure their slot is correct (e.g. if they just became owner)
+                const currentMemberData = memberSnap.data() as RoomMember;
+                if (currentMemberData.micSlot !== memberData.micSlot) {
+                    batch.update(memberRef, { micSlot: memberData.micSlot });
+                }
             }
+
             batch.update(userRef, { currentRoomId: roomId });
             await batch.commit();
-            
+
             setStatus('joined');
             setJoinTimestamp(Timestamp.now());
 
@@ -435,7 +440,7 @@ export default function RoomPage() {
         const isOwnerSlot = slotNumber === OWNER_SLOT;
         const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
         
-        const canTakeSeat = !memberInSlot && !isLocked && !isOwner;
+        const canTakeSeat = !memberInSlot && !isLocked && currentUserSlot?.micSlot === null;
 
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1 w-20 md:w-24">
@@ -518,7 +523,7 @@ export default function RoomPage() {
                                 </>
                             )}
                             
-                           {!isOwnerSlot && !isSuperAdminSlot && !memberInSlot && (
+                           {!isOwnerSlot && !isSuperAdminSlot && (
                                <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                                     {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                                     {isLocked ? 'Unlock Mic' : 'Lock Mic'}
