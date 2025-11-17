@@ -177,7 +177,7 @@ export default function RoomPage() {
     if (!firestore || !roomId || !authUser) return;
     
     setJoinTimestamp(Timestamp.now());
-    setStatus('joined'); // Immediately transition to joined state to show UI
+    setStatus('joining'); 
 
     const roomRef = doc(firestore, 'rooms', roomId);
     const unsubRoom = onSnapshot(roomRef, (docSnap) => {
@@ -187,16 +187,19 @@ export default function RoomPage() {
         setCurrentRoom(roomData);
         
         // Post-join validation
-        if (roomData.isLocked && roomData.ownerId !== authUser.uid) {
-          toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
-          handleLeaveRoom();
-          return;
+        if (status !== 'joining') {
+            if (roomData.isLocked && roomData.ownerId !== authUser.uid) {
+              toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
+              handleLeaveRoom();
+              return;
+            }
+            if (roomData.kickedUsers && roomData.kickedUsers[authUser.uid]) {
+                toast({ title: "You've been kicked", description: "You have been removed from this room by the owner.", variant: 'destructive'});
+                handleLeaveRoom();
+                return;
+            }
         }
-        if (roomData.kickedUsers && roomData.kickedUsers[authUser.uid]) {
-            toast({ title: "You've been kicked", description: "You have been removed from this room by the owner.", variant: 'destructive'});
-            handleLeaveRoom();
-            return;
-        }
+        setStatus('joined');
 
       } else {
         toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
@@ -246,7 +249,11 @@ export default function RoomPage() {
       const memberDoc = await getDoc(memberRef);
       
       let initialMicSlot: number | null = null;
-      if (room?.ownerId === authUser.uid) { // use state `room` which is now available
+       const roomDocSnap = await getDoc(roomRef);
+       if (!roomDocSnap.exists()) return;
+       const roomData = roomDocSnap.data() as Room;
+
+      if (roomData?.ownerId === authUser.uid) { 
           initialMicSlot = OWNER_SLOT;
       } else if (userProfile?.officialBadge?.isOfficial) {
           initialMicSlot = SUPER_ADMIN_SLOT;
@@ -275,7 +282,7 @@ export default function RoomPage() {
           await batch.commit();
       } else {
           const currentMemberData = memberDoc.data() as RoomMember;
-           if (room?.ownerId === authUser.uid) {
+           if (roomData?.ownerId === authUser.uid) {
               if (currentMemberData.micSlot !== OWNER_SLOT) {
                 await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
               }
@@ -431,10 +438,8 @@ export default function RoomPage() {
         
         const isOwnerSlot = slotNumber === OWNER_SLOT;
         const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
-
+        
         const canTakeSeat = !memberInSlot && !isLocked;
-        const canUserTakeSeat = canTakeSeat;
-
 
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1 w-20 md:w-24">
@@ -508,13 +513,6 @@ export default function RoomPage() {
                     {/* --- Options for the OWNER --- */}
                     {isOwner && (
                         <>
-                             {/* Take any free seat */}
-                             {canTakeSeat && (
-                                <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
-                                    <Mic className="mr-2 h-4 w-4"/> Take Seat
-                                </DropdownMenuItem>
-                             )}
-                            
                             {/* On other users */}
                             {memberInSlot && !isSelf && (
                                 <>
@@ -527,8 +525,8 @@ export default function RoomPage() {
                                 </>
                             )}
                             
-                            {/* On any slot that is not the OWNER slot */}
-                           {!isOwnerSlot && (
+                            {/* On any EMPTY slot that is not the OWNER slot */}
+                           {!isOwnerSlot && !memberInSlot && (
                                <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                                     {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                                     {isLocked ? 'Unlock Mic' : 'Lock Mic'}
@@ -538,7 +536,7 @@ export default function RoomPage() {
                     )}
                     
                     {/* --- Options for NON-OWNERS --- */}
-                    {canUserTakeSeat && (
+                    {!isOwner && canTakeSeat && (
                         <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                         </DropdownMenuItem>
