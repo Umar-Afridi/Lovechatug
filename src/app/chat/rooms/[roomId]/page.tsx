@@ -177,17 +177,34 @@ export default function RoomPage() {
     if (!firestore || !roomId || !authUser) return;
     
     setJoinTimestamp(Timestamp.now());
-    setStatus('joining'); 
 
-    const roomRef = doc(firestore, 'rooms', roomId);
-    const unsubRoom = onSnapshot(roomRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const roomData = { id: docSnap.id, ...docSnap.data() } as Room;
-        setRoom(roomData);
-        setCurrentRoom(roomData);
+    const joinRoomAndListen = async () => {
+        const roomRef = doc(firestore, 'rooms', roomId);
         
-        // Post-join validation
-        if (status !== 'joining') {
+        // Initial check to see if room exists and is not locked
+        const initialRoomSnap = await getDoc(roomRef);
+        if (!initialRoomSnap.exists()) {
+            toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
+            router.push('/chat/rooms');
+            return;
+        }
+        const initialRoomData = initialRoomSnap.data() as Room;
+        if (initialRoomData.isLocked && initialRoomData.ownerId !== authUser.uid) {
+            toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
+            router.push('/chat/rooms');
+            return;
+        }
+
+        // Now that we've passed initial checks, proceed with joining and setting up listeners
+        setStatus('joined');
+
+        const unsubRoom = onSnapshot(roomRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const roomData = { id: docSnap.id, ...docSnap.data() } as Room;
+            setRoom(roomData);
+            setCurrentRoom(roomData);
+            
+            // Post-join validation
             if (roomData.isLocked && roomData.ownerId !== authUser.uid) {
               toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
               handleLeaveRoom();
@@ -198,113 +215,104 @@ export default function RoomPage() {
                 handleLeaveRoom();
                 return;
             }
-        }
-        setStatus('joined');
-
-      } else {
-        toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
-        contextLeaveRoom();
-        router.push('/chat/rooms');
-      }
-    }, (error) => {
-      console.error("Error fetching room:", error);
-      contextLeaveRoom();
-      router.push('/chat/rooms');
-    });
-
-    const membersRef = collection(firestore, 'rooms', roomId, 'members');
-    const qMembers = query(membersRef);
-    const unsubMembers = onSnapshot(qMembers, async (snapshot) => {
-        const membersList = snapshot.docs.map(d => d.data() as RoomMember);
-        setMembers(membersList);
-
-        const newMemberIds = membersList.map(m => m.userId).filter(id => !memberProfiles[id]);
-        if (newMemberIds.length > 0) {
-            const profilesRef = collection(firestore, 'users');
-            const chunks = [];
-            for (let i = 0; i < newMemberIds.length; i += 30) {
-                chunks.push(newMemberIds.slice(i, i + 30));
-            }
-
-            const newProfiles: Record<string, UserProfile> = {};
-            for (const chunk of chunks) {
-                const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
-                const profilesSnapshot = await getDocs(profilesQuery);
-                profilesSnapshot.forEach(doc => {
-                    newProfiles[doc.id] = doc.data() as UserProfile;
-                });
-            }
-            setMemberProfiles(prev => ({...prev, ...newProfiles}));
-        }
-    });
-    
-    // Asynchronous logic to add the user to the room members
-    const joinRoomBackend = async () => {
-      const userProfileDoc = await getDoc(doc(firestore, 'users', authUser.uid));
-      if (!userProfileDoc.exists()) return;
-      const userProfile = userProfileDoc.data() as UserProfile;
-
-      const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-      const userRef = doc(firestore, 'users', authUser.uid);
-      const memberDoc = await getDoc(memberRef);
-      
-      let initialMicSlot: number | null = null;
-       const roomDocSnap = await getDoc(roomRef);
-       if (!roomDocSnap.exists()) return;
-       const roomData = roomDocSnap.data() as Room;
-
-      if (roomData?.ownerId === authUser.uid) { 
-          initialMicSlot = OWNER_SLOT;
-      } else if (userProfile?.officialBadge?.isOfficial) {
-          initialMicSlot = SUPER_ADMIN_SLOT;
-      }
-
-      if (!memberDoc.exists()) {
-          const batch = writeBatch(firestore);
-          const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
-          batch.set(memberRef, memberData);
-          
-          if (initialMicSlot !== OWNER_SLOT && initialMicSlot !== SUPER_ADMIN_SLOT) {
-            batch.update(roomRef, { memberCount: increment(1) });
+          } else {
+            toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
+            contextLeaveRoom();
+            router.push('/chat/rooms');
           }
-           batch.update(userRef, { currentRoomId: roomId });
-          
-          const notificationMessage = {
-              senderId: 'system',
-              senderName: 'System',
-              content: `${userProfile.displayName} joined the room.`,
-              timestamp: serverTimestamp(),
-              type: 'notification' as const,
-          };
-          const messageDocRef = doc(collection(firestore, 'rooms', roomId, 'messages'));
-          batch.set(messageDocRef, notificationMessage);
-          
-          await batch.commit();
-      } else {
-          const currentMemberData = memberDoc.data() as RoomMember;
-           if (roomData?.ownerId === authUser.uid) {
-              if (currentMemberData.micSlot !== OWNER_SLOT) {
-                await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
-              }
-          } else if (userProfile?.officialBadge?.isOfficial) {
-              if (currentMemberData.micSlot !== SUPER_ADMIN_SLOT) {
-                await updateDoc(memberRef, { micSlot: SUPER_ADMIN_SLOT, isMuted: true });
-              }
-          }
-      }
+        }, (error) => {
+          console.error("Error fetching room:", error);
+          contextLeaveRoom();
+          router.push('/chat/rooms');
+        });
+
+        const membersRef = collection(firestore, 'rooms', roomId, 'members');
+        const qMembers = query(membersRef);
+        const unsubMembers = onSnapshot(qMembers, async (snapshot) => {
+            const membersList = snapshot.docs.map(d => d.data() as RoomMember);
+            setMembers(membersList);
+
+            const newMemberIds = membersList.map(m => m.userId).filter(id => !memberProfiles[id]);
+            if (newMemberIds.length > 0) {
+                const profilesRef = collection(firestore, 'users');
+                const chunks = [];
+                for (let i = 0; i < newMemberIds.length; i += 30) {
+                    chunks.push(newMemberIds.slice(i, i + 30));
+                }
+
+                const newProfiles: Record<string, UserProfile> = {};
+                for (const chunk of chunks) {
+                    const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
+                    const profilesSnapshot = await getDocs(profilesQuery);
+                    profilesSnapshot.forEach(doc => {
+                        newProfiles[doc.id] = doc.data() as UserProfile;
+                    });
+                }
+                setMemberProfiles(prev => ({...prev, ...newProfiles}));
+            }
+        });
+        
+        // Backend logic to add the user to the room members
+        const userProfileDoc = await getDoc(doc(firestore, 'users', authUser.uid));
+        if (!userProfileDoc.exists()) return;
+        const userProfile = userProfileDoc.data() as UserProfile;
+
+        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+        const userRef = doc(firestore, 'users', authUser.uid);
+        const memberDoc = await getDoc(memberRef);
+        
+        let initialMicSlot: number | null = null;
+        if (initialRoomData.ownerId === authUser.uid) { 
+            initialMicSlot = OWNER_SLOT;
+        } else if (userProfile?.officialBadge?.isOfficial) {
+            initialMicSlot = SUPER_ADMIN_SLOT;
+        }
+
+        if (!memberDoc.exists()) {
+            const batch = writeBatch(firestore);
+            const memberData = { userId: authUser.uid, micSlot: initialMicSlot, isMuted: true };
+            batch.set(memberRef, memberData);
+            
+            if (initialMicSlot !== OWNER_SLOT && initialMicSlot !== SUPER_ADMIN_SLOT) {
+              batch.update(roomRef, { memberCount: increment(1) });
+            }
+            batch.update(userRef, { currentRoomId: roomId });
+            
+            const notificationMessage = {
+                senderId: 'system',
+                senderName: 'System',
+                content: `${userProfile.displayName} joined the room.`,
+                timestamp: serverTimestamp(),
+                type: 'notification' as const,
+            };
+            const messageDocRef = doc(collection(firestore, 'rooms', roomId, 'messages'));
+            batch.set(messageDocRef, notificationMessage);
+            
+            await batch.commit();
+        } else {
+            const currentMemberData = memberDoc.data() as RoomMember;
+             if (initialRoomData.ownerId === authUser.uid) {
+                if (currentMemberData.micSlot !== OWNER_SLOT) {
+                  await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
+                }
+            } else if (userProfile?.officialBadge?.isOfficial) {
+                if (currentMemberData.micSlot !== SUPER_ADMIN_SLOT) {
+                  await updateDoc(memberRef, { micSlot: SUPER_ADMIN_SLOT, isMuted: true });
+                }
+            }
+        }
+        
+        return () => {
+          unsubRoom();
+          unsubMembers();
+        };
     };
     
-    joinRoomBackend();
-
-    return () => {
-      unsubRoom();
-      unsubMembers();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    joinRoomAndListen();
   }, [firestore, roomId, authUser?.uid, router, toast]);
 
   useEffect(() => {
-    if (!firestore || !roomId || !joinTimestamp) return;
+    if (!firestore || !roomId || !joinTimestamp || status !== 'joined') return;
 
     const messagesRef = collection(firestore, 'rooms', roomId, 'messages');
     const qMessages = query(
@@ -329,7 +337,7 @@ export default function RoomPage() {
     return () => {
       unsubMessages();
     };
-  }, [firestore, roomId, joinTimestamp]);
+  }, [firestore, roomId, joinTimestamp, status]);
 
 
   const handleDeleteRoom = async () => {
@@ -439,7 +447,7 @@ export default function RoomPage() {
         const isOwnerSlot = slotNumber === OWNER_SLOT;
         const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
         
-        const canTakeSeat = !memberInSlot && !isLocked;
+        const canTakeSeat = !memberInSlot && !isLocked && !isOwner;
 
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1 w-20 md:w-24">
@@ -525,8 +533,8 @@ export default function RoomPage() {
                                 </>
                             )}
                             
-                            {/* On any EMPTY slot that is not the OWNER slot */}
-                           {!isOwnerSlot && !memberInSlot && (
+                            {/* On any EMPTY slot that is not the OWNER or SUPER_ADMIN slot */}
+                           {!isOwnerSlot && !isSuperAdminSlot && !memberInSlot && (
                                <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                                     {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                                     {isLocked ? 'Unlock Mic' : 'Lock Mic'}
@@ -536,7 +544,7 @@ export default function RoomPage() {
                     )}
                     
                     {/* --- Options for NON-OWNERS --- */}
-                    {!isOwner && canTakeSeat && (
+                    {canTakeSeat && (
                         <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
                             <Mic className="mr-2 h-4 w-4"/> Take Seat
                         </DropdownMenuItem>
