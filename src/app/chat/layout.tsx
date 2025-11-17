@@ -102,7 +102,7 @@ export const useCallContext = () => {
 
 const SYSTEM_SENDER_ID = 'system_lovechat';
 const SYSTEM_SENDER_NAME = 'Love Chat';
-const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/system-avatars%2FUG_LOGO.png?alt=media&token=1c2a7153-6623-4522-8616-200903333346';
+const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/UG_LOGO_RED.png?alt=media&token=e632b0a9-4678-4384-9549-01e403d5b00c';
 
 // Custom hook to get user profile data in real-time
 function useUserProfile(onAccountDisabled: () => void) {
