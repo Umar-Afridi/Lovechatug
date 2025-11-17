@@ -12,6 +12,8 @@ import { Crown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { OfficialBadge } from '@/components/ui/official-badge';
 
 type TimeRange = 'daily' | 'weekly' | 'monthly';
 
@@ -63,7 +65,11 @@ const UserRankItem = ({ user, rank }: { user: UserProfile, rank: number }) => (
         <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
       </Avatar>
       <div>
-        <p className="font-semibold">{applyNameColor(user.displayName, user.nameColor)}</p>
+        <div className="flex items-center gap-2">
+            <p className="font-semibold">{applyNameColor(user.displayName, user.nameColor)}</p>
+            {user.verifiedBadge?.showBadge && <VerifiedBadge color={user.verifiedBadge.badgeColor} />}
+            {user.officialBadge?.isOfficial && <OfficialBadge color={user.officialBadge.badgeColor} size="icon" className="h-4 w-4" />}
+        </div>
         <p className="text-xs text-muted-foreground">@{user.username}</p>
       </div>
     </div>
