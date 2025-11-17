@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { UserCog, CheckCheck, Sparkles } from 'lucide-react';
+import { UserCog, CheckCheck, Sparkles, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +26,12 @@ export default function SuperAdminHubPage() {
           <Link href="/admin/super/colorful-name">
             <Sparkles className="mr-4 h-6 w-6 text-pink-500" />
             Manage Colorful Names
+          </Link>
+        </Button>
+         <Button asChild variant="outline" className={cn(baseButtonClassName, "border-amber-600 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/20")}>
+          <Link href="/admin/super/active-users">
+            <Activity className="mr-4 h-6 w-6 text-amber-500" />
+            Active Users
           </Link>
         </Button>
       </div>

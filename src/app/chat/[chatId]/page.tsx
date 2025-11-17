@@ -622,6 +622,7 @@ export default function ChatIdPage() {
       const messagesRef = collection(firestore, 'chats', chatId, 'messages');
       const typingUpdate: { [key: string]: any } = {};
       typingUpdate[`typing.${authUser.uid}`] = false;
+      const userRef = doc(firestore, 'users', authUser.uid);
 
 
       // Ensure chat doc exists, then add message and update last message
@@ -657,6 +658,10 @@ export default function ChatIdPage() {
             lastMessage: lastMessageData,
             [unreadCountKey]: increment(1),
             ...typingUpdate
+        });
+        
+        batch.update(userRef, {
+            activityScore: increment(1),
         });
 
         return batch.commit();

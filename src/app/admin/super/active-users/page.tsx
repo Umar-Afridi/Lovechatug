@@ -1,0 +1,158 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useFirestore } from '@/firebase/provider';
+import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import type { UserProfile } from '@/lib/types';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Crown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+
+type TimeRange = 'daily' | 'weekly' | 'monthly';
+
+const getInitials = (name: string) => (name ? name.split(' ').map(n => n[0]).join('') : 'U');
+
+const applyNameColor = (name: string, color?: UserProfile['nameColor']) => {
+  if (!color || color === 'default') {
+    return name;
+  }
+  if (color === 'gradient') {
+    return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
+  }
+  const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
+    green: 'text-green-500',
+    yellow: 'text-yellow-500',
+    pink: 'text-pink-500',
+    purple: 'text-purple-500',
+    red: 'text-red-500',
+  };
+  return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
+};
+
+const RankingBadge = ({ rank }: { rank: number }) => {
+  if (rank > 3) return null;
+  const colors = {
+    1: 'bg-yellow-400 text-yellow-900',
+    2: 'bg-gray-300 text-gray-800',
+    3: 'bg-yellow-600 text-white',
+  };
+  const text = {
+    1: '1st',
+    2: '2nd',
+    3: '3rd',
+  };
+  return (
+    <Badge className={cn('flex items-center gap-1 font-bold', colors[rank])}>
+      <Crown className="h-3 w-3" />
+      {text[rank]}
+    </Badge>
+  );
+};
+
+const UserRankItem = ({ user, rank }: { user: UserProfile, rank: number }) => (
+  <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
+    <div className="flex items-center gap-4">
+      <span className="font-bold text-lg w-6 text-center text-muted-foreground">{rank}</span>
+      <Avatar className="h-12 w-12">
+        <AvatarImage src={user.photoURL} />
+        <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+      </Avatar>
+      <div>
+        <p className="font-semibold">{applyNameColor(user.displayName, user.nameColor)}</p>
+        <p className="text-xs text-muted-foreground">@{user.username}</p>
+      </div>
+    </div>
+    <div className="flex items-center gap-4">
+      <div className="text-right">
+        <p className="font-bold text-lg">{user.activityScore || 0}</p>
+        <p className="text-xs text-muted-foreground">Score</p>
+      </div>
+      <RankingBadge rank={rank} />
+    </div>
+  </div>
+);
+
+const Leaderboard = ({ timeRange }: { timeRange: TimeRange }) => {
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const firestore = useFirestore();
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      if (!firestore) return;
+      setLoading(true);
+
+      // Note: For a real app, you would have separate fields for daily, weekly, monthly scores
+      // and reset them with a scheduled function. For this prototype, we use the single
+      // `activityScore` for all tabs.
+      const usersRef = collection(firestore, 'users');
+      const q = query(usersRef, orderBy('activityScore', 'desc'), limit(100));
+
+      try {
+        const querySnapshot = await getDocs(q);
+        const usersList = querySnapshot.docs.map(doc => doc.data() as UserProfile);
+        setUsers(usersList);
+      } catch (error) {
+        console.error(`Error fetching ${timeRange} leaderboard:`, error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUsers();
+  }, [firestore, timeRange]);
+
+  if (loading) {
+    return <div className="p-4 text-center">Loading leaderboard...</div>;
+  }
+
+  if (users.length === 0) {
+    return <div className="p-4 text-center text-muted-foreground">No active users found for this period.</div>;
+  }
+
+  return (
+    <ScrollArea className="h-[calc(100vh-220px)]">
+      <div className="space-y-2 p-2">
+        {users.map((user, index) => (
+          <UserRankItem key={user.uid} user={user} rank={index + 1} />
+        ))}
+      </div>
+    </ScrollArea>
+  );
+};
+
+export default function ActiveUsersPage() {
+  return (
+    <>
+      <div className="p-4 border-b">
+        <h2 className="text-lg font-semibold">Active Users Leaderboard</h2>
+      </div>
+      <Tabs defaultValue="daily" className="w-full flex-1 flex flex-col">
+        <TabsList className="grid w-full grid-cols-3 m-4">
+          <TabsTrigger value="daily">Daily</TabsTrigger>
+          <TabsTrigger value="weekly">Weekly</TabsTrigger>
+          <TabsTrigger value="monthly">Monthly</TabsTrigger>
+        </TabsList>
+        <TabsContent value="daily" className="flex-1">
+          <Leaderboard timeRange="daily" />
+        </TabsContent>
+        <TabsContent value="weekly" className="flex-1">
+          <Leaderboard timeRange="weekly" />
+        </TabsContent>
+        <TabsContent value="monthly" className="flex-1">
+          <Leaderboard timeRange="monthly" />
+        </TabsContent>
+      </Tabs>
+      <div className="p-4 border-t">
+        <Button variant="outline" asChild>
+          <Link href="/admin/super">Back to Admin Hub</Link>
+        </Button>
+      </div>
+    </>
+  );
+}

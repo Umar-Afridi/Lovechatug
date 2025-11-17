@@ -27,6 +27,7 @@ export type UserProfile = {
   lastVerificationRequestAt?: any; // Firestore ServerTimestamp
   lastColorfulNameRequestAt?: any; // Firestore ServerTimestamp
   isDisabled?: boolean; // New field for disabled status
+  activityScore?: number;
 }
 
 export type Message = {

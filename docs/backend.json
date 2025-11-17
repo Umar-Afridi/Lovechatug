@@ -122,6 +122,10 @@
         "isDisabled": {
           "type": "boolean",
           "description": "Whether the user's account is disabled by an administrator."
+        },
+        "activityScore": {
+          "type": "number",
+          "description": "A score representing the user's activity level, updated periodically."
         }
       },
       "required": ["uid", "displayName", "email", "username", "verifiedBadge", "nameColor", "verificationApplicationStatus"]
