@@ -12,6 +12,8 @@ import {
   doc,
   updateDoc,
   where,
+  addDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import {
   Shield,
@@ -46,6 +48,10 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Separator } from '@/components/ui/separator';
 
 const BadgeColors: Array<NonNullable<UserProfile['officialBadge']>['badgeColor']> = ['blue', 'gold', 'green', 'red', 'pink'];
+const SYSTEM_SENDER_ID = 'system_lovechat';
+const SYSTEM_SENDER_NAME = 'Love Chat';
+const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/UG_LOGO_RED.png?alt=media&token=e632b0a9-4678-4384-9549-01e403d5b00c';
+
 
 function applyNameColor(name: string, color?: UserProfile['nameColor']) {
     if (!color || color === 'default') {
@@ -192,7 +198,7 @@ export default function ManageOfficialsPage() {
         u.username.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [searchQuery, allUsers]);
-
+  
   const handleUpdateOfficialStatus = async (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => {
     if (!firestore) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
@@ -218,6 +224,7 @@ export default function ManageOfficialsPage() {
     }
   };
 
+
   if (loading || !currentUserProfile?.canManageOfficials) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -235,23 +242,6 @@ export default function ManageOfficialsPage() {
         </div>
       </div>
       <ScrollArea className="flex-1">
-         <div className="p-4">
-            <h3 className="text-md font-semibold mb-2 flex items-center gap-2 text-muted-foreground"><Crown className="h-5 w-5 text-yellow-500" /> Current Officials</h3>
-            {officialUsers.length > 0 ? (
-                <div className="space-y-2 rounded-lg border p-2">
-                    {officialUsers.map((user) => (
-                        <UserListItem key={user.uid} user={user} onUpdate={handleUpdateOfficialStatus} />
-                    ))}
-                </div>
-            ) : (
-                <div className="text-center text-muted-foreground p-4 border rounded-lg border-dashed">
-                    <p>No other official users found.</p>
-                </div>
-            )}
-        </div>
-        
-        <Separator className="my-4" />
-
         <div className="p-4 space-y-4">
              <h3 className="text-md font-semibold text-muted-foreground">Add New Official</h3>
             <div className="relative">
@@ -272,6 +262,23 @@ export default function ManageOfficialsPage() {
             ) : (
                 <div className="flex flex-1 items-center justify-center text-muted-foreground p-8 h-full">
                     <p>{searchQuery ? "No users found." : "Search for a user to manage their official status."}</p>
+                </div>
+            )}
+        </div>
+
+        <Separator className="my-4" />
+        
+         <div className="p-4">
+            <h3 className="text-md font-semibold mb-2 flex items-center gap-2 text-muted-foreground"><Crown className="h-5 w-5 text-yellow-500" /> Current Officials</h3>
+            {officialUsers.length > 0 ? (
+                <div className="space-y-2 rounded-lg border p-2">
+                    {officialUsers.map((user) => (
+                        <UserListItem key={user.uid} user={user} onUpdate={handleUpdateOfficialStatus} />
+                    ))}
+                </div>
+            ) : (
+                <div className="text-center text-muted-foreground p-4 border rounded-lg border-dashed">
+                    <p>No other official users found.</p>
                 </div>
             )}
         </div>
