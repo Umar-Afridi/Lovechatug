@@ -49,7 +49,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useEffect, useState, useRef, useCallback, createContext, useContext } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit, addDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit, addDoc, deleteDoc, increment } from 'firebase/firestore';
 import type { UserProfile, Room, Chat, Call, Notification } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -103,6 +103,7 @@ export const useCallContext = () => {
 const SYSTEM_SENDER_ID = 'system_lovechat';
 const SYSTEM_SENDER_NAME = 'Love Chat';
 const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/UG_LOGO_RED.png?alt=media&token=e632b0a9-4678-4384-9549-01e403d5b00c';
+
 
 // Custom hook to get user profile data in real-time
 function useUserProfile(onAccountDisabled: () => void) {
@@ -201,29 +202,40 @@ function useUserProfile(onAccountDisabled: () => void) {
 }
 
 // Custom hook for presence management
-function usePresence() {
+function usePresence(profile: UserProfile | null) {
   const { user } = useUser();
   const firestore = useFirestore();
 
   useEffect(() => {
-    if (!user || !firestore) return;
+    if (!user || !firestore || !profile) return;
 
     const db = getDatabase();
     const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
     const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
     const connectedRef = ref(db, '.info/connected');
 
-    const unsubscribe = onValue(connectedRef, (snap) => {
+    const unsubscribe = onValue(connectedRef, async (snap) => {
       if (snap.val() === true) {
-        const presenceData = { isOnline: true, lastSeen: rtdbServerTimestamp() };
-        set(userStatusDatabaseRef, presenceData);
-
+        // User is online
+        const onlineStatus = { isOnline: true, lastSeen: rtdbServerTimestamp() };
+        await set(userStatusDatabaseRef, onlineStatus);
+        
+        await updateDoc(userStatusFirestoreRef, { isOnline: true, lastSeen: serverTimestamp() });
+        
+        // On disconnect, set user to offline in RTDB
         onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
 
-        const firestoreUpdateData = { isOnline: true, lastSeen: serverTimestamp() };
-        updateDoc(userStatusFirestoreRef, firestoreUpdateData).catch(err => {
-            console.warn("Could not update online status in Firestore:", err);
-        });
+        // Also handle leaving a room on disconnect
+        if (profile.currentRoomId) {
+            const roomRef = doc(firestore, 'rooms', profile.currentRoomId);
+            const memberRef = doc(roomRef, 'members', user.uid);
+            onDisconnect(userStatusDatabaseRef).cancel(); // Cancel previous onDisconnect
+            onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() }).then(() => {
+                deleteDoc(memberRef);
+                updateDoc(roomRef, { memberCount: increment(-1) });
+            });
+        }
+
       }
     }, (error) => {
       console.error("Error with presence listener:", error);
@@ -233,13 +245,10 @@ function usePresence() {
        if (typeof unsubscribe === 'function') {
         off(connectedRef, 'value', unsubscribe);
       }
-       set(userStatusDatabaseRef, { isOnline: false, lastSeen: rtdbServerTimestamp() });
-       updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() }).catch(err => {
-            // silent fail on sign out is okay
-       });
     };
-  }, [user, firestore]);
+  }, [user, firestore, profile]);
 }
+
 
 function CallProvider({ children }: { children: React.ReactNode }) {
     const { user, loading: authLoading } = useUser();
@@ -451,29 +460,25 @@ function ChatAppLayout({
   }, []);
   
   const { profile, loading: profileLoading } = useUserProfile(handleAccountDisabled);
-  usePresence(); // Initialize presence management
+  usePresence(profile); // Initialize presence management
 
   const playRequestSound = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a');
   const isFirstRequestLoad = useRef(true);
   
   const leaveCurrentRoom = useCallback(async () => {
     if (!firestore || !user || !currentRoom) return;
-    
+
     const memberRef = doc(firestore, 'rooms', currentRoom.id, 'members', user.uid);
     const roomRef = doc(firestore, 'rooms', currentRoom.id);
-    
+    const userRef = doc(firestore, 'users', user.uid);
+
     try {
         const memberDoc = await getDoc(memberRef);
         if (memberDoc.exists()) {
             const batch = writeBatch(firestore);
             batch.delete(memberRef);
-        
-            if (memberDoc.exists() && (memberDoc.data() as UserProfile).micSlot !== -1) {
-                const roomDoc = await getDoc(roomRef);
-                if (roomDoc.exists() && roomDoc.data().memberCount > 0) {
-                  batch.update(roomRef, { memberCount: -1 });
-                }
-            }
+            batch.update(roomRef, { memberCount: increment(-1) });
+            batch.update(userRef, { currentRoomId: null });
             await batch.commit();
         }
     } catch(e) {

@@ -67,8 +67,8 @@ export default function RoomsPage() {
     const unsubPublicRooms = onSnapshot(q, (snapshot) => {
       const allRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
       const myRoomIds = myRooms.map(room => room.id);
-      // Filter out user's own room from the public list to avoid duplication, and rooms with no one in them.
-      const filteredPublicRooms = allRooms.filter(room => !myRoomIds.includes(room.id) && room.memberCount > 0);
+      // Filter out user's own room from the public list
+      const filteredPublicRooms = allRooms.filter(room => !myRoomIds.includes(room.id));
       
       setPublicRooms(filteredPublicRooms);
       setLoading(false);

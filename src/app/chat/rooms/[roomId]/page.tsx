@@ -131,13 +131,14 @@ export default function RoomPage() {
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
 
  const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
-    if (!firestore || !authUser || !currentUserSlot) return;
+    if (!firestore || !authUser || !currentUserSlot || status === 'leaving') return;
 
     setStatus('leaving');
     contextLeaveRoom();
     
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
     const roomRef = doc(firestore, 'rooms', roomId);
+    const userRef = doc(firestore, 'users', authUser.uid);
 
     try {
         const memberDoc = await getDoc(memberRef);
@@ -145,19 +146,21 @@ export default function RoomPage() {
             const batch = writeBatch(firestore);
             batch.delete(memberRef);
 
-            if (!isKickOrDelete && currentUserSlot.micSlot !== SUPER_ADMIN_SLOT) { 
+            // Only decrement count if user is not an owner/super-admin and it's not a room deletion
+            if (!isKickOrDelete && currentUserSlot.micSlot !== SUPER_ADMIN_SLOT && currentUserSlot.micSlot !== OWNER_SLOT) { 
                 const roomDoc = await getDoc(roomRef);
                 if (roomDoc.exists() && roomDoc.data().memberCount > 0) {
                   batch.update(roomRef, { memberCount: increment(-1) });
                 }
             }
+             batch.update(userRef, { currentRoomId: null });
             await batch.commit();
         }
     } catch(e) {
         console.warn("Could not leave room properly, room might be deleted.", e);
     }
-    router.push('/chat');
-  }, [firestore, authUser, roomId, router, contextLeaveRoom, currentUserSlot]);
+    router.push('/chat/rooms');
+  }, [firestore, authUser, roomId, router, contextLeaveRoom, currentUserSlot, status]);
   
   const handleBeforeUnload = useCallback((e: BeforeUnloadEvent) => {
       handleLeaveRoom();
@@ -240,6 +243,7 @@ export default function RoomPage() {
       const userProfile = userProfileDoc.data() as UserProfile;
 
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+      const userRef = doc(firestore, 'users', authUser.uid);
       const memberDoc = await getDoc(memberRef);
       
       let initialMicSlot: number | null = null;
@@ -257,6 +261,7 @@ export default function RoomPage() {
           if (initialMicSlot !== OWNER_SLOT && initialMicSlot !== SUPER_ADMIN_SLOT) {
             batch.update(roomRef, { memberCount: increment(1) });
           }
+           batch.update(userRef, { currentRoomId: roomId });
           
           const notificationMessage = {
               senderId: 'system',

@@ -29,6 +29,7 @@ export type UserProfile = {
   lastColorfulNameRequestAt?: any; // Firestore ServerTimestamp
   isDisabled?: boolean; // New field for disabled status
   activityScore?: number;
+  currentRoomId?: string | null; // To track which room the user is in
 }
 
 export type Message = {
