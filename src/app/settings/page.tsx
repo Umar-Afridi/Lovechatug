@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useTheme } from 'next-themes';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { doc, onSnapshot, updateDoc, arrayRemove, collection, query, where, getDocs, limit } from 'firebase/firestore';
@@ -16,7 +17,7 @@ import type { UserProfile } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { cn } from '@/lib/utils';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { Switch } from '@/components/ui/switch';
 
 
 function BlockedUsersList() {
@@ -124,6 +125,7 @@ export default function SettingsPage() {
     const { toast } = useToast();
     const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
     const [findingHelp, setFindingHelp] = useState(false);
+    const { theme, setTheme } = useTheme();
 
     useEffect(() => {
         if (!user || !firestore) return;
@@ -232,8 +234,11 @@ export default function SettingsPage() {
                             </AccordionTrigger>
                             <AccordionContent>
                                 <div className="p-4 flex justify-between items-center">
-                                    <p className="font-medium">Theme</p>
-                                    <ThemeToggle />
+                                    <p className="font-medium">Dark Mode</p>
+                                     <Switch
+                                        checked={theme === 'dark'}
+                                        onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
+                                     />
                                 </div>
                             </AccordionContent>
                         </AccordionItem>
