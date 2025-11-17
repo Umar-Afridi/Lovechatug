@@ -78,27 +78,35 @@ export function SignupForm() {
         // Step 2: Send verification email IMMEDIATELY after user creation
         await sendEmailVerification(user);
 
-        // Step 3: Create Firestore doc
-        const newUserProfileData = {
+        // Step 3: Create Firestore doc with all default fields
+        const newUserProfileData: UserProfile = {
             uid: user.uid,
             displayName: fullName,
             email: email,
             username: username,
             photoURL: user.photoURL ?? '',
             friends: [],
+            chatIds: [],
             bio: '',
             isOnline: false,
             lastSeen: serverTimestamp(),
             blockedUsers: [],
             blockedBy: [],
+            chatsCleared: {},
             verifiedBadge: {
                 showBadge: false,
                 badgeColor: 'blue'
             },
-            colorfulName: false,
+            officialBadge: {
+                isOfficial: false,
+                badgeColor: 'gold'
+            },
+            canManageOfficials: false,
+            nameColor: 'default',
             verificationApplicationStatus: 'none',
             isDisabled: false,
-        } as Omit<UserProfile, 'officialBadge' | 'lastColorfulNameRequestAt' | 'lastVerificationRequestAt'>;
+            activityScore: 0,
+        };
         
         const userDocRef = doc(firestore, 'users', user.uid);
         

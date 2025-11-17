@@ -52,20 +52,33 @@ export function LoginForm() {
         const docSnap = await getDoc(userDocRef);
 
         if (!docSnap.exists()) {
-             const newUserProfile: Omit<UserProfile, 'officialBadge' | 'lastColorfulNameRequestAt' | 'lastVerificationRequestAt' | 'verificationApplicationStatus' | 'nameColor'> = {
+             const newUserProfile: UserProfile = {
                 uid: user.uid,
                 displayName: user.displayName || 'Anonymous User',
                 email: user.email || '',
                 username: user.email?.split('@')[0] || `user-${Date.now()}`,
                 photoURL: user.photoURL || '',
                 friends: [],
+                chatIds: [],
                 bio: '',
                 isOnline: true,
                 lastSeen: serverTimestamp(),
                 blockedUsers: [],
                 blockedBy: [],
-                verifiedBadge: { showBadge: false, badgeColor: 'blue' },
+                chatsCleared: {},
+                verifiedBadge: {
+                    showBadge: false,
+                    badgeColor: 'blue'
+                },
+                officialBadge: {
+                    isOfficial: false,
+                    badgeColor: 'gold'
+                },
+                canManageOfficials: false,
+                nameColor: 'default',
+                verificationApplicationStatus: 'none',
                 isDisabled: false,
+                activityScore: 0,
             };
             await setDoc(userDocRef, newUserProfile, { merge: true });
         } else {
