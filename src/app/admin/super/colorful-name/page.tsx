@@ -135,6 +135,10 @@ export default function ManageColorfulNamePage() {
         type: 'colorful_name_granted' as const,
         isRead: false,
         createdAt: serverTimestamp(),
+        senderId: currentUserProfile.uid,
+        senderName: currentUserProfile.displayName,
+        senderPhotoURL: currentUserProfile.photoURL,
+        senderOfficialBadge: currentUserProfile.officialBadge,
     };
     await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
   }

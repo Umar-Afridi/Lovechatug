@@ -121,6 +121,10 @@ export default function ManageVerificationPage() {
         type: status === 'approved' ? 'verification_approved' as const : 'verification_rejected' as const,
         isRead: false,
         createdAt: serverTimestamp(),
+        senderId: currentUserProfile.uid,
+        senderName: currentUserProfile.displayName,
+        senderPhotoURL: currentUserProfile.photoURL,
+        senderOfficialBadge: currentUserProfile.officialBadge,
     };
 
     await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);

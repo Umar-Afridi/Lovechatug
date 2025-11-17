@@ -142,4 +142,8 @@ export type Notification = {
   type: 'verification_approved' | 'verification_rejected' | 'colorful_name_granted';
   isRead: boolean;
   createdAt: any; // Firestore ServerTimestamp
+  senderId?: string;
+  senderName?: string;
+  senderPhotoURL?: string;
+  senderOfficialBadge?: UserProfile['officialBadge'];
 };

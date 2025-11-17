@@ -15,23 +15,31 @@ import {
 import { ArrowLeft, BellRing, CheckCheck, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import type { Notification } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { OfficialBadge } from '@/components/ui/official-badge';
+
 
 const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
     switch (type) {
         case 'verification_approved':
         case 'verification_rejected':
-            return <CheckCheck className="h-5 w-5 text-blue-500" />;
+            return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><CheckCheck className="h-4 w-4 text-blue-500" /></div>;
         case 'colorful_name_granted':
-            return <Palette className="h-5 w-5 text-pink-500" />;
+             return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><Palette className="h-4 w-4 text-pink-500" /></div>;
         default:
-            return <BellRing className="h-5 w-5 text-gray-500" />;
+             return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><BellRing className="h-4 w-4 text-gray-500" /></div>;
     }
 }
+
+const getInitials = (name: string | null | undefined) => {
+    if (!name) return 'U';
+    return name.split(' ').map((n) => n[0]).join('');
+};
+
 
 export default function NotificationsPage() {
   const router = useRouter();
@@ -110,9 +118,21 @@ export default function NotificationsPage() {
           <div className="divide-y">
             {notifications.map(n => (
               <div key={n.id} className={cn("p-4 flex items-start gap-4", !n.isRead && "bg-primary/5")}>
-                 <NotificationIcon type={n.type} />
+                 <div className="relative flex-shrink-0">
+                    <Avatar className="h-12 w-12">
+                        <AvatarImage src={n.senderPhotoURL} />
+                        <AvatarFallback>{getInitials(n.senderName)}</AvatarFallback>
+                    </Avatar>
+                     <NotificationIcon type={n.type} />
+                </div>
+
                 <div className="flex-1">
-                  <p className="font-bold">{n.title}</p>
+                   <div className="flex items-center gap-2">
+                        <p className="font-bold">{n.senderName}</p>
+                        {n.senderOfficialBadge?.isOfficial && (
+                            <OfficialBadge color={n.senderOfficialBadge.badgeColor} size="icon" className="h-4 w-4" />
+                        )}
+                   </div>
                   <p className="text-sm text-muted-foreground">{n.message}</p>
                   <p className="text-xs text-muted-foreground/80 mt-1">{formatTimestamp(n.createdAt)}</p>
                 </div>
