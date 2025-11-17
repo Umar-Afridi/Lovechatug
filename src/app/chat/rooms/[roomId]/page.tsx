@@ -131,11 +131,14 @@ export default function RoomPage() {
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
 
  const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
-    if (!firestore || !authUser || !currentUserSlot || status === 'leaving') return;
+    if (!firestore || !authUser || status === 'leaving') return;
 
     setStatus('leaving');
     contextLeaveRoom();
     
+    // We get the current user slot from the state at the moment of leaving
+    const slotAtTimeOfLeave = members.find(m => m.userId === authUser.uid);
+
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
     const roomRef = doc(firestore, 'rooms', roomId);
     const userRef = doc(firestore, 'users', authUser.uid);
@@ -146,21 +149,20 @@ export default function RoomPage() {
             const batch = writeBatch(firestore);
             batch.delete(memberRef);
 
-            // Only decrement count if user is not an owner/super-admin and it's not a room deletion
-            if (!isKickOrDelete && currentUserSlot.micSlot !== SUPER_ADMIN_SLOT && currentUserSlot.micSlot !== OWNER_SLOT) { 
+            if (slotAtTimeOfLeave && !isKickOrDelete && slotAtTimeOfLeave.micSlot !== SUPER_ADMIN_SLOT && slotAtTimeOfLeave.micSlot !== OWNER_SLOT) { 
                 const roomDoc = await getDoc(roomRef);
                 if (roomDoc.exists() && roomDoc.data().memberCount > 0) {
                   batch.update(roomRef, { memberCount: increment(-1) });
                 }
             }
-             batch.update(userRef, { currentRoomId: null });
+            batch.update(userRef, { currentRoomId: null });
             await batch.commit();
         }
     } catch(e) {
         console.warn("Could not leave room properly, room might be deleted.", e);
     }
     router.push('/chat/rooms');
-  }, [firestore, authUser, roomId, router, contextLeaveRoom, currentUserSlot, status]);
+  }, [firestore, authUser, roomId, router, contextLeaveRoom, status, members]);
   
   const handleBeforeUnload = useCallback((e: BeforeUnloadEvent) => {
       handleLeaveRoom();
@@ -175,6 +177,7 @@ export default function RoomPage() {
     if (!firestore || !roomId || !authUser) return;
     
     setJoinTimestamp(Timestamp.now());
+    setStatus('joined'); // Immediately transition to joined state to show UI
 
     const roomRef = doc(firestore, 'rooms', roomId);
     const unsubRoom = onSnapshot(roomRef, (docSnap) => {
@@ -182,10 +185,19 @@ export default function RoomPage() {
         const roomData = { id: docSnap.id, ...docSnap.data() } as Room;
         setRoom(roomData);
         setCurrentRoom(roomData);
+        
+        // Post-join validation
+        if (roomData.isLocked && roomData.ownerId !== authUser.uid) {
+          toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
+          handleLeaveRoom();
+          return;
+        }
         if (roomData.kickedUsers && roomData.kickedUsers[authUser.uid]) {
             toast({ title: "You've been kicked", description: "You have been removed from this room by the owner.", variant: 'destructive'});
-            router.push('/chat/rooms');
+            handleLeaveRoom();
+            return;
         }
+
       } else {
         toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
         contextLeaveRoom();
@@ -223,21 +235,8 @@ export default function RoomPage() {
         }
     });
     
-    const joinRoom = async () => {
-      const roomDoc = await getDoc(roomRef);
-      if (!roomDoc.exists()) {
-          toast({ title: 'Room not found', description: 'This room may have been deleted.', variant: 'destructive' });
-          router.push('/chat');
-          return;
-      }
-      const currentRoomData = roomDoc.data() as Room;
-
-      if (currentRoomData.isLocked && currentRoomData.ownerId !== authUser.uid) {
-          toast({ title: "Room is Locked", description: "This room is currently locked by the owner.", variant: "destructive" });
-          router.push('/chat/rooms');
-          return;
-      }
-      
+    // Asynchronous logic to add the user to the room members
+    const joinRoomBackend = async () => {
       const userProfileDoc = await getDoc(doc(firestore, 'users', authUser.uid));
       if (!userProfileDoc.exists()) return;
       const userProfile = userProfileDoc.data() as UserProfile;
@@ -247,7 +246,7 @@ export default function RoomPage() {
       const memberDoc = await getDoc(memberRef);
       
       let initialMicSlot: number | null = null;
-      if (currentRoomData.ownerId === authUser.uid) {
+      if (room?.ownerId === authUser.uid) { // use state `room` which is now available
           initialMicSlot = OWNER_SLOT;
       } else if (userProfile?.officialBadge?.isOfficial) {
           initialMicSlot = SUPER_ADMIN_SLOT;
@@ -276,7 +275,7 @@ export default function RoomPage() {
           await batch.commit();
       } else {
           const currentMemberData = memberDoc.data() as RoomMember;
-           if (currentRoomData.ownerId === authUser.uid) {
+           if (room?.ownerId === authUser.uid) {
               if (currentMemberData.micSlot !== OWNER_SLOT) {
                 await updateDoc(memberRef, { micSlot: OWNER_SLOT, isMuted: true });
               }
@@ -286,10 +285,9 @@ export default function RoomPage() {
               }
           }
       }
-      setStatus('joined');
     };
     
-    joinRoom();
+    joinRoomBackend();
 
     return () => {
       unsubRoom();
@@ -416,7 +414,7 @@ export default function RoomPage() {
       await updateDoc(memberRef, { micSlot: null });
   }
 
-  if (status !== 'joined' || !room || !authUser || !currentUserSlot) {
+  if (status !== 'joined' || !room || !authUser) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <p>{status === 'leaving' ? 'Leaving room...' : 'Joining room...'}</p>
