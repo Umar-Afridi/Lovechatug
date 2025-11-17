@@ -100,10 +100,13 @@ export default function ManageColorfulNamePage() {
     const q = query(usersRef);
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const usersList = snapshot.docs
-        .map((d) => d.data() as UserProfile)
-        // Exclude other official users, but keep self in the list
-        .filter(u => u.uid === authUser.uid || !u.officialBadge?.isOfficial);
+      let usersList = snapshot.docs.map((d) => d.data() as UserProfile);
+
+      // If the current admin CANNOT manage officials, filter other officials out.
+      if (!currentUserProfile.canManageOfficials) {
+        usersList = usersList.filter(u => u.uid === authUser.uid || !u.officialBadge?.isOfficial);
+      }
+      
       setAllUsers(usersList);
       setLoading(false);
     }, (error) => {
@@ -112,7 +115,7 @@ export default function ManageColorfulNamePage() {
     });
 
     return () => unsubscribe();
-  }, [currentUserProfile?.officialBadge?.isOfficial, firestore, authUser]);
+  }, [currentUserProfile, firestore, authUser]);
 
   const filteredUsers = useMemo(() => {
     if (!searchQuery) return []; // Don't show any users if search is empty
