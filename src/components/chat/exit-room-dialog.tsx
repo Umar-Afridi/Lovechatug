@@ -20,6 +20,9 @@ export function ExitRoomDialog({ isOpen, onOpenChange, onLeave, onMinimize }: Ex
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xs p-0 gap-0">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Exit Room Options</DialogTitle>
+        </DialogHeader>
         <div className="flex flex-col">
             <Button
                 variant="ghost"
