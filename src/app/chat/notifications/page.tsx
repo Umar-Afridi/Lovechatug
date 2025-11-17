@@ -12,7 +12,7 @@ import {
   writeBatch,
   doc,
 } from 'firebase/firestore';
-import { ArrowLeft, BellRing, CheckCheck, Palette, ShieldOff, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, BellRing, CheckCheck, Palette, Shield, ShieldOff, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
@@ -56,6 +56,10 @@ const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
              return <div className="bg-destructive rounded-full p-1"><Palette className="h-4 w-4 text-white" /></div>;
         case 'warning':
              return <div className="bg-yellow-500 rounded-full p-1"><AlertTriangle className="h-4 w-4 text-white" /></div>;
+        case 'official_badge_granted':
+             return <div className="bg-purple-500 rounded-full p-1"><Shield className="h-4 w-4 text-white" /></div>;
+        case 'official_badge_removed':
+             return <div className="bg-destructive rounded-full p-1"><ShieldOff className="h-4 w-4 text-white" /></div>;
         default:
              return <div className="bg-gray-500 rounded-full p-1"><BellRing className="h-4 w-4 text-white" /></div>;
     }

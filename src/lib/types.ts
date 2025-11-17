@@ -140,7 +140,7 @@ export type Notification = {
   userId: string;
   title: string;
   message: string;
-  type: 'verification_approved' | 'verification_rejected' | 'colorful_name_granted' | 'verified_badge_removed' | 'colorful_name_removed' | 'warning';
+  type: 'verification_approved' | 'verification_rejected' | 'colorful_name_granted' | 'verified_badge_removed' | 'colorful_name_removed' | 'warning' | 'official_badge_granted' | 'official_badge_removed';
   isRead: boolean;
   createdAt: any; // Firestore ServerTimestamp
   senderId?: string;
