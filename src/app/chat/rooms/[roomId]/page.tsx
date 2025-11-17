@@ -170,17 +170,17 @@ export default function RoomPage() {
   }, [router]);
   
   // Effect for joining the room and setting up the room listener
-  useEffect(() => {
+ useEffect(() => {
     if (!firestore || !roomId || !authUser?.uid) return;
-
+    
     let unsubRoom: (() => void) | undefined;
-
-    const joinAndListenRoom = async () => {
+    
+    const joinAndListen = async () => {
+        setStatus('joining');
         try {
             const roomRef = doc(firestore, 'rooms', roomId);
             const userRef = doc(firestore, 'users', authUser.uid);
-            const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-
+            
             const roomSnap = await getDoc(roomRef);
             if (!roomSnap.exists()) {
                 toast({ title: 'Room not found', variant: 'destructive' });
@@ -189,29 +189,38 @@ export default function RoomPage() {
                 return;
             }
 
-            const roomData = { id: roomSnap.id, ...roomSnap.data() } as Room;
-            const isRoomOwner = roomData.ownerId === authUser.uid;
-
-            const memberSnap = await getDoc(memberRef);
-            if (!memberSnap.exists()) {
-                const batch = writeBatch(firestore);
-                const memberData: RoomMember = {
-                    userId: authUser.uid,
-                    micSlot: isRoomOwner ? OWNER_SLOT : null,
-                    isMuted: true,
-                };
-                batch.set(memberRef, memberData);
-                batch.update(userRef, { currentRoomId: roomId });
-                if (!isRoomOwner) {
-                     batch.update(roomRef, { memberCount: increment(1) });
-                }
-                await batch.commit();
-            } else {
-                 await updateDoc(userRef, { currentRoomId: roomId });
+            // Check if kicked
+            const currentRoomData = roomSnap.data() as Room;
+            if (currentRoomData.kickedUsers && currentRoomData.kickedUsers[authUser.uid]) {
+                 toast({ title: "Cannot Join", description: "You have been kicked from this room.", variant: "destructive" });
+                 router.push('/chat/rooms');
+                 return;
             }
             
-            setJoinTimestamp(Timestamp.now());
+            setRoom({ id: roomSnap.id, ...currentRoomData } as Room);
+            setCurrentRoom({ id: roomSnap.id, ...currentRoomData } as Room);
 
+            // Join the room as a member
+            const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+            const memberSnap = await getDoc(memberRef);
+
+            if (!memberSnap.exists()) {
+                const isRoomOwner = currentRoomData.ownerId === authUser.uid;
+                await setDoc(memberRef, { 
+                  userId: authUser.uid, 
+                  micSlot: isRoomOwner ? OWNER_SLOT : null, 
+                  isMuted: true 
+                }, { merge: true });
+                if (!isRoomOwner) {
+                  await updateDoc(roomRef, { memberCount: increment(1) });
+                }
+            }
+
+            await updateDoc(userRef, { currentRoomId: roomId });
+            setJoinTimestamp(Timestamp.now());
+            setStatus('joined');
+
+            // Set up room listener after joining
             unsubRoom = onSnapshot(roomRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const updatedRoomData = { id: docSnap.id, ...docSnap.data() } as Room;
@@ -226,33 +235,29 @@ export default function RoomPage() {
                     contextLeaveRoom();
                     router.push('/chat/rooms');
                 }
-            }, (error) => {
-                console.error("Room listener error:", error);
-                setStatus('error');
             });
-            setStatus('joined');
 
         } catch (error) {
             console.error("Error joining room:", error);
             toast({ title: 'Error joining room', variant: 'destructive' });
             setStatus('error');
-            router.push('/chat/rooms');
         }
     };
-
-    joinAndListenRoom();
+    
+    joinAndListen();
 
     return () => {
         if (unsubRoom) unsubRoom();
     };
-  }, [roomId, authUser?.uid, firestore]);
+
+}, [roomId, authUser?.uid, firestore]);
 
   // Effect for members listener
   useEffect(() => {
     if (status !== 'joined' || !firestore || !roomId) return;
 
     const membersQuery = query(collection(firestore, 'rooms', roomId, 'members'));
-    const unsubMembers = onSnapshot(membersQuery, (snapshot) => {
+    const unsubMembers = onSnapshot(membersQuery, async (snapshot) => {
         const membersList = snapshot.docs.map(d => d.data() as RoomMember);
         setMembers(membersList);
 
@@ -262,20 +267,16 @@ export default function RoomPage() {
         if (newMemberIds.length > 0) {
             const profilesRef = collection(firestore, 'users');
             const newProfiles: Record<string, UserProfile> = {};
-            const fetchPromises = [];
-
-            for (let i = 0; i < newMemberIds.length; i += 30) {
-                const chunk = newMemberIds.slice(i, i + 30);
-                const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
-                fetchPromises.push(getDocs(profilesQuery));
+            const chunks = [];
+             for (let i = 0; i < newMemberIds.length; i += 30) {
+                chunks.push(newMemberIds.slice(i, i + 30));
             }
-            
-            Promise.all(fetchPromises).then(snapshots => {
-                snapshots.forEach(profilesSnapshot => {
-                    profilesSnapshot.forEach(doc => newProfiles[doc.id] = doc.data() as UserProfile);
-                });
-                setMemberProfiles(prev => ({...prev, ...newProfiles}));
-            });
+             for (const chunk of chunks) {
+                const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
+                const profilesSnapshot = await getDocs(profilesQuery);
+                profilesSnapshot.forEach(doc => newProfiles[doc.id] = doc.data() as UserProfile);
+            }
+            setMemberProfiles(prev => ({...prev, ...newProfiles}));
         }
     }, (error) => {
         console.error("Members listener error:", error);
