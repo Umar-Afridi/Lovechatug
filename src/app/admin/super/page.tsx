@@ -4,9 +4,29 @@ import Link from 'next/link';
 import { UserCog, CheckCheck, Sparkles, Activity, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useUser } from '@/firebase/auth/use-user';
+import { useFirestore } from '@/firebase/provider';
+import { doc, onSnapshot } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import type { UserProfile } from '@/lib/types';
+
 
 export default function SuperAdminHubPage() {
   const baseButtonClassName = "w-full text-base py-8 justify-center rounded-lg border-b-4 active:translate-y-1 active:border-b-0 transition-all duration-150 ease-in-out";
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    if (!user || !firestore) return;
+    const unsub = onSnapshot(doc(firestore, 'users', user.uid), (doc) => {
+        if (doc.exists()) {
+            setProfile(doc.data() as UserProfile);
+        }
+    });
+    return () => unsub();
+  }, [user, firestore]);
+
   return (
     <div className="p-4 md:p-8 flex-1 flex flex-col">
       <div className="w-full max-w-md space-y-6 mx-auto">
@@ -28,12 +48,14 @@ export default function SuperAdminHubPage() {
             Manage Colorful Names
           </Link>
         </Button>
-         <Button asChild variant="outline" className={cn(baseButtonClassName, "border-purple-600 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-900/20")}>
-          <Link href="/admin/super/manage-officials">
-            <Shield className="mr-4 h-6 w-6 text-purple-500" />
-            Manage Officials
-          </Link>
-        </Button>
+         {profile?.canManageOfficials && (
+            <Button asChild variant="outline" className={cn(baseButtonClassName, "border-purple-600 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-900/20")}>
+              <Link href="/admin/super/manage-officials">
+                <Shield className="mr-4 h-6 w-6 text-purple-500" />
+                Manage Officials
+              </Link>
+            </Button>
+         )}
          <Button asChild variant="outline" className={cn(baseButtonClassName, "border-amber-600 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/20")}>
           <Link href="/admin/super/active-users">
             <Activity className="mr-4 h-6 w-6 text-amber-500" />

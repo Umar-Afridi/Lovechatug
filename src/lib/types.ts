@@ -22,6 +22,7 @@ export type UserProfile = {
     isOfficial: boolean;
     badgeColor: 'blue' | 'gold' | 'green' | 'red' | 'pink';
   }
+  canManageOfficials?: boolean; // New permission flag
   nameColor?: 'default' | 'gradient' | 'green' | 'yellow' | 'pink' | 'purple' | 'red';
   verificationApplicationStatus?: 'none' | 'pending' | 'approved' | 'rejected';
   lastVerificationRequestAt?: any; // Firestore ServerTimestamp

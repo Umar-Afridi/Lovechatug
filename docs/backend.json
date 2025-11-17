@@ -99,6 +99,10 @@
             }
           }
         },
+        "canManageOfficials": {
+          "type": "boolean",
+          "description": "Whether the user has permission to manage other official users."
+        },
         "nameColor": {
           "type": "string",
           "enum": ["default", "gradient", "green", "yellow", "pink", "purple", "red"],

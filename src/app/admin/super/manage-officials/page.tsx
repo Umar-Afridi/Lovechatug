@@ -88,7 +88,8 @@ export default function ManageOfficialsPage() {
       if (docSnap.exists()) {
         const profile = docSnap.data() as UserProfile;
         setCurrentUserProfile(profile);
-        if (!profile.officialBadge?.isOfficial) {
+        // User must be an official AND have the explicit permission to manage others.
+        if (!profile.officialBadge?.isOfficial || !profile.canManageOfficials) {
           router.push('/chat');
         }
       } else {
@@ -102,7 +103,7 @@ export default function ManageOfficialsPage() {
 
   // Fetch all users
   useEffect(() => {
-    if (!currentUserProfile?.officialBadge?.isOfficial || !firestore || !authUser) return;
+    if (!currentUserProfile?.canManageOfficials || !firestore || !authUser) return;
 
     const usersRef = collection(firestore, 'users');
     const q = query(usersRef);
@@ -119,7 +120,7 @@ export default function ManageOfficialsPage() {
     });
 
     return () => unsubscribe();
-  }, [currentUserProfile?.officialBadge?.isOfficial, firestore, authUser]);
+  }, [currentUserProfile?.canManageOfficials, firestore, authUser]);
 
   const filteredUsers = useMemo(() => {
     if (!searchQuery) return []; 
@@ -136,10 +137,10 @@ export default function ManageOfficialsPage() {
     let notifType: Notification['type'];
 
     if (type === 'granted') {
-      message = `Congratulations! You have been promoted to an Official user by ${currentUserProfile.displayName}. Please use your new status to help and guide the community.`;
+      message = "Congratulations! You have been promoted to an Official user. Please use your new status to help and guide the community.";
       notifType = 'official_badge_granted';
     } else {
-      message = `Your Official user status has been revoked by ${currentUserProfile.displayName} because it was not used in the intended way. We are sorry for this action.`;
+      message = "Your Official user status has been revoked as it was not used in the intended way. We are sorry for this action.";
       notifType = 'official_badge_removed';
     }
 
@@ -155,7 +156,11 @@ export default function ManageOfficialsPage() {
         senderPhotoURL: SYSTEM_SENDER_PHOTO_URL,
     };
 
-    await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
+    try {
+        await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
+    } catch(e) {
+        console.error("Failed to send notification: ", e);
+    }
   };
 
   const handleUpdateOfficialStatus = async (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => {
@@ -193,7 +198,7 @@ export default function ManageOfficialsPage() {
 
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
 
-  if (loading || !currentUserProfile?.officialBadge?.isOfficial) {
+  if (loading || !currentUserProfile?.canManageOfficials) {
     return (
       <div className="flex h-full items-center justify-center">
         <p>Loading Official Management Panel...</p>
