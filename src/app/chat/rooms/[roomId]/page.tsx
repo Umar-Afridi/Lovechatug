@@ -133,11 +133,11 @@ export default function RoomPage() {
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
   const isMuted = useMemo(() => currentUserSlot?.isMuted ?? false, [currentUserSlot]);
 
- const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
+  const handleLeaveRoom = useCallback(async (isKickOrDelete = false) => {
     if (!firestore || !authUser || status === 'leaving') return;
 
     setStatus('leaving');
-    contextLeaveRoom(); // This will clear the floating indicator immediately
+    contextLeaveRoom(); 
 
     const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
     const roomRef = doc(firestore, 'rooms', roomId);
@@ -149,8 +149,6 @@ export default function RoomPage() {
             const batch = writeBatch(firestore);
             batch.delete(memberRef);
             
-            // Only decrement memberCount if the user was a regular member (not owner/superadmin)
-            // and the room isn't being deleted.
             if (memberDoc.data().micSlot > 0 && !isKickOrDelete) { 
                 const roomDoc = await getDoc(roomRef);
                 if (roomDoc.exists() && roomDoc.data().memberCount > 0) {
@@ -167,114 +165,124 @@ export default function RoomPage() {
     router.push('/chat/rooms');
   }, [firestore, authUser, roomId, router, contextLeaveRoom, status]);
   
-  const handleMinimizeRoom = () => {
+  const handleMinimizeRoom = useCallback(() => {
     router.push('/chat/rooms');
-  };
-
-  // Main Effect for Joining and Listening to Room/Members
-  useEffect(() => {
+  }, [router]);
+  
+  const joinRoomAndSetupListeners = useCallback(async () => {
     if (!firestore || !roomId || !authUser?.uid) return;
 
     let unsubRoom: (() => void) | undefined;
     let unsubMembers: (() => void) | undefined;
-    
-    const setupListeners = async () => {
-        try {
-            // --- Step 1: Join the room and set user status ---
-            const roomRef = doc(firestore, 'rooms', roomId);
-            const userRef = doc(firestore, 'users', authUser.uid);
-            const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
 
-            const roomSnap = await getDoc(roomRef);
-            if (!roomSnap.exists()) {
-                toast({ title: 'Room not found', variant: 'destructive' });
-                setStatus('error');
-                router.push('/chat/rooms');
-                return;
-            }
-            
-            const roomData = { id: roomSnap.id, ...roomSnap.data() } as Room;
-            const isRoomOwner = roomData.ownerId === authUser.uid;
+    try {
+        const roomRef = doc(firestore, 'rooms', roomId);
+        const userRef = doc(firestore, 'users', authUser.uid);
+        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
 
-            const memberSnap = await getDoc(memberRef);
-            if (!memberSnap.exists()) {
-                const batch = writeBatch(firestore);
-                const memberData: RoomMember = {
-                    userId: authUser.uid,
-                    micSlot: isRoomOwner ? OWNER_SLOT : null,
-                    isMuted: true,
-                };
-                batch.set(memberRef, memberData);
-                batch.update(userRef, { currentRoomId: roomId });
-                if (!isRoomOwner) {
-                     batch.update(roomRef, { memberCount: increment(1) });
-                }
-                await batch.commit();
-            } else {
-                 await updateDoc(userRef, { currentRoomId: roomId });
-            }
-
-            setJoinTimestamp(Timestamp.now());
-
-            // --- Step 2: Set up listeners ---
-            unsubRoom = onSnapshot(roomRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const updatedRoomData = { id: docSnap.id, ...docSnap.data() } as Room;
-                    setRoom(updatedRoomData);
-                    setCurrentRoom(updatedRoomData);
-                    if (updatedRoomData.kickedUsers && updatedRoomData.kickedUsers[authUser.uid]) {
-                        toast({ title: "You've been kicked", variant: 'destructive'});
-                        handleLeaveRoom(true);
-                    }
-                } else {
-                    toast({ title: 'Room deleted', variant: 'destructive' });
-                    contextLeaveRoom();
-                    router.push('/chat/rooms');
-                }
-            }, (error) => {
-                console.error("Room listener error:", error);
-                setStatus('error');
-            });
-
-            unsubMembers = onSnapshot(query(collection(firestore, 'rooms', roomId, 'members')), async (snapshot) => {
-                const membersList = snapshot.docs.map(d => d.data() as RoomMember);
-                setMembers(membersList);
-                
-                const newMemberIds = membersList.map(m => m.userId).filter(id => !memberProfiles[id]);
-                if (newMemberIds.length > 0) {
-                    const profilesRef = collection(firestore, 'users');
-                    const newProfiles: Record<string, UserProfile> = {};
-                    for (let i = 0; i < newMemberIds.length; i += 30) {
-                        const chunk = newMemberIds.slice(i, i + 30);
-                        const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
-                        const profilesSnapshot = await getDocs(profilesQuery);
-                        profilesSnapshot.forEach(doc => newProfiles[doc.id] = doc.data() as UserProfile);
-                    }
-                    setMemberProfiles(prev => ({...prev, ...newProfiles}));
-                }
-                setStatus('joined');
-            }, (error) => {
-                console.error("Members listener error:", error);
-                setStatus('error');
-            });
-        } catch (error) {
-            console.error("Error joining room and setting up listeners:", error);
-            toast({ title: 'Error joining room', variant: 'destructive' });
+        const roomSnap = await getDoc(roomRef);
+        if (!roomSnap.exists()) {
+            toast({ title: 'Room not found', variant: 'destructive' });
             setStatus('error');
             router.push('/chat/rooms');
+            return { unsubRoom: undefined, unsubMembers: undefined };
         }
-    };
+        
+        const roomData = { id: roomSnap.id, ...roomSnap.data() } as Room;
+        const isRoomOwner = roomData.ownerId === authUser.uid;
 
-    setupListeners();
+        const memberSnap = await getDoc(memberRef);
+        if (!memberSnap.exists()) {
+            const batch = writeBatch(firestore);
+            const memberData: RoomMember = {
+                userId: authUser.uid,
+                micSlot: isRoomOwner ? OWNER_SLOT : null,
+                isMuted: true,
+            };
+            batch.set(memberRef, memberData);
+            batch.update(userRef, { currentRoomId: roomId });
+            if (!isRoomOwner) {
+                 batch.update(roomRef, { memberCount: increment(1) });
+            }
+            await batch.commit();
+        } else {
+             await updateDoc(userRef, { currentRoomId: roomId });
+        }
 
-    return () => {
-      if (unsubRoom) unsubRoom();
-      if (unsubMembers) unsubMembers();
-    };
-  // NOTE: This dependency array is intentionally minimal.
-  // Adding more dependencies like `memberProfiles` would cause infinite loops.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, roomId, authUser?.uid]);
+        setJoinTimestamp(Timestamp.now());
+
+        unsubRoom = onSnapshot(roomRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const updatedRoomData = { id: docSnap.id, ...docSnap.data() } as Room;
+                setRoom(updatedRoomData);
+                setCurrentRoom(updatedRoomData);
+                if (updatedRoomData.kickedUsers && updatedRoomData.kickedUsers[authUser.uid]) {
+                    toast({ title: "You've been kicked", variant: 'destructive'});
+                    handleLeaveRoom(true);
+                }
+            } else {
+                toast({ title: 'Room deleted', variant: 'destructive' });
+                contextLeaveRoom();
+                router.push('/chat/rooms');
+            }
+        }, (error) => {
+            console.error("Room listener error:", error);
+            setStatus('error');
+        });
+
+        unsubMembers = onSnapshot(query(collection(firestore, 'rooms', roomId, 'members')), (snapshot) => {
+            const membersList = snapshot.docs.map(d => d.data() as RoomMember);
+            setMembers(membersList);
+            
+            const newMemberIds = membersList.map(m => m.userId).filter(id => !memberProfiles[id]);
+            if (newMemberIds.length > 0) {
+                const profilesRef = collection(firestore, 'users');
+                const newProfiles: Record<string, UserProfile> = {};
+                const fetchPromises = [];
+
+                for (let i = 0; i < newMemberIds.length; i += 30) {
+                    const chunk = newMemberIds.slice(i, i + 30);
+                    const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
+                    fetchPromises.push(getDocs(profilesQuery));
+                }
+                
+                Promise.all(fetchPromises).then(snapshots => {
+                    snapshots.forEach(profilesSnapshot => {
+                        profilesSnapshot.forEach(doc => newProfiles[doc.id] = doc.data() as UserProfile);
+                    });
+                    setMemberProfiles(prev => ({...prev, ...newProfiles}));
+                });
+            }
+            setStatus('joined');
+        }, (error) => {
+            console.error("Members listener error:", error);
+            setStatus('error');
+        });
+
+        return { unsubRoom, unsubMembers };
+
+    } catch (error) {
+        console.error("Error joining room and setting up listeners:", error);
+        toast({ title: 'Error joining room', variant: 'destructive' });
+        setStatus('error');
+        router.push('/chat/rooms');
+        return { unsubRoom: undefined, unsubMembers: undefined };
+    }
+  }, [firestore, roomId, authUser?.uid, router, toast, setCurrentRoom, contextLeaveRoom, handleLeaveRoom, memberProfiles]);
+
+
+  useEffect(() => {
+      let unsub: { unsubRoom?: () => void; unsubMembers?: () => void; };
+      const setup = async () => {
+          unsub = await joinRoomAndSetupListeners();
+      }
+      setup();
+
+      return () => {
+          if (unsub?.unsubRoom) unsub.unsubRoom();
+          if (unsub?.unsubMembers) unsub.unsubMembers();
+      };
+  }, [joinRoomAndSetupListeners]);
 
 
   useEffect(() => {
@@ -311,7 +319,6 @@ export default function RoomPage() {
     try {
         await deleteDoc(doc(firestore, 'rooms', room.id));
         toast({ title: 'Room Deleted', description: 'The room has been successfully deleted.' });
-        // No need to call leave room as listeners will handle cleanup
     } catch(e) {
         console.error("Error deleting room", e);
         toast({ title: 'Error', description: 'Failed to delete the room.', variant: 'destructive' });
@@ -451,6 +458,8 @@ export default function RoomPage() {
                             </>
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
+                        ) : isOwnerSlot ? (
+                            <span className="text-sm font-bold text-muted-foreground">UMAR</span>
                         ) : (
                            <Mic className="text-muted-foreground h-8 w-8"/>
                         )}
@@ -469,10 +478,8 @@ export default function RoomPage() {
                                 <VerifiedBadge color={profile.verifiedBadge.badgeColor} className="h-4 w-4"/>
                             )}
                         </div>
-                    ) : isOwnerSlot ? (
-                       <p className="text-sm font-semibold text-muted-foreground">Umar</p>
                     ) : (
-                         !isLocked && <p className="text-sm text-muted-foreground">{slotNumber}</p>
+                         !isLocked && !isOwnerSlot && <p className="text-sm text-muted-foreground">{slotNumber}</p>
                     )}
                 </div>
             </div>
@@ -480,8 +487,8 @@ export default function RoomPage() {
         
         return (
             <DropdownMenu key={slotNumber}>
-                <DropdownMenuTrigger asChild disabled={isOwnerSlot}>
-                    <div className={cn("cursor-pointer", (isOwnerSlot) && "cursor-default")}>{content}</div>
+                <DropdownMenuTrigger asChild disabled={isOwnerSlot && !memberInSlot}>
+                    <div className={cn("cursor-pointer", (isOwnerSlot && !memberInSlot) && "cursor-default")}>{content}</div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                     {memberInSlot && (
