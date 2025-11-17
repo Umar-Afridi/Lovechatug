@@ -50,7 +50,7 @@ export function OfficialBadge({ color, size, className }: OfficialBadgeProps) {
       >
         <span className={cn('text-sm font-bold', colorClass)}>V</span>
       </div>
-      {size !== 'icon' && <span>Official</span>}
+      {size !== 'icon' && <span>Owner</span>}
     </div>
   );
 }
