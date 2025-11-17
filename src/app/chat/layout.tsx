@@ -466,19 +466,13 @@ function ChatAppLayout({
   const isFirstRequestLoad = useRef(true);
   
   const leaveCurrentRoom = useCallback(async () => {
-    // This function can be called from anywhere, so we get the currentRoomId from the user's profile
-    // to ensure we're acting on the correct data, even if the local state is stale.
     if (!firestore || !user) return;
     
-    // Optimistically update UI
-    setCurrentRoom(null);
-
     const userRef = doc(firestore, 'users', user.uid);
     const userSnap = await getDoc(userRef);
     const userProfile = userSnap.data() as UserProfile;
 
     if (!userProfile?.currentRoomId) {
-        // No room to leave, just ensure state is clear.
         setCurrentRoom(null);
         return;
     }
@@ -504,6 +498,8 @@ function ChatAppLayout({
     } catch(e) {
         console.warn("Could not leave room properly", e);
     }
+    // This will clear the floating indicator
+    setCurrentRoom(null);
   }, [firestore, user]);
 
 

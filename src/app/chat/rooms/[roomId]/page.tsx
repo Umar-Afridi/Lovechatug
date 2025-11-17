@@ -44,6 +44,8 @@ import {
   Inbox,
   Settings,
   UserPlus,
+  ArrowDownToLine,
+  LogOut,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -75,6 +77,7 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { RoomSettingsSheet } from '@/components/chat/room-settings-sheet';
 import { InviteFriendsSheet } from '@/components/chat/invite-friends-sheet';
+import { ExitRoomDialog } from '@/components/chat/exit-room-dialog';
 
 
 const MIC_SLOTS = 8;
@@ -124,7 +127,7 @@ export default function RoomPage() {
   const [status, setStatus] = useState<'joining' | 'joined' | 'leaving'>('joining');
 
 
-  const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick' | null, targetMember?: RoomMember | null }>({ isOpen: false, action: null });
+  const [dialogState, setDialogState] = useState<{ isOpen: boolean, action: 'delete' | 'leave' | 'kick' | 'exit' | null, targetMember?: RoomMember | null }>({ isOpen: false, action: null });
   
   const isOwner = useMemo(() => room?.ownerId === authUser?.uid, [room, authUser]);
   const currentUserSlot = useMemo(() => members.find(m => m.userId === authUser?.uid), [members, authUser]);
@@ -163,6 +166,10 @@ export default function RoomPage() {
     router.push('/chat/rooms');
   }, [firestore, authUser, roomId, router, contextLeaveRoom, status, members]);
   
+  const handleMinimizeRoom = () => {
+    router.push('/chat/rooms');
+  };
+
   const handleBeforeUnload = useCallback((e: BeforeUnloadEvent) => {
       handleLeaveRoom();
   }, [handleLeaveRoom]);
@@ -620,7 +627,7 @@ export default function RoomPage() {
         onOpenChange={setInviteSheetOpen}
         room={room}
       />
-      <AlertDialog open={dialogState.isOpen} onOpenChange={(isOpen) => !isOpen && setDialogState({ isOpen: false, action: null })}>
+      <AlertDialog open={dialogState.isOpen && dialogState.action !== 'exit'} onOpenChange={(isOpen) => !isOpen && setDialogState({ isOpen: false, action: null })}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -635,7 +642,6 @@ export default function RoomPage() {
             <AlertDialogAction 
               onClick={() => {
                 if (dialogState.action === 'delete') handleDeleteRoom();
-                else if (dialogState.action === 'leave') handleLeaveRoom();
                 else if (dialogState.action === 'kick') handleKickUser(dialogState.targetMember);
                 setDialogState({ isOpen: false, action: null, targetMember: null });
               }}
@@ -645,6 +651,19 @@ export default function RoomPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ExitRoomDialog
+        isOpen={dialogState.isOpen && dialogState.action === 'exit'}
+        onOpenChange={(isOpen) => !isOpen && setDialogState({ isOpen: false, action: null })}
+        onLeave={() => {
+          handleLeaveRoom();
+          setDialogState({ isOpen: false, action: null });
+        }}
+        onMinimize={() => {
+          handleMinimizeRoom();
+          setDialogState({ isOpen: false, action: null });
+        }}
+      />
 
       <div className={cn("flex h-screen flex-col", themeClass)} style={themeStyle}>
         <header className="flex shrink-0 items-center justify-between gap-4 border-b p-3 bg-background shadow-sm">
@@ -667,8 +686,8 @@ export default function RoomPage() {
                     <Settings className="h-5 w-5" />
                 </Button>
             )}
-            <Button variant="destructive" size="sm" onClick={() => setDialogState({isOpen: true, action: 'leave'})}>
-              <PhoneOff className="mr-2 h-4 w-4" /> Leave
+            <Button variant="destructive" size="sm" onClick={() => setDialogState({isOpen: true, action: 'exit'})}>
+              <LogOut className="mr-2 h-4 w-4" /> Exit
             </Button>
           </div>
         </header>
