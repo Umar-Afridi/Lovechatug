@@ -448,7 +448,7 @@ export default function RoomPage() {
         const isOwnerSlot = slotNumber === OWNER_SLOT;
         const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
         
-        const canTakeSeat = !memberInSlot && !isLocked && currentUserSlot?.micSlot === null && !isOwner && !isSuperAdminSlot;
+        const canTakeSeat = !memberInSlot && !isLocked && currentUserSlot?.micSlot === null && !isOwner && !(currentUserSlot?.micSlot === SUPER_ADMIN_SLOT);
 
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1 w-20 md:w-24">
@@ -529,7 +529,7 @@ export default function RoomPage() {
                         </>
                     )}
                     
-                   {isOwner && !memberInSlot && (
+                   {isOwner && !memberInSlot && !isOwnerSlot && !isSuperAdminSlot && (
                        <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                             {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                             {isLocked ? 'Unlock Mic' : 'Lock Mic'}
@@ -542,7 +542,7 @@ export default function RoomPage() {
                         </DropdownMenuItem>
                     )}
                     
-                    {isSelf && currentUserSlot?.micSlot !== null && (
+                    {isSelf && currentUserSlot?.micSlot !== null && !isOwnerSlot && !isSuperAdminSlot && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
                          </DropdownMenuItem>
