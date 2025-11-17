@@ -126,6 +126,11 @@ export default function SettingsPage() {
     const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
     const [findingHelp, setFindingHelp] = useState(false);
     const { theme, setTheme } = useTheme();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     useEffect(() => {
         if (!user || !firestore) return;
@@ -210,10 +215,12 @@ export default function SettingsPage() {
                                 <Palette className="h-5 w-5" />
                                 <span className="text-base font-medium">Dark Mode</span>
                             </div>
-                            <Switch
-                                checked={theme === 'dark'}
-                                onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
-                            />
+                            {mounted && (
+                                <Switch
+                                    checked={theme === 'dark'}
+                                    onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
+                                />
+                            )}
                         </div>
                      </div>
                      <Accordion type="single" collapsible defaultValue="item-1" className="w-full">
