@@ -12,7 +12,7 @@ import {
   writeBatch,
   doc,
 } from 'firebase/firestore';
-import { ArrowLeft, BellRing, CheckCheck, Palette } from 'lucide-react';
+import { ArrowLeft, BellRing, CheckCheck, Palette, ShieldOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
@@ -30,6 +30,10 @@ const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
             return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><CheckCheck className="h-4 w-4 text-blue-500" /></div>;
         case 'colorful_name_granted':
              return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><Palette className="h-4 w-4 text-pink-500" /></div>;
+        case 'verified_badge_removed':
+             return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><ShieldOff className="h-4 w-4 text-destructive" /></div>;
+        case 'colorful_name_removed':
+             return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><Palette className="h-4 w-4 text-destructive" /></div>;
         default:
              return <div className="absolute -bottom-1 -right-1 bg-background p-0.5 rounded-full"><BellRing className="h-4 w-4 text-gray-500" /></div>;
     }

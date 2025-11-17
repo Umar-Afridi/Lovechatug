@@ -108,17 +108,37 @@ export default function ManageVerificationPage() {
     );
   }, [searchQuery, allUsers]);
 
-  const sendNotification = async (targetUser: UserProfile, status: 'approved' | 'rejected') => {
+  const sendNotification = async (targetUser: UserProfile, status: 'approved' | 'rejected' | 'removed') => {
     if (!firestore || !currentUserProfile) return;
     const adminName = currentUserProfile.displayName;
 
+    let title = '';
+    let message = '';
+    let type: 'verification_approved' | 'verification_rejected' | 'verified_badge_removed';
+
+    switch(status) {
+        case 'approved':
+            title = 'Profile Verified!';
+            message = `Congratulations! ${adminName} has verified your profile.`;
+            type = 'verification_approved';
+            break;
+        case 'rejected':
+            title = 'Verification Update';
+            message = `Your verification request was not approved by ${adminName} at this time. Please ensure your profile information is complete and try again later.`;
+            type = 'verification_rejected';
+            break;
+        case 'removed':
+            title = 'Verification Update';
+            message = `Your verified badge has been removed by ${adminName}.`;
+            type = 'verified_badge_removed';
+            break;
+    }
+
     const notification = {
         userId: targetUser.uid,
-        title: status === 'approved' ? 'Profile Verified!' : 'Verification Update',
-        message: status === 'approved' 
-            ? `Congratulations! ${adminName} has verified your profile.`
-            : `Your verification request was not approved by ${adminName} at this time. Please ensure your profile information is complete and try again later.`,
-        type: status === 'approved' ? 'verification_approved' as const : 'verification_rejected' as const,
+        title: adminName,
+        message: message,
+        type: type as const,
         isRead: false,
         createdAt: serverTimestamp(),
         senderId: currentUserProfile.uid,
@@ -137,6 +157,8 @@ export default function ManageVerificationPage() {
     let updatePayload: any = {
       'verificationApplicationStatus': status,
     };
+    
+    const wasPreviouslyApproved = targetUser.verifiedBadge?.showBadge;
 
     if (status === 'approved') {
       updatePayload['verifiedBadge'] = {
@@ -152,9 +174,15 @@ export default function ManageVerificationPage() {
 
     try {
       await updateDoc(userRef, updatePayload);
-      if (status === 'approved' || status === 'rejected') {
-        await sendNotification(targetUser, status);
+      
+      if (status === 'approved') {
+        await sendNotification(targetUser, 'approved');
+      } else if (status === 'rejected') {
+        await sendNotification(targetUser, 'rejected');
+      } else if (status === 'none' && wasPreviouslyApproved) {
+        await sendNotification(targetUser, 'removed');
       }
+
       toast({
         title: 'Verification Status Updated',
         description: `${targetUser.displayName}'s status is now '${status}'.`,

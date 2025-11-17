@@ -139,7 +139,7 @@ export type Notification = {
   userId: string;
   title: string;
   message: string;
-  type: 'verification_approved' | 'verification_rejected' | 'colorful_name_granted';
+  type: 'verification_approved' | 'verification_rejected' | 'colorful_name_granted' | 'verified_badge_removed' | 'colorful_name_removed';
   isRead: boolean;
   createdAt: any; // Firestore ServerTimestamp
   senderId?: string;

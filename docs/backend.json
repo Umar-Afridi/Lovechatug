@@ -389,7 +389,7 @@
         },
         "type": {
           "type": "string",
-          "enum": ["verification_approved", "verification_rejected", "colorful_name_granted"],
+          "enum": ["verification_approved", "verification_rejected", "colorful_name_granted", "verified_badge_removed", "colorful_name_removed"],
           "description": "The type of the notification."
         },
         "isRead": {
