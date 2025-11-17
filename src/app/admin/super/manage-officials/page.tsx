@@ -130,7 +130,7 @@ export default function ManageOfficialsPage() {
   }, [searchQuery, allUsers]);
 
   const sendNotification = async (targetUser: UserProfile, type: 'granted' | 'removed') => {
-    if (!firestore || !currentUserProfile) return;
+    if (!firestore) return;
 
     let message = '';
     let notifType: Notification['type'];
@@ -139,7 +139,7 @@ export default function ManageOfficialsPage() {
       message = "Congratulations! You have been promoted to an Official user. Please use your new status to help and guide the community.";
       notifType = 'official_badge_granted';
     } else {
-      message = "Your Official user status has been revoked as it was not used in the intended way. We are sorry for this action.";
+      message = "Your Official user status has been revoked because it was not used in the intended way. We are sorry for this action.";
       notifType = 'official_badge_removed';
     }
 
@@ -161,6 +161,7 @@ export default function ManageOfficialsPage() {
   const handleUpdateOfficialStatus = async (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => {
     if (!firestore) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
+    const wasPreviouslyOfficial = targetUser.officialBadge?.isOfficial === true;
     
     let updatePayload: any = {
       'officialBadge.isOfficial': isOfficial,
@@ -173,9 +174,10 @@ export default function ManageOfficialsPage() {
     try {
       await updateDoc(userRef, updatePayload);
       
-      if (isOfficial) {
+      // Send notification based on the change
+      if (isOfficial && !wasPreviouslyOfficial) {
         await sendNotification(targetUser, 'granted');
-      } else {
+      } else if (!isOfficial && wasPreviouslyOfficial) {
         await sendNotification(targetUser, 'removed');
       }
 
