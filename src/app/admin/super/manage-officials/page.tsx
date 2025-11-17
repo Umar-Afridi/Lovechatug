@@ -47,7 +47,7 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 const BadgeColors: Array<NonNullable<UserProfile['officialBadge']>['badgeColor']> = ['blue', 'gold', 'green', 'red', 'pink'];
 const SYSTEM_SENDER_ID = 'system_lovechat';
 const SYSTEM_SENDER_NAME = 'Love Chat';
-const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/system-avatars%2FHEART_ICON.png?alt=media&token=c875d1d6-8419-49c3-986c-5b31273907c1';
+const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/system-avatars%2FUG_LOGO.png?alt=media&token=1c2a7153-6623-4522-8616-200903333346';
 
 
 function applyNameColor(name: string, color?: UserProfile['nameColor']) {

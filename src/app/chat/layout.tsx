@@ -102,7 +102,7 @@ export const useCallContext = () => {
 
 const SYSTEM_SENDER_ID = 'system_lovechat';
 const SYSTEM_SENDER_NAME = 'Love Chat';
-const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/system-avatars%2FHEART_ICON.png?alt=media&token=c875d1d6-8419-49c3-986c-5b31273907c1';
+const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/system-avatars%2FUG_LOGO.png?alt=media&token=1c2a7153-6623-4522-8616-200903333346';
 
 // Custom hook to get user profile data in real-time
 function useUserProfile(onAccountDisabled: () => void) {
@@ -463,17 +463,19 @@ function ChatAppLayout({
     const roomRef = doc(firestore, 'rooms', currentRoom.id);
     
     try {
-        const batch = writeBatch(firestore);
-        batch.delete(memberRef);
-        
         const memberDoc = await getDoc(memberRef);
-        if (memberDoc.exists() && (memberDoc.data() as UserProfile).micSlot !== -1) {
-            const roomDoc = await getDoc(roomRef);
-            if (roomDoc.exists() && roomDoc.data().memberCount > 0) {
-              batch.update(roomRef, { memberCount: -1 });
+        if (memberDoc.exists()) {
+            const batch = writeBatch(firestore);
+            batch.delete(memberRef);
+        
+            if (memberDoc.exists() && (memberDoc.data() as UserProfile).micSlot !== -1) {
+                const roomDoc = await getDoc(roomRef);
+                if (roomDoc.exists() && roomDoc.data().memberCount > 0) {
+                  batch.update(roomRef, { memberCount: -1 });
+                }
             }
+            await batch.commit();
         }
-        await batch.commit();
     } catch(e) {
         console.warn("Could not leave room properly", e);
     }
