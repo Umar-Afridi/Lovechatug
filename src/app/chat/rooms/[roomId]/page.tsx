@@ -508,8 +508,8 @@ export default function RoomPage() {
         
         return (
             <DropdownMenu key={slotNumber}>
-                <DropdownMenuTrigger asChild>
-                    <div className="cursor-pointer">{content}</div>
+                <DropdownMenuTrigger asChild disabled={isOwnerSlot || isSuperAdminSlot}>
+                    <div className={cn("cursor-pointer", (isOwnerSlot || isSuperAdminSlot) && "cursor-default")}>{content}</div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                     {memberInSlot && (
@@ -518,27 +518,23 @@ export default function RoomPage() {
                         </DropdownMenuItem>
                     )}
 
-                    {isOwner && (
+                    {isOwner && memberInSlot && !isSelf && (
                         <>
-                            {memberInSlot && !isSelf && (
-                                <>
-                                   <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })}>
-                                        <UserX className="mr-2 h-4 w-4"/> Kick User
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleForceLeaveMic(memberInSlot)}>
-                                        <MicOff className="mr-2 h-4 w-4" /> Move from Mic
-                                    </DropdownMenuItem>
-                                </>
-                            )}
-                            
-                           {!isOwnerSlot && !isSuperAdminSlot && !memberInSlot && (
-                               <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
-                                    {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
-                                    {isLocked ? 'Unlock Mic' : 'Lock Mic'}
-                                </DropdownMenuItem>
-                           )}
+                           <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })}>
+                                <UserX className="mr-2 h-4 w-4"/> Kick User
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleForceLeaveMic(memberInSlot)}>
+                                <MicOff className="mr-2 h-4 w-4" /> Move from Mic
+                            </DropdownMenuItem>
                         </>
                     )}
+                    
+                   {isOwner && !memberInSlot && (
+                       <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
+                            {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
+                            {isLocked ? 'Unlock Mic' : 'Lock Mic'}
+                        </DropdownMenuItem>
+                   )}
                     
                     {canTakeSeat && (
                         <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
@@ -546,7 +542,7 @@ export default function RoomPage() {
                         </DropdownMenuItem>
                     )}
                     
-                    {isSelf && currentUserSlot?.micSlot !== null && !isOwnerSlot && !isSuperAdminSlot && (
+                    {isSelf && currentUserSlot?.micSlot !== null && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
                             <MicOff className="mr-2 h-4 w-4"/> Leave Seat
                          </DropdownMenuItem>
