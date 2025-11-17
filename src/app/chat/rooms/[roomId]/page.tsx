@@ -123,7 +123,6 @@ export default function RoomPage() {
   const [isSettingsSheetOpen, setSettingsSheetOpen] = useState(false);
   const [isInviteSheetOpen, setInviteSheetOpen] = useState(false);
   const [viewedProfile, setViewedProfile] = useState<UserProfile | null>(null);
-  const [joinTimestamp, setJoinTimestamp] = useState<Timestamp | null>(null);
   const [status, setStatus] = useState<'joining' | 'joined' | 'leaving' | 'error'>('joining');
 
 
@@ -169,149 +168,118 @@ export default function RoomPage() {
     router.push('/chat/rooms');
   }, [router]);
   
-  // Effect for joining the room and setting up the room listener
- useEffect(() => {
+  // This single useEffect manages all room-related data fetching and listeners.
+  useEffect(() => {
     if (!firestore || !roomId || !authUser?.uid) return;
-    
+
     let unsubRoom: (() => void) | undefined;
-    
+    let unsubMembers: (() => void) | undefined;
+    let unsubMessages: (() => void) | undefined;
+
     const joinAndListen = async () => {
-        setStatus('joining');
-        try {
-            const roomRef = doc(firestore, 'rooms', roomId);
-            const userRef = doc(firestore, 'users', authUser.uid);
-            
-            const roomSnap = await getDoc(roomRef);
-            if (!roomSnap.exists()) {
-                toast({ title: 'Room not found', variant: 'destructive' });
-                setStatus('error');
-                router.push('/chat/rooms');
-                return;
+      setStatus('joining');
+      const roomRef = doc(firestore, 'rooms', roomId);
+      const userRef = doc(firestore, 'users', authUser.uid);
+
+      try {
+        const roomSnap = await getDoc(roomRef);
+        if (!roomSnap.exists()) {
+          toast({ title: 'Room not found', variant: 'destructive' });
+          setStatus('error');
+          router.push('/chat/rooms');
+          return;
+        }
+
+        const roomData = roomSnap.data() as Room;
+        if (roomData.kickedUsers && roomData.kickedUsers[authUser.uid]) {
+          toast({ title: "Cannot Join", description: "You have been kicked from this room.", variant: "destructive" });
+          router.push('/chat/rooms');
+          return;
+        }
+        
+        const memberRef = doc(roomRef, 'members', authUser.uid);
+        const memberSnap = await getDoc(memberRef);
+        if (!memberSnap.exists()) {
+          await setDoc(memberRef, {
+            userId: authUser.uid,
+            micSlot: roomData.ownerId === authUser.uid ? OWNER_SLOT : null,
+            isMuted: true,
+          }, { merge: true });
+          if (roomData.ownerId !== authUser.uid) {
+            await updateDoc(roomRef, { memberCount: increment(1) });
+          }
+        }
+
+        await updateDoc(userRef, { currentRoomId: roomId });
+        setStatus('joined');
+
+        // --- Start Listeners ---
+        unsubRoom = onSnapshot(roomRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const updatedRoomData = { id: docSnap.id, ...docSnap.data() } as Room;
+            setRoom(updatedRoomData);
+            setCurrentRoom(updatedRoomData);
+            if (updatedRoomData.kickedUsers && updatedRoomData.kickedUsers[authUser.uid]) {
+              toast({ title: "You've been kicked", variant: 'destructive'});
+              handleLeaveRoom(true);
             }
+          } else {
+            toast({ title: 'Room deleted', variant: 'destructive' });
+            contextLeaveRoom();
+            router.push('/chat/rooms');
+          }
+        });
+        
+        const membersQuery = query(collection(roomRef, 'members'));
+        unsubMembers = onSnapshot(membersQuery, async (snapshot) => {
+            const membersList = snapshot.docs.map(d => d.data() as RoomMember);
+            setMembers(membersList);
 
-            // Check if kicked
-            const currentRoomData = roomSnap.data() as Room;
-            if (currentRoomData.kickedUsers && currentRoomData.kickedUsers[authUser.uid]) {
-                 toast({ title: "Cannot Join", description: "You have been kicked from this room.", variant: "destructive" });
-                 router.push('/chat/rooms');
-                 return;
-            }
-            
-            setRoom({ id: roomSnap.id, ...currentRoomData } as Room);
-            setCurrentRoom({ id: roomSnap.id, ...currentRoomData } as Room);
+            const currentProfileIds = Object.keys(memberProfiles);
+            const newMemberIds = membersList.map(m => m.userId).filter(id => !currentProfileIds.includes(id));
 
-            // Join the room as a member
-            const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-            const memberSnap = await getDoc(memberRef);
-
-            if (!memberSnap.exists()) {
-                const isRoomOwner = currentRoomData.ownerId === authUser.uid;
-                await setDoc(memberRef, { 
-                  userId: authUser.uid, 
-                  micSlot: isRoomOwner ? OWNER_SLOT : null, 
-                  isMuted: true 
-                }, { merge: true });
-                if (!isRoomOwner) {
-                  await updateDoc(roomRef, { memberCount: increment(1) });
+            if (newMemberIds.length > 0) {
+                const profilesRef = collection(firestore, 'users');
+                const newProfiles: Record<string, UserProfile> = {};
+                const chunks = [];
+                for (let i = 0; i < newMemberIds.length; i += 30) {
+                    chunks.push(newMemberIds.slice(i, i + 30));
                 }
+                for (const chunk of chunks) {
+                    const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
+                    const profilesSnapshot = await getDocs(profilesQuery);
+                    profilesSnapshot.forEach(doc => newProfiles[doc.id] = doc.data() as UserProfile);
+                }
+                setMemberProfiles(prev => ({...prev, ...newProfiles}));
             }
+        });
 
-            await updateDoc(userRef, { currentRoomId: roomId });
-            setJoinTimestamp(Timestamp.now());
-            setStatus('joined');
-
-            // Set up room listener after joining
-            unsubRoom = onSnapshot(roomRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const updatedRoomData = { id: docSnap.id, ...docSnap.data() } as Room;
-                    setRoom(updatedRoomData);
-                    setCurrentRoom(updatedRoomData);
-                    if (updatedRoomData.kickedUsers && updatedRoomData.kickedUsers[authUser.uid]) {
-                        toast({ title: "You've been kicked", variant: 'destructive'});
-                        handleLeaveRoom(true);
-                    }
-                } else {
-                    toast({ title: 'Room deleted', variant: 'destructive' });
-                    contextLeaveRoom();
-                    router.push('/chat/rooms');
+        const joinTime = Timestamp.now();
+        const messagesQuery = query(collection(roomRef, 'messages'), where('timestamp', '>=', joinTime), orderBy('timestamp', 'asc'));
+        unsubMessages = onSnapshot(messagesQuery, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added') {
+                    const newMsg = { id: change.doc.id, ...change.doc.data() } as RoomMessage;
+                    setMessages(prev => [...prev, newMsg]);
                 }
             });
+        });
 
-        } catch (error) {
-            console.error("Error joining room:", error);
-            toast({ title: 'Error joining room', variant: 'destructive' });
-            setStatus('error');
-        }
+      } catch (error) {
+        console.error("Error joining room and setting up listeners:", error);
+        setStatus('error');
+      }
     };
-    
+
     joinAndListen();
 
+    // Cleanup function
     return () => {
-        if (unsubRoom) unsubRoom();
+      if (unsubRoom) unsubRoom();
+      if (unsubMembers) unsubMembers();
+      if (unsubMessages) unsubMessages();
     };
-
-}, [roomId, authUser?.uid, firestore]);
-
-  // Effect for members listener
-  useEffect(() => {
-    if (status !== 'joined' || !firestore || !roomId) return;
-
-    const membersQuery = query(collection(firestore, 'rooms', roomId, 'members'));
-    const unsubMembers = onSnapshot(membersQuery, async (snapshot) => {
-        const membersList = snapshot.docs.map(d => d.data() as RoomMember);
-        setMembers(membersList);
-
-        const currentProfileIds = Object.keys(memberProfiles);
-        const newMemberIds = membersList.map(m => m.userId).filter(id => !currentProfileIds.includes(id));
-
-        if (newMemberIds.length > 0) {
-            const profilesRef = collection(firestore, 'users');
-            const newProfiles: Record<string, UserProfile> = {};
-            const chunks = [];
-             for (let i = 0; i < newMemberIds.length; i += 30) {
-                chunks.push(newMemberIds.slice(i, i + 30));
-            }
-             for (const chunk of chunks) {
-                const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
-                const profilesSnapshot = await getDocs(profilesQuery);
-                profilesSnapshot.forEach(doc => newProfiles[doc.id] = doc.data() as UserProfile);
-            }
-            setMemberProfiles(prev => ({...prev, ...newProfiles}));
-        }
-    }, (error) => {
-        console.error("Members listener error:", error);
-    });
-
-    return () => unsubMembers();
-  }, [status, firestore, roomId]);
-
-
-  // Effect for messages listener
-  useEffect(() => {
-    if (status !== 'joined' || !firestore || !roomId || !joinTimestamp) return;
-
-    const messagesRef = collection(firestore, 'rooms', roomId, 'messages');
-    const qMessages = query(
-      messagesRef,
-      where('timestamp', '>=', joinTimestamp),
-      orderBy('timestamp', 'asc')
-    );
-
-    const unsubMessages = onSnapshot(qMessages, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') {
-          const newMsg = { id: change.doc.id, ...change.doc.data() } as RoomMessage;
-          setMessages(prev => [...prev, newMsg]);
-        }
-      });
-    }, (error) => {
-        console.error("Messages listener error:", error);
-    });
-
-    return () => {
-      unsubMessages();
-    };
-  }, [status, firestore, roomId, joinTimestamp]);
+  }, [roomId, authUser?.uid, firestore]); // Stable dependencies
 
 
   const handleDeleteRoom = async () => {
