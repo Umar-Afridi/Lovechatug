@@ -285,7 +285,7 @@ export default function ManageUsersPage() {
                                     <div className="flex items-center gap-2">
                                         <p className="font-semibold truncate">{applyNameColor(user.displayName, user.nameColor)}</p>
                                         {user.verifiedBadge?.showBadge && <VerifiedBadge color={user.verifiedBadge.badgeColor}/>}
-                                        {user.officialBadge?.isOfficial && <OfficialBadge color={user.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>}
+                                        {user.officialBadge?.isOfficial && <OfficialBadge color={user.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={user.canManageOfficials} />}
                                     </div>
                                     <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
                                     {user.isDisabled && <p className="text-xs font-bold text-destructive">DISABLED</p>}

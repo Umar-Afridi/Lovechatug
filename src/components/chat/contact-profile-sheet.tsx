@@ -175,7 +175,7 @@ export function ContactProfileSheet({
           
            {userProfile.officialBadge?.isOfficial && (
                 <div className="flex justify-center mb-2">
-                    <OfficialBadge color={userProfile.officialBadge.badgeColor} />
+                    <OfficialBadge color={userProfile.officialBadge.badgeColor} isOwner={userProfile.canManageOfficials} />
                 </div>
             )}
           <SheetTitle className="text-2xl font-bold flex items-center justify-center gap-2">

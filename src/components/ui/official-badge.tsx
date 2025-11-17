@@ -28,9 +28,10 @@ const badgeVariants = cva(
 
 interface OfficialBadgeProps extends VariantProps<typeof badgeVariants> {
   className?: string;
+  isOwner?: boolean;
 }
 
-export function OfficialBadge({ color, size, className }: OfficialBadgeProps) {
+export function OfficialBadge({ color, size, className, isOwner = false }: OfficialBadgeProps) {
     
   const colorClass = {
     blue: 'text-blue-500',
@@ -39,6 +40,8 @@ export function OfficialBadge({ color, size, className }: OfficialBadgeProps) {
     red: 'text-red-500',
     pink: 'text-pink-500',
   }[color || 'gold'];
+
+  const badgeText = isOwner ? 'Owner' : 'Official';
 
   return (
     <div className={cn(badgeVariants({ color, size }), className)}>
@@ -50,7 +53,7 @@ export function OfficialBadge({ color, size, className }: OfficialBadgeProps) {
       >
         <span className={cn('text-sm font-bold', colorClass)}>V</span>
       </div>
-      {size !== 'icon' && <span>Owner</span>}
+      {size !== 'icon' && <span>{badgeText}</span>}
     </div>
   );
 }

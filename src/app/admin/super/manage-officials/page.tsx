@@ -86,7 +86,7 @@ const UserListItem = ({ user, onUpdate }: { user: UserProfile, onUpdate: (target
                     <div className="flex items-center gap-2">
                         <p className="font-semibold truncate">{applyNameColor(user.displayName, user.nameColor)}</p>
                         {user.verifiedBadge?.showBadge && <VerifiedBadge color={user.verifiedBadge.badgeColor}/>}
-                        {user.officialBadge?.isOfficial && <OfficialBadge color={user.officialBadge.badgeColor} size="icon" className="h-4 w-4"/>}
+                        {user.officialBadge?.isOfficial && <OfficialBadge color={user.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={user.canManageOfficials}/>}
                     </div>
                     <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
                 </div>
@@ -99,12 +99,12 @@ const UserListItem = ({ user, onUpdate }: { user: UserProfile, onUpdate: (target
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Manage Owner Status</DropdownMenuLabel>
+                        <DropdownMenuLabel>Manage Official Status</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                          <DropdownMenuSub>
                             <DropdownMenuSubTrigger disabled={user.officialBadge?.isOfficial}>
                                 <ShieldCheck className="mr-2 h-4 w-4 text-green-500" />
-                                <span>Make Owner</span>
+                                <span>Make Official</span>
                             </DropdownMenuSubTrigger>
                             <DropdownMenuPortal>
                                 <DropdownMenuSubContent>
@@ -125,7 +125,7 @@ const UserListItem = ({ user, onUpdate }: { user: UserProfile, onUpdate: (target
                         </DropdownMenuSub>
                         <DropdownMenuItem onClick={() => onUpdate(user, false)} disabled={!user.officialBadge?.isOfficial} className="text-destructive focus:text-destructive">
                             <ShieldOff className="mr-2 h-4 w-4" />
-                            <span>Remove Owner</span>
+                            <span>Remove Official</span>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -181,7 +181,7 @@ export default function ManageOfficialsPage() {
       const others = usersList.filter(u => !u.officialBadge?.isOfficial);
 
       setOfficialUsers(officials);
-      setAllUsers(others); // `allUsers` will now only contain non-owners for searching
+      setAllUsers(others); // `allUsers` will now only contain non-officials for searching
       setLoading(false);
     }, (error) => {
         console.error("Error fetching users:", error);
@@ -217,12 +217,12 @@ export default function ManageOfficialsPage() {
       await updateDoc(userRef, updatePayload);
       
       toast({
-        title: 'Owner Status Updated',
-        description: `${targetUser.displayName} is ${isOfficial ? 'now an owner' : 'no longer an owner'}.`,
+        title: 'Official Status Updated',
+        description: `${targetUser.displayName} is ${isOfficial ? 'now an official' : 'no longer an official'}.`,
       });
 
     } catch (error) {
-       toast({ title: 'Error', description: 'Could not update owner status.', variant: 'destructive'});
+       toast({ title: 'Error', description: 'Could not update official status.', variant: 'destructive'});
        console.error("Error updating official status:", error);
     }
   };
@@ -231,7 +231,7 @@ export default function ManageOfficialsPage() {
   if (loading || !currentUserProfile?.canManageOfficials) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p>Loading Owner Management Panel...</p>
+        <p>Loading Official Management Panel...</p>
       </div>
     );
   }
@@ -241,14 +241,14 @@ export default function ManageOfficialsPage() {
       <div className="p-4 border-b space-y-4">
         <div className="flex items-center gap-2">
             <Shield className="h-6 w-6 text-primary" />
-            <h2 className="text-lg font-semibold">Manage Owners</h2>
+            <h2 className="text-lg font-semibold">Manage Officials</h2>
         </div>
       </div>
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
             <div className="relative">
                 <Input 
-                    placeholder="Search users to make owner..."
+                    placeholder="Search users to make official..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10"
@@ -263,7 +263,7 @@ export default function ManageOfficialsPage() {
                 </div>
             ) : (
                 <div className="flex flex-1 items-center justify-center text-muted-foreground p-8 h-full">
-                    <p>{searchQuery ? "No users found." : "Search for a user to manage their owner status."}</p>
+                    <p>{searchQuery ? "No users found." : "Search for a user to manage their official status."}</p>
                 </div>
             )}
         </div>
@@ -271,7 +271,7 @@ export default function ManageOfficialsPage() {
         <Separator className="my-4" />
         
          <div className="p-4">
-            <h3 className="text-md font-semibold mb-2 flex items-center gap-2 text-muted-foreground"><Crown className="h-5 w-5 text-yellow-500" /> Current Owners</h3>
+            <h3 className="text-md font-semibold mb-2 flex items-center gap-2 text-muted-foreground"><Crown className="h-5 w-5 text-yellow-500" /> Current Officials</h3>
             {officialUsers.length > 0 ? (
                 <div className="space-y-2 rounded-lg border p-2">
                     {officialUsers.map((user) => (
@@ -280,7 +280,7 @@ export default function ManageOfficialsPage() {
                 </div>
             ) : (
                 <div className="text-center text-muted-foreground p-4 border rounded-lg border-dashed">
-                    <p>No other owners found.</p>
+                    <p>No other officials found.</p>
                 </div>
             )}
         </div>

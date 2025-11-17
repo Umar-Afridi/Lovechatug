@@ -155,7 +155,7 @@ export default function NotificationsPage() {
                     </Avatar>
                      {n.senderOfficialBadge?.isOfficial && (
                         <div className="absolute -bottom-1 -right-1">
-                            <OfficialBadge color={n.senderOfficialBadge.badgeColor} size="icon" className="h-5 w-5" />
+                            <OfficialBadge color={n.senderOfficialBadge.badgeColor} size="icon" className="h-5 w-5" isOwner={n.senderOfficialBadge.isOfficial} />
                         </div>
                     )}
                 </div>

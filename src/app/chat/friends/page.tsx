@@ -209,7 +209,7 @@ export default function FriendsPage() {
                                 </Avatar>
                                 {request.fromUser.officialBadge?.isOfficial && (
                                     <div className="absolute bottom-0 right-0">
-                                        <OfficialBadge color={request.fromUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
+                                        <OfficialBadge color={request.fromUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={request.fromUser.canManageOfficials} />
                                     </div>
                                 )}
                             </div>

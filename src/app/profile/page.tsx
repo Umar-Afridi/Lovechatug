@@ -436,7 +436,7 @@ export default function ProfilePage() {
                         </div>
                         {userProfile?.officialBadge?.isOfficial && (
                            <div className="mt-2">
-                                <OfficialBadge color={userProfile.officialBadge.badgeColor} />
+                                <OfficialBadge color={userProfile.officialBadge.badgeColor} isOwner={userProfile.canManageOfficials} />
                            </div>
                         )}
                     </div>

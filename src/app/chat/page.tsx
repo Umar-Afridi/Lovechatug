@@ -121,7 +121,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
             </Avatar>
             {participant.officialBadge?.isOfficial && (
               <div className="absolute bottom-0 right-0">
-                  <OfficialBadge color={participant.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
+                  <OfficialBadge color={participant.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={participant.canManageOfficials} />
               </div>
             )}
             {participant.isOnline && (
@@ -410,7 +410,7 @@ export default function ChatPage() {
                         </Avatar>
                         {foundUser.officialBadge?.isOfficial && (
                             <div className="absolute bottom-0 right-0">
-                                <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
+                                <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
                             </div>
                         )}
                     </div>

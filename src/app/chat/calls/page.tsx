@@ -96,7 +96,7 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
                 </Avatar>
                  {call.otherUser?.officialBadge?.isOfficial && (
                   <div className="absolute bottom-0 right-0">
-                    <OfficialBadge color={call.otherUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" />
+                    <OfficialBadge color={call.otherUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={call.otherUser.canManageOfficials} />
                   </div>
                 )}
             </div>

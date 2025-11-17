@@ -131,7 +131,7 @@ export default function RoomsPage() {
                                  </div>
                                  {room.ownerIsOfficial && (
                                      <div className="absolute top-2 left-2">
-                                        <OfficialBadge color="gold" size="icon" className="h-6 w-6"/>
+                                        <OfficialBadge color="gold" size="icon" className="h-6 w-6" isOwner={true}/>
                                      </div>
                                  )}
                              </div>
