@@ -136,7 +136,7 @@ export default function ManageOfficialsPage() {
       message = `Congratulations! You have been promoted to an Official user by ${adminName}. Please use your new status to help and guide the community.`;
       notifType = 'official_badge_granted';
     } else {
-      message = `Your Official user status has been revoked by ${adminName}.`;
+      message = `Your Official user status has been revoked by ${adminName} because it was not used in the intended way. We are sorry for this action.`;
       notifType = 'official_badge_removed';
     }
 
