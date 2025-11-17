@@ -221,14 +221,14 @@ export default function RoomPage() {
                 const notificationMessage = {
                     senderId: 'system',
                     senderName: 'System',
-                    content: `${userProfile.displayName} joined the room.`,
+                    content: `${userProfile.displayName} has joined the room.`,
                     timestamp: serverTimestamp(),
                     type: 'notification' as const,
                 };
                 const messageDocRef = doc(collection(firestore, 'rooms', roomId, 'messages'));
                 batch.set(messageDocRef, notificationMessage);
             } else {
-                // If user is already a member, ensure their slot is correct (e.g. if they just became owner)
+                // If user is already a member, ensure their slot is correct
                 const currentMemberData = memberSnap.data() as RoomMember;
                 if (currentMemberData.micSlot !== memberData.micSlot) {
                     batch.update(memberRef, { micSlot: memberData.micSlot });
@@ -302,6 +302,7 @@ export default function RoomPage() {
       unsubRoom();
       unsubMembers();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, roomId, authUser?.uid]);
 
   useEffect(() => {
@@ -440,7 +441,7 @@ export default function RoomPage() {
         const isOwnerSlot = slotNumber === OWNER_SLOT;
         const isSuperAdminSlot = slotNumber === SUPER_ADMIN_SLOT;
         
-        const canTakeSeat = !memberInSlot && !isLocked && currentUserSlot?.micSlot === null;
+        const canTakeSeat = !memberInSlot && !isLocked && currentUserSlot?.micSlot === null && !isOwner && !isSuperAdminSlot;
 
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1 w-20 md:w-24">
@@ -523,7 +524,7 @@ export default function RoomPage() {
                                 </>
                             )}
                             
-                           {!isOwnerSlot && !isSuperAdminSlot && (
+                           {!isOwnerSlot && !isSuperAdminSlot && !memberInSlot && (
                                <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                                     {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                                     {isLocked ? 'Unlock Mic' : 'Lock Mic'}
