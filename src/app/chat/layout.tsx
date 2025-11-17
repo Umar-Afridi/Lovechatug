@@ -50,7 +50,7 @@ import {
 import { useEffect, useState, useRef, useCallback, createContext, useContext } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit, addDoc, deleteDoc } from 'firebase/firestore';
-import type { UserProfile, Room, Chat, Call } from '@/lib/types';
+import type { UserProfile, Room, Chat, Call, Notification } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getDatabase, ref, onValue, off, onDisconnect, serverTimestamp as rtdbServerTimestamp, set } from 'firebase/database';
@@ -100,6 +100,9 @@ export const useCallContext = () => {
   return context;
 };
 
+const SYSTEM_SENDER_ID = 'system_lovechat';
+const SYSTEM_SENDER_NAME = 'Love Chat';
+const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/system-avatars%2FHEART_ICON.png?alt=media&token=c875d1d6-8419-49c3-986c-5b31273907c1';
 
 // Custom hook to get user profile data in real-time
 function useUserProfile(onAccountDisabled: () => void) {
@@ -107,6 +110,7 @@ function useUserProfile(onAccountDisabled: () => void) {
   const firestore = useFirestore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const previousProfileRef = useRef<UserProfile | null>(null);
 
   useEffect(() => {
     if (authLoading) {
@@ -118,6 +122,39 @@ function useUserProfile(onAccountDisabled: () => void) {
     }
 
     const userDocRef = doc(firestore, 'users', user.uid);
+
+    const sendOfficialStatusNotification = async (newStatus: boolean) => {
+        let message = '';
+        let notifType: Notification['type'];
+
+        if (newStatus) {
+            message = "Congratulations! You have been promoted to an Official user. Please use your new status to help and guide the community.";
+            notifType = 'official_badge_granted';
+        } else {
+            message = "Your Official user status has been revoked because it was not used in the intended way. We are sorry for this action.";
+            notifType = 'official_badge_removed';
+        }
+
+        const notification: any = {
+            userId: user.uid,
+            title: SYSTEM_SENDER_NAME,
+            message,
+            type: notifType,
+            isRead: false,
+            createdAt: serverTimestamp(),
+            senderId: SYSTEM_SENDER_ID,
+            senderName: SYSTEM_SENDER_NAME,
+            senderPhotoURL: SYSTEM_SENDER_PHOTO_URL,
+        };
+
+        try {
+            await addDoc(collection(firestore, 'users', user.uid, 'notifications'), notification);
+        } catch (e) {
+            console.error("Failed to send official status notification", e);
+        }
+    };
+
+
     const unsubscribe = onSnapshot(userDocRef, 
       (docSnap) => {
         if (docSnap.exists()) {
@@ -127,9 +164,17 @@ function useUserProfile(onAccountDisabled: () => void) {
           if (data.isDisabled) {
             onAccountDisabled();
           }
+
+          // Check for official status change
+          const previousProfile = previousProfileRef.current;
+          if (previousProfile && previousProfile.officialBadge?.isOfficial !== data.officialBadge?.isOfficial) {
+              sendOfficialStatusNotification(data.officialBadge?.isOfficial ?? false);
+          }
+          
+          previousProfileRef.current = data; // Update ref with current data for next snapshot
+
         } else {
           // This case might happen for a brand new user before the doc is created
-          // We can set a temporary profile
           setProfile({
             uid: user.uid,
             displayName: user.displayName || 'User',
@@ -146,7 +191,10 @@ function useUserProfile(onAccountDisabled: () => void) {
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+        unsubscribe();
+        previousProfileRef.current = null;
+    };
   }, [user, firestore, authLoading, onAccountDisabled]);
 
   return { profile, loading };
