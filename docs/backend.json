@@ -369,6 +369,39 @@
         }
       },
       "required": ["senderId", "senderName", "content", "timestamp"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Represents a notification for a user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the user who this notification is for."
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the notification."
+        },
+        "message": {
+          "type": "string",
+          "description": "The main content of the notification."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["verification_approved", "verification_rejected", "colorful_name_granted"],
+          "description": "The type of the notification."
+        },
+        "isRead": {
+          "type": "boolean",
+          "description": "Whether the user has read the notification."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "title", "message", "type", "isRead", "createdAt"]
     }
   },
   "auth": {
@@ -380,6 +413,12 @@
         "$ref": "#/entities/UserProfile"
       },
       "description": "Stores public user profile information."
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": {
+        "$ref": "#/entities/Notification"
+      },
+      "description": "Sub-collection for a user's notifications."
     },
     "/friendRequests/{requestId}": {
       "schema": {

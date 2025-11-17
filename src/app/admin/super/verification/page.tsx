@@ -10,6 +10,8 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  addDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import {
   CheckCheck,
@@ -106,6 +108,23 @@ export default function ManageVerificationPage() {
     );
   }, [searchQuery, allUsers]);
 
+  const sendNotification = async (targetUser: UserProfile, status: 'approved' | 'rejected') => {
+    if (!firestore) return;
+
+    const notification = {
+        userId: targetUser.uid,
+        title: status === 'approved' ? 'Profile Verified!' : 'Verification Update',
+        message: status === 'approved' 
+            ? 'Congratulations! Your profile has been verified by the Love Chat team.'
+            : 'Your verification request was not approved at this time. Please ensure your profile information is complete and try again later.',
+        type: status === 'approved' ? 'verification_approved' as const : 'verification_rejected' as const,
+        isRead: false,
+        createdAt: serverTimestamp(),
+    };
+
+    await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
+  }
+
   const handleUpdateVerification = async (targetUser: UserProfile, status: 'approved' | 'rejected' | 'none' | 'pending', color?: UserProfile['verifiedBadge']['badgeColor']) => {
     if (!firestore) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
@@ -128,6 +147,9 @@ export default function ManageVerificationPage() {
 
     try {
       await updateDoc(userRef, updatePayload);
+      if (status === 'approved' || status === 'rejected') {
+        await sendNotification(targetUser, status);
+      }
       toast({
         title: 'Verification Status Updated',
         description: `${targetUser.displayName}'s status is now '${status}'.`,

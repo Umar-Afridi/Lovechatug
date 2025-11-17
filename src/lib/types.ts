@@ -133,3 +133,13 @@ export type RoomMessage = {
   timestamp: any; // Firestore ServerTimestamp
   type: 'text' | 'notification'; // Add type for notifications
 };
+
+export type Notification = {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'verification_approved' | 'verification_rejected' | 'colorful_name_granted';
+  isRead: boolean;
+  createdAt: any; // Firestore ServerTimestamp
+};

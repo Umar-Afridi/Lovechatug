@@ -10,6 +10,8 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  addDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import {
   Sparkles,
@@ -122,11 +124,27 @@ export default function ManageColorfulNamePage() {
     );
   }, [searchQuery, allUsers]);
 
+  const sendNotification = async (targetUser: UserProfile, color: NameColor) => {
+    if (!firestore) return;
+    const notification = {
+        userId: targetUser.uid,
+        title: 'Colorful Name Granted!',
+        message: `Congratulations! You have been granted the '${color}' name color.`,
+        type: 'colorful_name_granted' as const,
+        isRead: false,
+        createdAt: serverTimestamp(),
+    };
+    await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
+  }
+
   const handleUpdateNameColor = async (targetUser: UserProfile, color: NameColor | 'default') => {
     if (!firestore) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
     try {
       await updateDoc(userRef, { nameColor: color });
+      if (color !== 'default') {
+          await sendNotification(targetUser, color);
+      }
       toast({
         title: `Name Color Updated`,
         description: `${targetUser.displayName}'s name color has been set to ${color}.`,

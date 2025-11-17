@@ -42,6 +42,12 @@ service cloud.firestore {
       // We are allowing this broadly for simplicity, but in a production app,
       // you might add more specific query constraints.
       allow list: if isSignedIn();
+
+      // Rules for the `notifications` subcollection
+      match /notifications/{notificationId} {
+        // A user can only read, create, or update their own notifications.
+        allow read, write: if isOwner(userId);
+      }
     }
     
     // 2. Chats and Messages Collection (/chats/{chatId})

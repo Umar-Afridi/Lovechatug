@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { Search, MessageSquare, UserPlus, Phone, Settings, Home } from 'lucide-react';
+import { Search, MessageSquare, UserPlus, Phone, Settings, Home, Bell } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { Chat, UserProfile, FriendRequest } from '@/lib/types';
+import type { Chat, UserProfile, FriendRequest, Notification as NotificationType } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import FriendsPage from './friends/page';
@@ -14,13 +14,15 @@ import CallsPage from './calls/page';
 import RoomsPage from './rooms/page';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, onSnapshot, doc, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, doc, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp, orderBy, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow, isToday, isYesterday, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Separator } from '@/components/ui/separator';
 
 function applyNameColor(name: string, color?: UserProfile['nameColor']) {
     if (!color || color === 'default') {
@@ -187,6 +189,7 @@ export default function ChatPage() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [requestCount, setRequestCount] = useState(0);
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
+  const [notifications, setNotifications] = useState<NotificationType[]>([]);
   const { toast } = useToast();
 
   const touchStartX = useRef(0);
@@ -200,6 +203,8 @@ export default function ChatPage() {
   ];
   const tabOrder = navigationItems.map(item => item.content);
 
+
+  const unreadNotificationCount = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
 
   const handleTabSelect = useCallback((tabContent: string) => {
     setActiveTab(tabContent);
@@ -283,11 +288,22 @@ export default function ChatPage() {
         console.error("Error fetching sent requests:", error);
     });
 
+    const notificationsRef = collection(firestore, 'users', user.uid, 'notifications');
+    const qNotifications = query(notificationsRef, orderBy('createdAt', 'desc'));
+
+    const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
+        const notifs = snapshot.docs.map(d => ({id: d.id, ...d.data()}) as NotificationType);
+        setNotifications(notifs);
+    }, (error) => {
+        console.error("Error fetching notifications:", error);
+    });
+
     return () => {
         unsubProfile();
         unsubChats();
         unsubscribeIncoming();
         unsubscribeSent();
+        unsubscribeNotifications();
     };
   }, [user, firestore]);
 
@@ -372,6 +388,18 @@ export default function ChatPage() {
       .join('');
   };
   
+  const handleMarkNotificationsAsRead = () => {
+    if (!firestore || !user || unreadNotificationCount === 0) return;
+    const batch = writeBatch(firestore);
+    notifications.forEach(n => {
+        if (!n.isRead) {
+            const notifRef = doc(firestore, 'users', user.uid, 'notifications', n.id);
+            batch.update(notifRef, { isRead: true });
+        }
+    });
+    batch.commit().catch(err => console.error("Error marking notifications as read", err));
+  }
+  
   const renderContent = () => {
     if (searchQuery.trim() !== '') {
       if (searchResults.length === 0) {
@@ -445,6 +473,16 @@ export default function ChatPage() {
     }
   }
 
+  const formatNotificationTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    try {
+      const date = timestamp.toDate();
+      return formatDistanceToNow(date, { addSuffix: true });
+    } catch (e) {
+      return '';
+    }
+  };
+
   return (
     <div className="flex h-screen flex-col bg-background">
       <div className="w-full border-r flex flex-col h-full">
@@ -455,6 +493,39 @@ export default function ChatPage() {
                 <span>Love Chat</span>
             </h1>
             <div className="flex items-center gap-2">
+                 <DropdownMenu onOpenChange={(open) => { if(open) handleMarkNotificationsAsRead() }}>
+                    <DropdownMenuTrigger asChild>
+                       <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full">
+                         <Bell className="h-5 w-5" />
+                         {unreadNotificationCount > 0 && (
+                            <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{unreadNotificationCount}</Badge>
+                         )}
+                         <span className="sr-only">Notifications</span>
+                       </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-80">
+                         <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                         <DropdownMenuSeparator />
+                         {notifications.length > 0 ? (
+                            <ScrollArea className="max-h-96">
+                                {notifications.map(n => (
+                                    <React.Fragment key={n.id}>
+                                        <DropdownMenuItem className="flex flex-col items-start gap-1 whitespace-normal">
+                                            <p className="font-bold">{n.title}</p>
+                                            <p className="text-xs text-muted-foreground">{n.message}</p>
+                                            <p className="text-xs text-muted-foreground/80 self-end">{formatNotificationTime(n.createdAt)}</p>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </React.Fragment>
+                                ))}
+                            </ScrollArea>
+                         ) : (
+                            <div className="p-4 text-center text-sm text-muted-foreground">
+                                You have no new notifications.
+                            </div>
+                         )}
+                    </DropdownMenuContent>
+                 </DropdownMenu>
                  <ThemeToggle />
                  <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
                     <Link href="/settings">
