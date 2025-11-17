@@ -466,7 +466,10 @@ function ChatAppLayout({
   const isFirstRequestLoad = useRef(true);
   
   const leaveCurrentRoom = useCallback(async () => {
-    if (!firestore || !user) return;
+    if (!firestore || !user) {
+        setCurrentRoom(null);
+        return;
+    }
     
     const userRef = doc(firestore, 'users', user.uid);
     const userSnap = await getDoc(userRef);
