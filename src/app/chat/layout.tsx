@@ -466,26 +466,45 @@ function ChatAppLayout({
   const isFirstRequestLoad = useRef(true);
   
   const leaveCurrentRoom = useCallback(async () => {
-    if (!firestore || !user || !currentRoom) return;
+    // This function can be called from anywhere, so we get the currentRoomId from the user's profile
+    // to ensure we're acting on the correct data, even if the local state is stale.
+    if (!firestore || !user) return;
+    
+    // Optimistically update UI
+    setCurrentRoom(null);
 
-    const memberRef = doc(firestore, 'rooms', currentRoom.id, 'members', user.uid);
-    const roomRef = doc(firestore, 'rooms', currentRoom.id);
     const userRef = doc(firestore, 'users', user.uid);
+    const userSnap = await getDoc(userRef);
+    const userProfile = userSnap.data() as UserProfile;
+
+    if (!userProfile?.currentRoomId) {
+        // No room to leave, just ensure state is clear.
+        setCurrentRoom(null);
+        return;
+    }
+
+    const roomId = userProfile.currentRoomId;
+    const memberRef = doc(firestore, 'rooms', roomId, 'members', user.uid);
+    const roomRef = doc(firestore, 'rooms', roomId);
 
     try {
         const memberDoc = await getDoc(memberRef);
         if (memberDoc.exists()) {
             const batch = writeBatch(firestore);
             batch.delete(memberRef);
-            batch.update(roomRef, { memberCount: increment(-1) });
+            
+            const roomDoc = await getDoc(roomRef);
+            if (roomDoc.exists() && roomDoc.data().memberCount > 0) {
+              batch.update(roomRef, { memberCount: increment(-1) });
+            }
+
             batch.update(userRef, { currentRoomId: null });
             await batch.commit();
         }
     } catch(e) {
         console.warn("Could not leave room properly", e);
     }
-    setCurrentRoom(null);
-  }, [firestore, user, currentRoom]);
+  }, [firestore, user]);
 
 
   useEffect(() => {
@@ -550,7 +569,7 @@ function ChatAppLayout({
 
   const handleSignOut = async () => {
     if (auth && user && firestore) {
-      if(currentRoom) {
+      if(profile?.currentRoomId) {
          await leaveCurrentRoom();
       }
       const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
