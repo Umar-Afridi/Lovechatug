@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { UserCog, CheckCheck, Sparkles, Activity, Shield } from 'lucide-react';
+import { UserCog, CheckCheck, Sparkles, Activity, Shield, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/firebase/auth/use-user';
@@ -56,6 +56,12 @@ export default function SuperAdminHubPage() {
               </Link>
             </Button>
          )}
+         <Button asChild variant="outline" className={cn(baseButtonClassName, "border-teal-600 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-900/20")}>
+          <Link href="/admin/super/status-users">
+            <Users className="mr-4 h-6 w-6 text-teal-500" />
+            Verified & Colorful Users
+          </Link>
+        </Button>
          <Button asChild variant="outline" className={cn(baseButtonClassName, "border-amber-600 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/20")}>
           <Link href="/admin/super/active-users">
             <Activity className="mr-4 h-6 w-6 text-amber-500" />
