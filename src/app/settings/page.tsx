@@ -9,13 +9,14 @@ import { doc, onSnapshot, updateDoc, arrayRemove, collection, query, where, getD
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Shield, Lock, ArrowLeft, UserX, UserCog, HelpCircle } from 'lucide-react';
+import { Shield, Lock, ArrowLeft, UserX, UserCog, HelpCircle, Palette } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { cn } from '@/lib/utils';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 
 function BlockedUsersList() {
@@ -221,6 +222,20 @@ export default function SettingsPage() {
                                 </div>
                             </AccordionTrigger>
                             {/* Content could be added here if it becomes a collapsible section */}
+                        </AccordionItem>
+                        <AccordionItem value="item-4">
+                            <AccordionTrigger className="text-base font-medium px-2">
+                               <div className="flex items-center gap-3">
+                                    <Palette className="h-5 w-5" />
+                                    <span>Appearance</span>
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent>
+                                <div className="p-4 flex justify-between items-center">
+                                    <p className="font-medium">Theme</p>
+                                    <ThemeToggle />
+                                </div>
+                            </AccordionContent>
                         </AccordionItem>
                         <AccordionItem value="item-3">
                             <AccordionTrigger 

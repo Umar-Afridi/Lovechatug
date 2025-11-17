@@ -476,7 +476,6 @@ export default function ChatPage() {
                       <span className="sr-only">Notifications</span>
                     </Link>
                  </Button>
-                 <ThemeToggle />
                  <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
                     <Link href="/settings">
                         <Settings className="h-5 w-5" />
