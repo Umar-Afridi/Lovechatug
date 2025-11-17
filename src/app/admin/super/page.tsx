@@ -52,7 +52,7 @@ export default function SuperAdminHubPage() {
             <Button asChild variant="outline" className={cn(baseButtonClassName, "border-purple-600 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-900/20")}>
               <Link href="/admin/super/manage-officials">
                 <Shield className="mr-4 h-6 w-6 text-purple-500" />
-                Manage Owners
+                Manage Officials
               </Link>
             </Button>
          )}
