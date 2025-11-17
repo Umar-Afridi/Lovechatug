@@ -12,7 +12,7 @@ import {
   writeBatch,
   doc,
 } from 'firebase/firestore';
-import { ArrowLeft, BellRing, CheckCheck, Palette, ShieldOff } from 'lucide-react';
+import { ArrowLeft, BellRing, CheckCheck, Palette, ShieldOff, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
@@ -45,17 +45,19 @@ function applyNameColor(name: string, color?: UserProfile['nameColor']) {
 const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
     switch (type) {
         case 'verification_approved':
-            return <div className="bg-blue-500 rounded-full p-0.5"><CheckCheck className="h-3 w-3 text-white" /></div>;
+            return <div className="bg-blue-500 rounded-full p-1"><CheckCheck className="h-4 w-4 text-white" /></div>;
         case 'verification_rejected':
-             return <div className="bg-destructive rounded-full p-0.5"><ShieldOff className="h-3 w-3 text-white" /></div>;
+             return <div className="bg-destructive rounded-full p-1"><ShieldOff className="h-4 w-4 text-white" /></div>;
         case 'colorful_name_granted':
-             return <div className="bg-pink-500 rounded-full p-0.5"><Palette className="h-3 w-3 text-white" /></div>;
+             return <div className="bg-pink-500 rounded-full p-1"><Palette className="h-4 w-4 text-white" /></div>;
         case 'verified_badge_removed':
-             return <div className="bg-destructive rounded-full p-0.5"><ShieldOff className="h-3 w-3 text-white" /></div>;
+             return <div className="bg-destructive rounded-full p-1"><ShieldOff className="h-4 w-4 text-white" /></div>;
         case 'colorful_name_removed':
-             return <div className="bg-destructive rounded-full p-0.5"><Palette className="h-3 w-3 text-white" /></div>;
+             return <div className="bg-destructive rounded-full p-1"><Palette className="h-4 w-4 text-white" /></div>;
+        case 'warning':
+             return <div className="bg-yellow-500 rounded-full p-1"><AlertTriangle className="h-4 w-4 text-white" /></div>;
         default:
-             return <div className="bg-gray-500 rounded-full p-0.5"><BellRing className="h-3 w-3 text-white" /></div>;
+             return <div className="bg-gray-500 rounded-full p-1"><BellRing className="h-4 w-4 text-white" /></div>;
     }
 }
 

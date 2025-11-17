@@ -12,12 +12,15 @@ import {
   doc,
   updateDoc,
   deleteDoc,
+  addDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import {
   MoreVertical,
   Search,
   Trash2,
   Ban,
+  AlertTriangle,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -29,6 +32,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -79,7 +83,7 @@ export default function ManageUsersPage() {
   
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
-    action: 'disable' | 'delete' | 'enable' | null;
+    action: 'disable' | 'delete' | 'enable' | 'warn' | null;
     targetUser: UserProfile | null;
   }>({ isOpen: false, action: null, targetUser: null });
 
@@ -138,9 +142,37 @@ export default function ManageUsersPage() {
     );
   }, [searchQuery, allUsers]);
 
-  const openConfirmationDialog = (action: 'disable' | 'delete' | 'enable', targetUser: UserProfile) => {
+  const openConfirmationDialog = (action: 'disable' | 'delete' | 'enable' | 'warn', targetUser: UserProfile) => {
     setDialogState({ isOpen: true, action, targetUser });
   };
+
+  const handleSendWarning = async (targetUser: UserProfile) => {
+    if (!firestore || !currentUserProfile) return;
+    
+    const notification: any = {
+        userId: targetUser.uid,
+        title: currentUserProfile.displayName,
+        message: "You have received a warning from the administration. Please adhere to the community guidelines to avoid account suspension.",
+        type: 'warning' as const,
+        isRead: false,
+        createdAt: serverTimestamp(),
+        senderId: currentUserProfile.uid,
+        senderName: currentUserProfile.displayName,
+        senderPhotoURL: currentUserProfile.photoURL,
+        senderOfficialBadge: currentUserProfile.officialBadge,
+        senderNameColor: currentUserProfile.nameColor,
+    };
+    try {
+        await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
+        toast({
+            title: 'Warning Sent',
+            description: `A warning notification has been sent to ${targetUser.displayName}.`,
+        });
+    } catch (error) {
+         toast({ title: 'Error', description: 'Could not send warning.', variant: 'destructive'});
+         console.error("Error sending warning:", error);
+    }
+  }
 
   const handleToggleDisableUser = async (targetUser: UserProfile) => {
     if (!firestore || !targetUser) return;
@@ -182,6 +214,8 @@ export default function ManageUsersPage() {
         handleToggleDisableUser(dialogState.targetUser);
     } else if (dialogState.action === 'delete') {
         handleDeleteUser(dialogState.targetUser);
+    } else if (dialogState.action === 'warn') {
+        handleSendWarning(dialogState.targetUser);
     }
     
     setDialogState({ isOpen: false, action: null, targetUser: null });
@@ -206,13 +240,18 @@ export default function ManageUsersPage() {
             <AlertDialogDescription>
                 {dialogState.action === 'delete'
                 ? `This will permanently delete ${dialogState.targetUser?.displayName}'s account data from Firestore. This action cannot be undone.`
+                : dialogState.action === 'warn' 
+                ? `This will send a formal warning to ${dialogState.targetUser?.displayName}.`
                 : `This will ${dialogState.targetUser?.isDisabled ? 're-enable' : 'disable'} ${dialogState.targetUser?.displayName}'s account, ${dialogState.targetUser?.isDisabled ? 'allowing them to log in again.' : 'preventing them from logging in.'}`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmAction} className={dialogState.action === 'delete' ? "bg-destructive hover:bg-destructive/90" : ""}>
-                Yes, {dialogState.action === 'delete' ? 'delete' : (dialogState.targetUser?.isDisabled ? 'enable' : 'disable')} user
+            <AlertDialogAction onClick={handleConfirmAction} className={cn(
+                dialogState.action === 'delete' && "bg-destructive hover:bg-destructive/90",
+                dialogState.action === 'warn' && "bg-yellow-500 hover:bg-yellow-600 dark:text-background"
+            )}>
+                Yes, {dialogState.action === 'delete' ? 'delete' : dialogState.action === 'warn' ? 'send warning' : (dialogState.targetUser?.isDisabled ? 'enable' : 'disable')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -256,6 +295,11 @@ export default function ManageUsersPage() {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => openConfirmationDialog('warn', user)} className="text-yellow-600 dark:text-yellow-500 focus:bg-yellow-500/10 focus:text-yellow-600 dark:focus:text-yellow-500">
+                                        <AlertTriangle className="mr-2 h-4 w-4" />
+                                        <span>Send Warning</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={() => openConfirmationDialog(user.isDisabled ? 'enable' : 'disable', user)}>
                                         <Ban className="mr-2 h-4 w-4" />
                                         <span>{user.isDisabled ? 'Enable' : 'Disable'} Account</span>
