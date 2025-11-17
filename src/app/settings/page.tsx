@@ -33,7 +33,7 @@ function BlockedUsersList() {
     }, [user, firestore]);
 
     useEffect(() => {
-        if (!userDocRef || !firestore) return;
+        if (!userDocRef || !firestore || !user) return;
 
         const unsubscribe = onSnapshot(userDocRef, async (docSnap) => {
             if (docSnap.exists()) {
@@ -64,7 +64,7 @@ function BlockedUsersList() {
 
         return () => unsubscribe();
 
-    }, [userDocRef, firestore]);
+    }, [userDocRef, firestore, user]);
 
 
     const handleUnblock = async (blockedUserId: string) => {
@@ -204,6 +204,18 @@ export default function SettingsPage() {
                             </Link>
                         </Button>
                      )}
+                     <div className="w-full rounded-lg border bg-card text-card-foreground shadow-sm">
+                        <div className="p-4 flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <Palette className="h-5 w-5" />
+                                <span className="text-base font-medium">Dark Mode</span>
+                            </div>
+                            <Switch
+                                checked={theme === 'dark'}
+                                onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
+                            />
+                        </div>
+                     </div>
                      <Accordion type="single" collapsible defaultValue="item-1" className="w-full">
                         <AccordionItem value="item-1">
                             <AccordionTrigger className="text-base font-medium px-2">
@@ -224,23 +236,6 @@ export default function SettingsPage() {
                                 </div>
                             </AccordionTrigger>
                             {/* Content could be added here if it becomes a collapsible section */}
-                        </AccordionItem>
-                        <AccordionItem value="item-4">
-                            <AccordionTrigger className="text-base font-medium px-2">
-                               <div className="flex items-center gap-3">
-                                    <Palette className="h-5 w-5" />
-                                    <span>Appearance</span>
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent>
-                                <div className="p-4 flex justify-between items-center">
-                                    <p className="font-medium">Dark Mode</p>
-                                     <Switch
-                                        checked={theme === 'dark'}
-                                        onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
-                                     />
-                                </div>
-                            </AccordionContent>
                         </AccordionItem>
                         <AccordionItem value="item-3">
                             <AccordionTrigger 
