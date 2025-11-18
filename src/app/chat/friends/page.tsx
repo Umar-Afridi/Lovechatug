@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
 import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot, getDocs, writeBatch, setDoc, serverTimestamp, getDoc as getDocNonRealTime, addDoc, or } from 'firebase/firestore';
@@ -141,28 +141,23 @@ const FriendRequestsList = () => {
             if (!chatSnap.exists()) {
                 const currentUserProfile = (await getDocNonRealTime(currentUserRef)).data() as UserProfile;
                 batch.set(chatRef, {
-                members: [user.uid, request.senderId],
-                createdAt: serverTimestamp(),
-                lastMessage: {
-                    content: "No messages yet",
-                    timestamp: serverTimestamp(),
-                    senderId: ""
-                },
-                participantDetails: {
-                    [user.uid]: {
-                    displayName: currentUserProfile?.displayName || user.displayName,
-                    photoURL: currentUserProfile?.photoURL || user.photoURL,
+                    members: [user.uid, request.senderId],
+                    createdAt: serverTimestamp(),
+                    lastMessage: null,
+                    participantDetails: {
+                        [user.uid]: {
+                        displayName: currentUserProfile?.displayName || user.displayName,
+                        photoURL: currentUserProfile?.photoURL || user.photoURL,
+                        },
+                        [request.senderId]: {
+                        displayName: request.fromUser.displayName,
+                        photoURL: request.fromUser.photoURL,
+                        },
                     },
-                    [request.senderId]: {
-                    displayName: request.fromUser.displayName,
-                    photoURL: request.fromUser.photoURL,
-                    },
-                },
-                unreadCount: { [user.uid]: 0, [request.senderId]: 0 },
-                typing: { [user.uid]: false, [request.senderId]: false }
+                    unreadCount: { [user.uid]: 0, [request.senderId]: 0 },
+                    typing: { [user.uid]: false, [request.senderId]: false }
                 });
             }
-
 
             batch.delete(requestRef);
 
@@ -196,7 +191,7 @@ const FriendRequestsList = () => {
             <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground p-8 text-center">
                 <UserPlus className="h-16 w-16 mb-4" />
                 <h2 className="text-xl font-semibold">No Friend Requests</h2>
-                <p>You have no pending friend requests.</p>
+                <p>When someone sends you a friend request, it will appear here.</p>
             </div>
         );
     }
@@ -288,47 +283,37 @@ export default function FriendsPage() {
 
   }, [user, firestore]);
 
- const handleSearch = async (queryText: string) => {
-      setSearchQuery(queryText);
-      const queryLower = queryText.toLowerCase();
+ const handleSearch = useCallback(async (queryText: string) => {
+    setSearchQuery(queryText);
+    const queryLower = queryText.toLowerCase();
 
-      if (queryLower.trim() === '') {
-        setSearchResults([]);
-        return;
-      }
+    if (queryLower.trim().length < 2) { // Only search if query is 2+ chars
+      setSearchResults([]);
+      return;
+    }
 
-      if (firestore && user && profile) {
-        const usersRef = collection(firestore, 'users');
-        const usernameQuery = query(
-          usersRef, 
-          where('username', '>=', queryLower),
-          where('username', '<=', queryLower + '\uf8ff')
-        );
-        const displayNameQuery = query(
-          usersRef,
-          where('displayName', '>=', queryText),
-          where('displayName', '<=', queryText + '\uf8ff')
-        );
-        
-        try {
-          const [usernameSnapshot, displayNameSnapshot] = await Promise.all([
-            getDocs(usernameQuery),
-            getDocs(displayNameQuery)
-          ]);
-          
-          const resultsMap = new Map<string, UserProfile>();
+    if (firestore && user && profile) {
+      const usersRef = collection(firestore, 'users');
+      // Using 'or' to query both username and displayName
+      // Note: This requires a composite index on username and displayName,
+      // or Firestore will suggest creating it. For this prototype, separate queries are safer.
+      const usernameQuery = query(
+        usersRef, 
+        where('username', '>=', queryLower),
+        where('username', '<=', queryLower + '\uf8ff'),
+        where('username', '!=', profile.username)
+      );
+      
+      try {
+        const usernameSnapshot = await getDocs(usernameQuery);
+        const resultsMap = new Map<string, UserProfile>();
 
-          const processSnapshot = (snapshot: any) => {
-              snapshot.docs.forEach((doc: any) => {
-                  const userData = doc.data() as UserProfile;
-                  if (userData.uid !== user.uid && !userData.isDisabled) {
-                    resultsMap.set(userData.uid, userData);
-                  }
-              });
-          };
-
-          processSnapshot(usernameSnapshot);
-          processSnapshot(displayNameSnapshot);
+        usernameSnapshot.forEach((doc) => {
+            const userData = doc.data() as UserProfile;
+             if (userData.uid !== user.uid && !userData.isDisabled) {
+                resultsMap.set(userData.uid, userData);
+             }
+        });
             
           const myBlockedList = profile.blockedUsers || [];
           const whoBlockedMe = profile.blockedBy || [];
@@ -348,7 +333,7 @@ export default function FriendsPage() {
             })
         }
       }
-    };
+    }, [firestore, user, profile, toast]);
 
   const handleSendRequest = async (receiverId: string) => {
       if (!firestore || !user) return;
@@ -401,33 +386,33 @@ export default function FriendsPage() {
                     
                     return (
                         <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
-                            <div className="flex items-center gap-4">
-                            <div className="relative">
-                                <Avatar className="h-12 w-12">
-                                    <AvatarImage src={foundUser.photoURL || undefined} />
-                                    <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
-                                </Avatar>
-                                {foundUser.officialBadge?.isOfficial && (
-                                    <div className="absolute bottom-0 right-0">
-                                        <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
-                                    </div>
-                                )}
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                <p className="font-semibold">
-                                    {applyNameColor(foundUser.displayName, foundUser.nameColor)}
-                                    </p>
-                                    {foundUser.verifiedBadge?.showBadge && (
-                                        <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
+                            <div className="flex items-center gap-4 overflow-hidden">
+                                <div className="relative">
+                                    <Avatar className="h-12 w-12">
+                                        <AvatarImage src={foundUser.photoURL || undefined} />
+                                        <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
+                                    </Avatar>
+                                    {foundUser.officialBadge?.isOfficial && (
+                                        <div className="absolute bottom-0 right-0">
+                                            <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
+                                        </div>
                                     )}
                                 </div>
-                                <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
-                            </div>
+                                <div className="overflow-hidden">
+                                    <div className="flex items-center gap-2">
+                                        <p className="font-semibold truncate">
+                                            {applyNameColor(foundUser.displayName, foundUser.nameColor)}
+                                        </p>
+                                        {foundUser.verifiedBadge?.showBadge && (
+                                            <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
+                                        )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground truncate">@{foundUser.username}</p>
+                                </div>
                             </div>
                             {isFriend ? (
-                                <Button asChild size="sm">
-                                    <Link href={`/chat/${foundUser.uid}`}>Message</Link>
+                                <Button asChild size="sm" variant="secondary" disabled>
+                                    <span>Friends</span>
                                 </Button>
                             ) : hasSentRequest ? (
                                 <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel</Button>
@@ -448,7 +433,7 @@ export default function FriendsPage() {
     <div className="flex h-full flex-col bg-background">
          <div className="p-4 space-y-4 border-b">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
+            <h1 className="text-2xl font-bold flex items-center gap-2">
                 <span>Friends</span>
             </h1>
             <div className="flex items-center gap-2">
@@ -476,7 +461,7 @@ export default function FriendsPage() {
           {isSearching && (
              <div className="relative">
                 <Input 
-                    placeholder="Search by username or name..." 
+                    placeholder="Search by username..." 
                     className="pl-10"
                     value={searchQuery}
                     onChange={(e) => handleSearch(e.target.value)}

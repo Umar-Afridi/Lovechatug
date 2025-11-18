@@ -81,18 +81,12 @@ export const useCallContext = () => {
   return context;
 };
 
-const SYSTEM_SENDER_ID = 'system_lovechat';
-const SYSTEM_SENDER_NAME = 'Love Chat';
-const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/UG_LOGO_RED.png?alt=media&token=e632b0a9-4678-4384-9549-01e403d5b00c';
-
-
 // Custom hook to get user profile data in real-time
 function useUserProfile(onAccountDisabled: () => void) {
   const { user, loading: authLoading } = useUser();
   const firestore = useFirestore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const previousProfileRef = useRef<UserProfile | null>(null);
 
   useEffect(() => {
     if (authLoading) {
@@ -115,11 +109,6 @@ function useUserProfile(onAccountDisabled: () => void) {
             onAccountDisabled();
           }
 
-          // Check for official status change
-          const previousProfile = previousProfileRef.current;
-          
-          previousProfileRef.current = data; // Update ref with current data for next snapshot
-
         } else {
           // This case might happen for a brand new user before the doc is created
           setProfile({
@@ -138,10 +127,7 @@ function useUserProfile(onAccountDisabled: () => void) {
       }
     );
 
-    return () => {
-        unsubscribe();
-        previousProfileRef.current = null;
-    };
+    return () => unsubscribe();
   }, [user, firestore, authLoading, onAccountDisabled]);
 
   return { profile, loading };
@@ -420,7 +406,7 @@ function ChatAppLayout({
     );
 
     return () => unsubscribe();
-  }, [firestore, user?.uid, playRequestSound]);
+  }, [firestore, user?.uid, playRequestSound, requestCount]);
   
   // Listener for total unread messages
   useEffect(() => {
@@ -580,7 +566,7 @@ function ChatAppLayout({
                         <SidebarMenuItem key={item.id}>
                             <Link href={item.href}>
                             <SidebarMenuButton
-                                isActive={item.href === '/chat' ? pathname === '/chat' : pathname.startsWith(item.href)}
+                                isActive={item.id === 'home' ? pathname === '/chat' : pathname.startsWith(item.href)}
                                 tooltip={item.label}
                             >
                                 <Icon />
@@ -623,7 +609,7 @@ function ChatAppLayout({
                 <div className="sticky bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur-sm">
                     <nav className="flex items-center justify-around p-2">
                         {menuItems.map((item) => {
-                            const isActive = item.href === '/chat' ? pathname === '/chat' : pathname.startsWith(item.href);
+                            const isActive = item.id === 'home' ? pathname === '/chat' : pathname.startsWith(item.href);
                              const Icon = item.icon;
                             return (
                                 <Link href={item.href} key={item.id} className={cn(
