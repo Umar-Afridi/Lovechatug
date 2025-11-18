@@ -182,7 +182,6 @@ export default function RoomPage() {
     const joinAndListen = async () => {
         const roomRef = doc(firestore, 'rooms', roomId);
         const userRef = doc(firestore, 'users', authUser.uid);
-        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
 
         try {
             // 1. Check if room exists and user is not kicked
@@ -200,23 +199,7 @@ export default function RoomPage() {
                 return;
             }
 
-            // 2. Set user as member if not already, and update currentRoomId
-            const isRoomOwner = roomData.ownerId === authUser.uid;
-            const memberSnap = await getDoc(memberRef);
-
-            const batch = writeBatch(firestore);
-            if (!memberSnap.exists()) {
-                batch.set(memberRef, { userId: authUser.uid, micSlot: isRoomOwner ? OWNER_SLOT : null, isMuted: true });
-                if (!isRoomOwner) batch.update(roomRef, { memberCount: increment(1) });
-            } else if (isRoomOwner && memberSnap.data()?.micSlot !== OWNER_SLOT) {
-                batch.update(memberRef, { micSlot: OWNER_SLOT });
-            }
-            batch.update(userRef, { currentRoomId: roomId });
-            await batch.commit();
-
-            setStatus('joined');
-
-            // 3. Setup Listeners
+            // 2. Setup Listeners
             unsubRoom = onSnapshot(roomRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const updatedRoomData = { id: docSnap.id, ...docSnap.data() } as Room;
@@ -236,13 +219,9 @@ export default function RoomPage() {
             const membersQuery = query(collection(roomRef, 'members'));
             unsubMembers = onSnapshot(membersQuery, async (snapshot) => {
                 const membersList = snapshot.docs.map(d => d.data() as RoomMember);
-                setMembers(membersList);
-
                 const currentProfileIds = Object.keys(memberProfiles);
-                const newMemberIds = membersList
-                    .map(m => m.userId)
-                    .filter(id => !currentProfileIds.includes(id));
-                
+                const newMemberIds = membersList.map(m => m.userId).filter(id => !currentProfileIds.includes(id));
+
                 if (newMemberIds.length > 0) {
                     const profilesRef = collection(firestore, 'users');
                     const newProfiles: Record<string, UserProfile> = {};
@@ -254,9 +233,27 @@ export default function RoomPage() {
                     }
                     setMemberProfiles(prev => ({...prev, ...newProfiles}));
                 }
+                setMembers(membersList);
             }, (error) => {
                 console.error("Error listening to room members:", error);
             });
+
+            // 3. Set user as member if not already, and update currentRoomId
+            const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+            const memberSnap = await getDoc(memberRef);
+            const isRoomOwner = roomData.ownerId === authUser.uid;
+
+            const batch = writeBatch(firestore);
+            if (!memberSnap.exists()) {
+                batch.set(memberRef, { userId: authUser.uid, micSlot: isRoomOwner ? OWNER_SLOT : null, isMuted: true });
+                if (!isRoomOwner) batch.update(roomRef, { memberCount: increment(1) });
+            } else if (isRoomOwner && memberSnap.data()?.micSlot !== OWNER_SLOT) {
+                batch.update(memberRef, { micSlot: OWNER_SLOT });
+            }
+            batch.update(userRef, { currentRoomId: roomId });
+            await batch.commit();
+
+            setStatus('joined');
 
             const joinTime = Timestamp.now();
             const messagesQuery = query(collection(roomRef, 'messages'), where('timestamp', '>=', joinTime), orderBy('timestamp', 'asc'));
