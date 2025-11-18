@@ -405,7 +405,7 @@ function ChatAppLayout({
     );
 
     return () => unsubscribe();
-  }, [firestore, user?.uid, playRequestSound, requestCount]);
+  }, [firestore, user?.uid, playRequestSound]);
   
   // Listener for total unread messages
   useEffect(() => {
