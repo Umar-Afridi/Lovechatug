@@ -31,14 +31,6 @@ import { useAuth, useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
 import { Button } from '@/components/ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogContent,
@@ -59,6 +51,9 @@ import { IncomingCall } from '@/components/chat/incoming-call';
 import ActiveCallPage from './call/active/[callId]/page';
 import OutgoingCallPage from './call/outgoing/[userId]/page';
 import { Badge } from '@/components/ui/badge';
+import Image from 'next/image';
+import { ProfileFrameProvider } from '@/hooks/use-profile-frame-provider';
+import { useProfileFrame } from '@/hooks/use-profile-frame';
 
 // Context for Call State
 interface CallContextType {
@@ -125,6 +120,7 @@ function useUserProfile(onAccountDisabled: () => void) {
               officialBadge: data.officialBadge,
               nameColor: data.nameColor,
               isDisabled: data.isDisabled,
+              activeFrame: data.activeFrame,
           };
           const significantDataString = JSON.stringify(significantData);
 
@@ -406,6 +402,15 @@ function ChatAppLayout({
   }, []);
   
   const { profile, loading: profileLoading } = useUserProfile(handleAccountDisabled);
+  const { setActiveFrame } = useProfileFrame();
+
+  useEffect(() => {
+    if (profile?.activeFrame) {
+      setActiveFrame(profile.activeFrame);
+    }
+  }, [profile?.activeFrame, setActiveFrame]);
+
+
   usePresence(); // Initialize presence management
 
   const { play: playRequestSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a');
@@ -432,7 +437,7 @@ function ChatAppLayout({
     );
 
     return () => unsubscribe();
-  }, [firestore, user?.uid, playRequestSound]);
+  }, [firestore, user?.uid, playRequestSound, requestCount]);
   
   // Listener for total unread messages
   useEffect(() => {
@@ -565,15 +570,26 @@ function ChatAppLayout({
             <Sidebar side="left" collapsible="icon" className="group hidden md:flex">
                 <SidebarHeader>
                     <Link href="/profile" className="h-12 w-full justify-start gap-2 px-2 flex items-center">
-                        <Avatar className="h-8 w-8">
-                        <AvatarImage
-                            src={profile?.photoURL ?? undefined}
-                            alt={profile?.displayName ?? 'user-avatar'}
-                        />
-                        <AvatarFallback>
-                            {getInitials(profile?.displayName)}
-                        </AvatarFallback>
-                        </Avatar>
+                        <div className="relative h-8 w-8">
+                            {profile?.activeFrame && (
+                                <Image
+                                    src={profile.activeFrame}
+                                    alt="Profile Frame"
+                                    width={32}
+                                    height={32}
+                                    className="absolute inset-0 z-10"
+                                />
+                            )}
+                            <Avatar className="h-full w-full">
+                                <AvatarImage
+                                    src={profile?.photoURL ?? undefined}
+                                    alt={profile?.displayName ?? 'user-avatar'}
+                                />
+                                <AvatarFallback>
+                                    {getInitials(profile?.displayName)}
+                                </AvatarFallback>
+                            </Avatar>
+                        </div>
                         <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
                         <span className={"truncate text-sm font-medium"}>
                             {applyNameColor(profile?.displayName ?? 'User', profile?.nameColor)}
@@ -668,8 +684,10 @@ function ChatAppLayout({
 
 export default function ChatAppLayoutWithProvider({ children }: { children: React.ReactNode }) {
     return (
+      <ProfileFrameProvider>
         <CallProvider>
             <ChatAppLayout>{children}</ChatAppLayout>
         </CallProvider>
+      </ProfileFrameProvider>
     );
 }

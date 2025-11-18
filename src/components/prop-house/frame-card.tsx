@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { useProfileFrame } from '@/hooks/use-profile-frame';
 
 interface FrameCardProps {
   item: {
@@ -15,6 +16,8 @@ interface FrameCardProps {
 }
 
 export function FrameCard({ item }: FrameCardProps) {
+  const { applyFrame } = useProfileFrame();
+
   return (
     <div className="group relative flex flex-col justify-between overflow-hidden rounded-xl border bg-card p-2 text-center shadow-sm transition-all duration-300 hover:shadow-lg hover:border-primary/50">
       
@@ -42,7 +45,7 @@ export function FrameCard({ item }: FrameCardProps) {
          <Button variant="ghost" size="sm" className="rounded-none text-muted-foreground hover:bg-muted/80">
             Send
          </Button>
-         <Button size="sm" className="rounded-none">
+         <Button size="sm" className="rounded-none" onClick={() => applyFrame(item.id, item.imageUrl)}>
             Use
          </Button>
       </div>

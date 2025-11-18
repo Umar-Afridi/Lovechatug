@@ -30,6 +30,7 @@ export type UserProfile = {
   isDisabled?: boolean; // New field for disabled status
   activityScore?: number;
   currentRoomId?: string | null; // To track which room the user is in
+  activeFrame?: string; // URL of the active profile frame
 }
 
 export type Message = {

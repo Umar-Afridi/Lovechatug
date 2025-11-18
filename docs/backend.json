@@ -130,6 +130,11 @@
         "activityScore": {
           "type": "number",
           "description": "A score representing the user's activity level, updated periodically."
+        },
+        "activeFrame": {
+            "type": "string",
+            "format": "uri",
+            "description": "The URL of the user's currently active profile frame."
         }
       },
       "required": ["uid", "displayName", "email", "username", "verifiedBadge", "nameColor", "verificationApplicationStatus"]

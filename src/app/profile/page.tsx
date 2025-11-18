@@ -16,6 +16,7 @@ import { OfficialBadge } from '@/components/ui/official-badge';
 import { getDatabase, ref, set, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 
 
 export default function ProfilePage() {
@@ -131,15 +132,23 @@ export default function ProfilePage() {
                 <div className="mx-auto max-w-xl space-y-8">
                     <Link href="/profile/edit" className="block">
                         <div className="flex items-center gap-4 rounded-lg p-4 bg-muted/50 hover:bg-muted transition-colors">
-                            <div className="relative">
-                                <Avatar className="h-20 w-20">
+                            <div className="relative h-20 w-20">
+                                {userProfile.activeFrame && (
+                                    <Image
+                                        src={userProfile.activeFrame}
+                                        alt="Profile Frame"
+                                        layout="fill"
+                                        className="absolute inset-0 z-10 pointer-events-none"
+                                    />
+                                )}
+                                <Avatar className="h-full w-full">
                                     <AvatarImage src={userProfile.photoURL ?? undefined} alt={userProfile.displayName} />
                                     <AvatarFallback className="text-3xl">
                                         {getInitials(userProfile.displayName)}
                                     </AvatarFallback>
                                 </Avatar>
                                 {userProfile.verifiedBadge?.showBadge && (
-                                    <div className="absolute bottom-0 right-0">
+                                    <div className="absolute bottom-0 right-0 z-20">
                                         <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-6 w-6"/>
                                     </div>
                                 )}
