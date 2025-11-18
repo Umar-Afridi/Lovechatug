@@ -419,7 +419,7 @@ function ChatAppLayout({
     );
 
     return () => unsubscribe();
-  }, [firestore, user?.uid, playRequestSound]);
+  }, [firestore, user?.uid, playRequestSound, requestCount]);
   
   // Listener for total unread messages
   useEffect(() => {
@@ -499,20 +499,26 @@ function ChatAppLayout({
   
   const menuItems = [
     {
-      href: '/chat/friends',
-      icon: '🏠',
+      href: '/chat',
+      icon: () => <span className="h-6 w-6 flex items-center justify-center text-xl">🏠</span>,
       label: 'Home',
       id: 'home',
     },
     {
       href: '/chat',
-      icon: '📥',
+      icon: () => <span className="h-6 w-6 flex items-center justify-center text-xl">📥</span>,
       label: 'Inbox',
       id: 'inbox',
     },
+     {
+      href: '/chat/friends',
+      icon: UserPlus,
+      label: 'Friends',
+      id: 'friends',
+    },
     {
        href: '/profile',
-       icon: '🧸',
+       icon: () => <span className="h-6 w-6 flex items-center justify-center text-xl">🧸</span>,
        label: 'Me',
        id: 'me',
     },
@@ -566,12 +572,12 @@ function ChatAppLayout({
                 <SidebarContent>
                 <SidebarMenu>
                     {menuItems.map((item) => {
-                       const Icon = typeof item.icon === 'string' ? () => <span className="h-6 w-6 flex items-center justify-center text-xl">{item.icon}</span> : item.icon;
+                       const Icon = item.icon;
                       return (
-                        <SidebarMenuItem key={item.href}>
+                        <SidebarMenuItem key={item.id}>
                             <Link href={item.href}>
                             <SidebarMenuButton
-                                isActive={pathname === item.href}
+                                isActive={pathname === item.href || (item.id === 'home' && pathname === '/chat')}
                                 tooltip={item.label}
                             >
                                 <Icon />
@@ -612,7 +618,7 @@ function ChatAppLayout({
                     <nav className="flex items-center justify-around p-2">
                         {menuItems.map((item) => {
                             const isActive = item.href === '/chat' ? pathname === '/chat' : pathname.startsWith(item.href);
-                             const Icon = typeof item.icon === 'string' ? () => <span className="h-6 w-6 flex items-center justify-center text-xl">{item.icon}</span> : item.icon;
+                             const Icon = item.icon;
                             return (
                                 <Link href={item.href} key={item.id} className={cn(
                                     "flex flex-col items-center gap-1 rounded-md p-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",

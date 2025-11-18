@@ -372,7 +372,7 @@ export default function FriendsPage() {
          <div className="p-4 space-y-4 border-b">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
-                <span>Home</span>
+                <span>Friends</span>
             </h1>
             <div className="flex items-center gap-2">
                  <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={toggleSearch}>
