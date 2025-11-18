@@ -175,7 +175,6 @@ function usePresence() {
         await set(userStatusDatabaseRef, onlineStatus);
         
         // This is a one-time update when connection is established.
-        // It won't trigger loops because it's not based on profile changes.
         await updateDoc(userStatusFirestoreRef, { isOnline: true, lastSeen: serverTimestamp() });
         
         // On disconnect, set user to offline in RTDB
@@ -190,7 +189,7 @@ function usePresence() {
         off(connectedRef, 'value', unsubscribe);
       }
     };
-  }, [user, firestore]); // The dependency array is stable and won't cause loops.
+  }, [user, firestore]);
 }
 
 
@@ -437,7 +436,7 @@ function ChatAppLayout({
     );
 
     return () => unsubscribe();
-  }, [firestore, user?.uid, playRequestSound, requestCount]);
+  }, [firestore, user?.uid, playRequestSound]);
   
   // Listener for total unread messages
   useEffect(() => {
