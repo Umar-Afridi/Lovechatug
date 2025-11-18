@@ -13,7 +13,7 @@ export default function PropHousePage() {
     <div className="p-4 md:p-8 flex-1 flex flex-col">
       <div className="w-full max-w-md space-y-6 mx-auto">
         <Button asChild variant="outline" className={cn(baseButtonClassName, "border-blue-600 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20")}>
-          <Link href="#">
+          <Link href="/prop-house/frames">
             <Frame className="mr-4 h-6 w-6 text-blue-500" />
             Frames
           </Link>
