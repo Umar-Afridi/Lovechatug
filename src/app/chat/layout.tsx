@@ -486,7 +486,7 @@ function ChatAppLayout({
   
   const menuItems = [
     {
-      href: '/chat',
+      href: '/chat/rooms',
       icon: () => <span className="h-6 w-6 flex items-center justify-center text-xl">🏠</span>,
       label: 'Home',
       id: 'home',
@@ -562,11 +562,15 @@ function ChatAppLayout({
                 <SidebarMenu>
                     {menuItems.map((item) => {
                        const Icon = item.icon;
+                       let isActive = pathname.startsWith(item.href);
+                       if (item.id === 'inbox') isActive = pathname === '/chat';
+                       if (item.id === 'home') isActive = pathname === '/chat/rooms';
+
                       return (
                         <SidebarMenuItem key={item.id}>
                             <Link href={item.href}>
                             <SidebarMenuButton
-                                isActive={item.id === 'home' ? pathname === '/chat' : pathname.startsWith(item.href)}
+                                isActive={isActive}
                                 tooltip={item.label}
                             >
                                 <Icon />
@@ -609,8 +613,10 @@ function ChatAppLayout({
                 <div className="sticky bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur-sm">
                     <nav className="flex items-center justify-around p-2">
                         {menuItems.map((item) => {
-                            const isActive = item.id === 'home' ? pathname === '/chat' : pathname.startsWith(item.href);
-                             const Icon = item.icon;
+                           let isActive = pathname.startsWith(item.href);
+                           if (item.id === 'inbox') isActive = pathname === '/chat';
+                           if (item.id === 'home') isActive = pathname === '/chat/rooms';
+                           const Icon = item.icon;
                             return (
                                 <Link href={item.href} key={item.id} className={cn(
                                     "relative flex flex-col items-center gap-1 rounded-md p-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
