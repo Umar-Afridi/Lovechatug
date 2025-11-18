@@ -9,6 +9,8 @@ import {
   PhoneIncoming,
   PhoneOutgoing,
   PhoneMissed,
+  Bell,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -38,6 +40,8 @@ import type { UserProfile, Call, Chat } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { OfficialBadge } from '@/components/ui/official-badge';
+import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
 
 
 interface CallWithUser extends Call {
@@ -129,8 +133,25 @@ export default function CallsPage() {
   const [loading, setLoading] = useState(true);
   const [isClearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const { toast } = useToast();
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   
   const usersCache = React.useRef(new Map<string, UserProfile>());
+
+  useEffect(() => {
+    if (!user || !firestore) return;
+    
+    const notificationsRef = collection(firestore, 'users', user.uid, 'notifications');
+    const qNotifications = query(notificationsRef, where('isRead', '==', false));
+
+    const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
+        setUnreadNotificationCount(snapshot.size);
+    });
+
+    return () => {
+        unsubscribeNotifications();
+    };
+
+  }, [user, firestore]);
 
   const handleClearAll = async () => {
     if (!firestore || !user || calls.length === 0) return;
@@ -249,19 +270,36 @@ export default function CallsPage() {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <h1 className="text-xl font-bold">Call History</h1>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <MoreVertical className="h-5 w-5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setClearAllDialogOpen(true)} className="text-destructive focus:bg-destructive/10 focus:text-destructive" disabled={calls.length === 0}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                <span>Clear all call history</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+           <div className="flex items-center gap-2">
+                 <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full" asChild>
+                    <Link href="/chat/notifications">
+                      <Bell className="h-5 w-5" />
+                      {unreadNotificationCount > 0 && (
+                          <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{unreadNotificationCount}</Badge>
+                      )}
+                      <span className="sr-only">Notifications</span>
+                    </Link>
+                 </Button>
+                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
+                    <Link href="/settings">
+                        <Settings className="h-5 w-5" />
+                        <span className="sr-only">Settings</span>
+                    </Link>
+                 </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setClearAllDialogOpen(true)} className="text-destructive focus:bg-destructive/10 focus:text-destructive" disabled={calls.length === 0}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  <span>Clear all call history</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Content */}

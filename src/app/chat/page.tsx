@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { Search, Bell, Settings } from 'lucide-react';
+import { Search, Bell, Settings, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -158,6 +158,7 @@ export default function ChatPage() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   // Search state
+  const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [sentRequests, setSentRequests] = useState<FriendRequestType[]>([]);
@@ -290,10 +291,10 @@ export default function ChatPage() {
   }
 
   const renderContent = () => {
-    if (searchQuery) {
+    if (isSearching) {
         return (
             <ScrollArea className="flex-1">
-                {searchResults.length === 0 ? (
+                {searchResults.length === 0 && searchQuery ? (
                     <div className="p-4 text-center text-muted-foreground">
                         <p>No users found for "{searchQuery}".</p>
                     </div>
@@ -381,6 +382,10 @@ export default function ChatPage() {
                 <span>Love Chat</span>
             </h1>
             <div className="flex items-center gap-2">
+                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={() => setIsSearching(true)}>
+                    <Search className="h-5 w-5" />
+                    <span className="sr-only">Search</span>
+                 </Button>
                  <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full" asChild>
                     <Link href="/chat/notifications">
                       <Bell className="h-5 w-5" />
@@ -398,15 +403,21 @@ export default function ChatPage() {
                  </Button>
             </div>
           </div>
-           <div className="relative">
-            <Input 
-                placeholder="Search users..." 
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-           </div>
+           {isSearching && (
+             <div className="relative">
+                <Input 
+                    placeholder="Search users..." 
+                    className="pl-10"
+                    value={searchQuery}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    autoFocus
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={() => { setIsSearching(false); setSearchQuery(''); setSearchResults([]); }}>
+                    <X className="h-5 w-5" />
+                </Button>
+            </div>
+          )}
         </div>
         
         {/* Content */}
