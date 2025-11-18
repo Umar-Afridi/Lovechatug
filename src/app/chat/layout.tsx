@@ -13,7 +13,6 @@ import {
   PlusSquare,
   Home,
   Inbox,
-  User as UserIcon,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -398,10 +397,9 @@ function ChatAppLayout({
   const { play: playRequestSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a');
   const isFirstRequestLoad = useRef(true);
 
+  // Listener for friend requests count
   useEffect(() => {
-    if (!firestore || !user?.uid) {
-      return;
-    }
+    if (!firestore || !user?.uid) return;
 
     const requestsRef = collection(firestore, 'friendRequests');
     const q = query(requestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
@@ -423,7 +421,7 @@ function ChatAppLayout({
     return () => unsubscribe();
   }, [firestore, user?.uid, playRequestSound]);
   
-  // New listener for total unread messages
+  // Listener for total unread messages
   useEffect(() => {
     if (!firestore || !user?.uid) return;
 
@@ -440,7 +438,6 @@ function ChatAppLayout({
     });
 
     return () => unsubscribeChats();
-
   }, [firestore, user?.uid]);
 
 
@@ -515,7 +512,7 @@ function ChatAppLayout({
     },
     {
        href: '/profile',
-       icon: UserIcon,
+       icon: '🧸',
        label: 'Me',
        id: 'me',
     },
