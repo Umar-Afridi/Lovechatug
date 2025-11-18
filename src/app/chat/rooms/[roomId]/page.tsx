@@ -180,107 +180,104 @@ export default function RoomPage() {
     let unsubMessages: (() => void) | undefined;
 
     const joinAndListen = async () => {
-        const roomRef = doc(firestore, 'rooms', roomId);
-        const userRef = doc(firestore, 'users', authUser.uid);
+      const roomRef = doc(firestore, 'rooms', roomId);
+      const userRef = doc(firestore, 'users', authUser.uid);
 
-        try {
-            // 1. Check if room exists and user is not kicked
-            const roomSnap = await getDoc(roomRef);
-            if (!roomSnap.exists()) {
-                toast({ title: 'Room not found', variant: 'destructive' });
-                router.push('/chat/rooms');
-                return;
-            }
-
-            const roomData = roomSnap.data() as Room;
-            if (roomData.kickedUsers?.[authUser.uid]) {
-                toast({ title: "Cannot Join", description: "You have been kicked from this room.", variant: "destructive" });
-                router.push('/chat/rooms');
-                return;
-            }
-
-            // 2. Setup Listeners
-            unsubRoom = onSnapshot(roomRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const updatedRoomData = { id: docSnap.id, ...docSnap.data() } as Room;
-                    setRoom(updatedRoomData);
-                    setCurrentRoom(updatedRoomData);
-                    if (updatedRoomData.kickedUsers?.[authUser.uid]) {
-                        toast({ title: "You've been kicked", variant: 'destructive' });
-                        handleLeaveRoom(true);
-                    }
-                } else {
-                    toast({ title: 'Room deleted', variant: 'destructive' });
-                    contextLeaveRoom();
-                    router.push('/chat/rooms');
-                }
-            });
-
-            const membersQuery = query(collection(roomRef, 'members'));
-            unsubMembers = onSnapshot(membersQuery, async (snapshot) => {
-                const membersList = snapshot.docs.map(d => d.data() as RoomMember);
-                const currentProfileIds = Object.keys(memberProfiles);
-                const newMemberIds = membersList.map(m => m.userId).filter(id => !currentProfileIds.includes(id));
-
-                if (newMemberIds.length > 0) {
-                    const profilesRef = collection(firestore, 'users');
-                    const newProfiles: Record<string, UserProfile> = {};
-                    for (let i = 0; i < newMemberIds.length; i += 30) {
-                        const chunk = newMemberIds.slice(i, i + 30);
-                        const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
-                        const profilesSnapshot = await getDocs(profilesQuery);
-                        profilesSnapshot.forEach(doc => newProfiles[doc.id] = doc.data() as UserProfile);
-                    }
-                    setMemberProfiles(prev => ({...prev, ...newProfiles}));
-                }
-                setMembers(membersList);
-            }, (error) => {
-                console.error("Error listening to room members:", error);
-            });
-
-            // 3. Set user as member if not already, and update currentRoomId
-            const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-            const memberSnap = await getDoc(memberRef);
-            const isRoomOwner = roomData.ownerId === authUser.uid;
-
-            const batch = writeBatch(firestore);
-            if (!memberSnap.exists()) {
-                batch.set(memberRef, { userId: authUser.uid, micSlot: isRoomOwner ? OWNER_SLOT : null, isMuted: true });
-                if (!isRoomOwner) batch.update(roomRef, { memberCount: increment(1) });
-            } else if (isRoomOwner && memberSnap.data()?.micSlot !== OWNER_SLOT) {
-                batch.update(memberRef, { micSlot: OWNER_SLOT });
-            }
-            batch.update(userRef, { currentRoomId: roomId });
-            await batch.commit();
-
-            setStatus('joined');
-
-            const joinTime = Timestamp.now();
-            const messagesQuery = query(collection(roomRef, 'messages'), where('timestamp', '>=', joinTime), orderBy('timestamp', 'asc'));
-            unsubMessages = onSnapshot(messagesQuery, (snapshot) => {
-                snapshot.docChanges().forEach((change) => {
-                    if (change.type === 'added') {
-                        const newMsg = { id: change.doc.id, ...change.doc.data() } as RoomMessage;
-                        setMessages(prev => [...prev, newMsg]);
-                    }
-                });
-            });
-
-        } catch (error) {
-            console.error("Error joining room:", error);
-            setStatus('error');
-            router.push('/chat/rooms');
+      try {
+        // 1. Check if room exists and user is not kicked
+        const roomSnap = await getDoc(roomRef);
+        if (!roomSnap.exists()) {
+          toast({ title: 'Room not found', variant: 'destructive' });
+          router.push('/chat/rooms');
+          return;
         }
+
+        const roomData = roomSnap.data() as Room;
+        if (roomData.kickedUsers?.[authUser.uid]) {
+          toast({ title: "Cannot Join", description: "You have been kicked from this room.", variant: "destructive" });
+          router.push('/chat/rooms');
+          return;
+        }
+
+        // 2. Setup Listeners
+        unsubRoom = onSnapshot(roomRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const updatedRoomData = { id: docSnap.id, ...docSnap.data() } as Room;
+            setRoom(updatedRoomData);
+            setCurrentRoom(updatedRoomData);
+            if (updatedRoomData.kickedUsers?.[authUser.uid]) {
+              toast({ title: "You've been kicked", variant: 'destructive' });
+              handleLeaveRoom(true);
+            }
+          } else {
+            toast({ title: 'Room deleted', variant: 'destructive' });
+            contextLeaveRoom();
+            router.push('/chat/rooms');
+          }
+        });
+
+        const membersQuery = query(collection(roomRef, 'members'));
+        unsubMembers = onSnapshot(membersQuery, async (snapshot) => {
+            const membersList = snapshot.docs.map(d => d.data() as RoomMember);
+            setMembers(membersList);
+
+            const currentProfileIds = Object.keys(memberProfiles);
+            const newMemberIds = membersList.map(m => m.userId).filter(id => !currentProfileIds.includes(id));
+
+            if (newMemberIds.length > 0) {
+                const profilesRef = collection(firestore, 'users');
+                const newProfiles: Record<string, UserProfile> = {};
+                for (let i = 0; i < newMemberIds.length; i += 30) {
+                    const chunk = newMemberIds.slice(i, i + 30);
+                    const profilesQuery = query(profilesRef, where('uid', 'in', chunk));
+                    const profilesSnapshot = await getDocs(profilesQuery);
+                    profilesSnapshot.forEach(doc => newProfiles[doc.id] = doc.data() as UserProfile);
+                }
+                setMemberProfiles(prev => ({...prev, ...newProfiles}));
+            }
+        }, (error) => {
+            console.error("Error listening to room members:", error);
+        });
+        
+        // 3. Set user as member and update their currentRoomId
+        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
+        const isRoomOwner = roomData.ownerId === authUser.uid;
+        const memberData: RoomMember = {
+            userId: authUser.uid,
+            isMuted: true,
+            micSlot: isRoomOwner ? OWNER_SLOT : null
+        };
+        await setDoc(memberRef, memberData, { merge: true });
+        await updateDoc(userRef, { currentRoomId: roomId });
+
+        setStatus('joined');
+
+        const joinTime = Timestamp.now();
+        const messagesQuery = query(collection(roomRef, 'messages'), where('timestamp', '>=', joinTime), orderBy('timestamp', 'asc'));
+        unsubMessages = onSnapshot(messagesQuery, (snapshot) => {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const newMsg = { id: change.doc.id, ...change.doc.data() } as RoomMessage;
+              setMessages(prev => [...prev, newMsg]);
+            }
+          });
+        });
+
+      } catch (error) {
+        console.error("Error joining room:", error);
+        setStatus('error');
+        router.push('/chat/rooms');
+      }
     };
 
     joinAndListen();
 
     return () => {
-        unsubRoom?.();
-        unsubMembers?.();
-        unsubMessages?.();
+      unsubRoom?.();
+      unsubMembers?.();
+      unsubMessages?.();
     };
-  }, [firestore, roomId, authUser?.uid]);
+  }, [firestore, roomId, authUser?.uid, router, toast, contextLeaveRoom, handleLeaveRoom, memberProfiles, setCurrentRoom]);
 
   const handleDeleteRoom = async () => {
      if (!firestore || !isOwner || !room) return;
@@ -361,11 +358,6 @@ export default function RoomPage() {
   const handleTakeSeat = async (slotNumber: number) => {
       if (!currentUserSlot || !authUser) return;
       
-      // Optimistic UI update
-      setMembers(prevMembers => prevMembers.map(m => 
-          m.userId === authUser.uid ? { ...m, micSlot: slotNumber } : m
-      ));
-      
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       await updateDoc(memberRef, { micSlot: slotNumber });
   };
@@ -373,11 +365,6 @@ export default function RoomPage() {
   const handleLeaveSeat = async () => {
       if (!currentUserSlot || currentUserSlot.micSlot === null || !authUser) return;
       
-       // Optimistic UI update
-      setMembers(prevMembers => prevMembers.map(m => 
-          m.userId === authUser.uid ? { ...m, micSlot: null } : m
-      ));
-
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       await updateDoc(memberRef, { micSlot: null });
   }
