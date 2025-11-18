@@ -13,9 +13,8 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+import { Search, Settings, Bell, X } from 'lucide-react';
 import Link from 'next/link';
-import { Settings, Bell } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 
@@ -246,6 +245,7 @@ export default function FriendsPage() {
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [sentRequests, setSentRequests] = useState<FriendRequestType[]>([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
   const { toast } = useToast();
 
 
@@ -360,6 +360,12 @@ export default function FriendsPage() {
       .map((n) => n[0])
       .join('');
   };
+
+  const toggleSearch = () => {
+    setIsSearching(!isSearching);
+    setSearchQuery('');
+    setSearchResults([]);
+  }
   
   return (
     <div className="flex h-full flex-col bg-background">
@@ -369,6 +375,10 @@ export default function FriendsPage() {
                 <span>Home</span>
             </h1>
             <div className="flex items-center gap-2">
+                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={toggleSearch}>
+                    {isSearching ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+                    <span className="sr-only">Search Users</span>
+                 </Button>
                  <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full" asChild>
                     <Link href="/chat/notifications">
                       <Bell className="h-5 w-5" />
@@ -386,24 +396,25 @@ export default function FriendsPage() {
                  </Button>
             </div>
           </div>
-          <form onSubmit={handleSearch} className="relative flex items-center">
-            <Input 
-                placeholder="Search users by username..." 
-                className="pr-12 pl-4"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <Button type="submit" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8">
-                <Search className="h-4 w-4 text-muted-foreground" />
-            </Button>
-          </form>
         </div>
         <ScrollArea className="flex-1">
-            {searchQuery.trim() !== '' ? (
+            {isSearching ? (
                 <div>
+                     <form onSubmit={handleSearch} className="relative flex items-center p-4">
+                        <Input 
+                            placeholder="Search users by username..." 
+                            className="pr-12 pl-4"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            autoFocus
+                        />
+                        <Button type="submit" variant="ghost" size="icon" className="absolute right-5 top-1/2 -translate-y-1/2 h-8 w-8">
+                            <Search className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                     </form>
                      {searchResults.length === 0 ? (
                         <div className="p-4 text-center text-muted-foreground">
-                            <p>No users found matching your search.</p>
+                            <p>{searchQuery ? "No users found." : "Enter a username to find users."}</p>
                         </div>
                      ) : (
                         searchResults.map(foundUser => {
