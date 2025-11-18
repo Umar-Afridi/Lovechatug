@@ -259,6 +259,8 @@ export default function RoomPage() {
             }
              setMemberProfiles(prev => ({...prev, ...newProfiles}));
         }
+      }, (error) => {
+          console.error("Error listening to room members:", error);
       });
 
       const joinTime = Timestamp.now();
@@ -280,6 +282,8 @@ export default function RoomPage() {
       unsubMembers?.();
       unsubMessages?.();
     };
+  // IMPORTANT: The dependency array is intentionally minimal to prevent infinite loops.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, authUser?.uid, firestore]);
 
   const handleDeleteRoom = async () => {
