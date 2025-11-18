@@ -58,6 +58,7 @@ import { useSound } from '@/hooks/use-sound';
 import { IncomingCall } from '@/components/chat/incoming-call';
 import ActiveCallPage from './call/active/[callId]/page';
 import OutgoingCallPage from './call/outgoing/[userId]/page';
+import { Badge } from '@/components/ui/badge';
 
 // Context for Call State
 interface CallContextType {
@@ -505,16 +506,18 @@ function ChatAppLayout({
       id: 'home',
     },
     {
+      href: '/chat/friends',
+      icon: () => <UserPlus />,
+      label: 'Friends',
+      id: 'friends',
+      badgeCount: requestCount,
+    },
+    {
       href: '/chat',
       icon: () => <span className="h-6 w-6 flex items-center justify-center text-xl">📥</span>,
       label: 'Inbox',
       id: 'inbox',
-    },
-     {
-      href: '/chat/friends',
-      icon: UserPlus,
-      label: 'Friends',
-      id: 'friends',
+      badgeCount: inboxCount,
     },
     {
        href: '/profile',
@@ -577,13 +580,16 @@ function ChatAppLayout({
                         <SidebarMenuItem key={item.id}>
                             <Link href={item.href}>
                             <SidebarMenuButton
-                                isActive={pathname === item.href || (item.id === 'home' && pathname === '/chat')}
+                                isActive={item.href === '/chat' ? pathname === '/chat' : pathname.startsWith(item.href)}
                                 tooltip={item.label}
                             >
                                 <Icon />
                                 <span>{item.label}</span>
                             </SidebarMenuButton>
                             </Link>
+                            {item.badgeCount && item.badgeCount > 0 ? (
+                              <SidebarMenuBadge>{item.badgeCount}</SidebarMenuBadge>
+                            ): null}
                         </SidebarMenuItem>
                       )
                     })}
@@ -621,11 +627,14 @@ function ChatAppLayout({
                              const Icon = item.icon;
                             return (
                                 <Link href={item.href} key={item.id} className={cn(
-                                    "flex flex-col items-center gap-1 rounded-md p-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+                                    "relative flex flex-col items-center gap-1 rounded-md p-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
                                     isActive && "text-primary"
                                 )}>
                                     <Icon />
                                     <span>{item.label}</span>
+                                     {item.badgeCount && item.badgeCount > 0 ? (
+                                        <Badge variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 justify-center p-0 text-[10px]">{item.badgeCount}</Badge>
+                                    ): null}
                                 </Link>
                             )
                         })}

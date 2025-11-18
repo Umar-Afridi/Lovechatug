@@ -426,7 +426,7 @@ export default function FriendsPage() {
                 <span>Friends</span>
             </h1>
             <div className="flex items-center gap-2">
-                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={() => setIsSearching(true)}>
+                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={() => setIsSearching(prev => !prev)}>
                     <Search className="h-5 w-5" />
                     <span className="sr-only">Search</span>
                  </Button>
