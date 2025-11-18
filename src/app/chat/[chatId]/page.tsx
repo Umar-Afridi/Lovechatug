@@ -284,22 +284,21 @@ export default function ChatIdPage() {
         q = query(q, where('timestamp', '>', Timestamp.fromDate(clearedDate)));
     }
 
-
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const msgs = querySnapshot.docs.map(
+      const currentMessages = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as MessageType)
       );
 
       // Play sound for new incoming messages only after initial load
-      if (!isFirstMessageLoad.current && msgs.length > messages.length) {
-          const newMessage = msgs[msgs.length - 1];
+      if (!isFirstMessageLoad.current && currentMessages.length > messages.length) {
+          const newMessage = currentMessages[currentMessages.length - 1];
           // Check if the new message is not from the current user
           if (newMessage && authUser && newMessage.senderId !== authUser.uid) {
               playReceiveMessageSound();
           }
       }
       
-      setMessages(msgs);
+      setMessages(currentMessages);
       isFirstMessageLoad.current = false; // Mark initial load as complete
     }, (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -310,7 +309,7 @@ export default function ChatIdPage() {
     });
 
     return () => unsubscribe();
-  }, [firestore, chatId, currentUser, authUser, amIBlocked, messages.length, playReceiveMessageSound]);
+  }, [firestore, chatId, currentUser, authUser, amIBlocked, playReceiveMessageSound]);
 
 
   // Mark messages as read and reset unread count
