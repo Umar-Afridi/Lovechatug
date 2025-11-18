@@ -11,6 +11,13 @@ const frameItems = [
     quantity: 1,
     durationDays: 7,
   },
+  {
+    id: 'tiger-king-frame',
+    name: 'Tiger King Frame',
+    imageUrl: 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/frames%2Ftiger-king-frame.png?alt=media&token=a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
+    quantity: 1,
+    durationDays: 7,
+  },
    {
     id: 'placeholder-2',
     name: 'Golden Wreath',

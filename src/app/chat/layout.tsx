@@ -171,22 +171,28 @@ function usePresence() {
     
     getDoc(userStatusFirestoreRef).then(docSnap => {
         if (docSnap.exists()) {
-             unsubscribe = onValue(connectedRef, async (snap) => {
+             const unsubscribeOnValue = onValue(connectedRef, async (snap) => {
               if (snap.val() === true) {
                 const onlineStatus = { isOnline: true, lastSeen: rtdbServerTimestamp() };
                 await set(userStatusDatabaseRef, onlineStatus);
                 
-                await updateDoc(userStatusFirestoreRef, { isOnline: true });
+                // Only update firestore on initial connect, not every time.
+                // This prevents the infinite loop.
+                const currentData = docSnap.data() as UserProfile;
+                if (!currentData.isOnline) {
+                    await updateDoc(userStatusFirestoreRef, { isOnline: true });
+                }
 
                 onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
               }
             });
+            unsubscribe = () => off(connectedRef, 'value', unsubscribeOnValue);
         }
     });
 
     return () => {
        if (typeof unsubscribe === 'function') {
-        off(connectedRef, 'value', unsubscribe);
+        unsubscribe();
       }
     };
   }, [user, firestore]);
@@ -576,7 +582,7 @@ function ChatAppLayout({
                                     alt="Profile Frame"
                                     width={32}
                                     height={32}
-                                    className="absolute inset-0 z-10"
+                                    className="absolute inset-0 z-10 pointer-events-none"
                                 />
                             )}
                             <Avatar className="h-full w-full">
