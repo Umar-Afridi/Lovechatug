@@ -391,8 +391,7 @@ function ChatAppLayout({
     const requestsRef = collection(firestore, 'friendRequests');
     const q = query(requestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
 
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
         const newSize = snapshot.size;
         if (!isFirstRequestLoad.current && newSize > requestCount) {
           playRequestSound();
@@ -562,7 +561,7 @@ function ChatAppLayout({
                 <SidebarMenu>
                     {menuItems.map((item) => {
                        const Icon = item.icon;
-                       let isActive = pathname.startsWith(item.href);
+                       let isActive = pathname === item.href || (item.href !== '/chat' && pathname.startsWith(item.href));
                        if (item.id === 'inbox') isActive = pathname === '/chat';
                        if (item.id === 'home') isActive = pathname === '/chat/rooms';
 
@@ -613,7 +612,7 @@ function ChatAppLayout({
                 <div className="sticky bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur-sm">
                     <nav className="flex items-center justify-around p-2">
                         {menuItems.map((item) => {
-                           let isActive = pathname.startsWith(item.href);
+                           let isActive = pathname === item.href || (item.href !== '/chat' && pathname.startsWith(item.href));
                            if (item.id === 'inbox') isActive = pathname === '/chat';
                            if (item.id === 'home') isActive = pathname === '/chat/rooms';
                            const Icon = item.icon;
