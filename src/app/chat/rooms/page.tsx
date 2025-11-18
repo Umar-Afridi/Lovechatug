@@ -26,59 +26,58 @@ export default function RoomsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch My Rooms (created by the current user)
+  // Combined useEffect to fetch all rooms and categorize them
   useEffect(() => {
-    if (!firestore || !user) return;
-    const roomsRef = collection(firestore, 'rooms');
-    const q = query(roomsRef, where('ownerId', '==', user.uid), orderBy('createdAt', 'desc'));
-
-    const unsubMyRooms = onSnapshot(q, (snapshot) => {
-      let userRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
-      // Logic to only show the single most relevant room for the user (e.g., official or latest)
-      if (userRooms.length > 1) {
-          const officialRoom = userRooms.find(r => r.ownerIsOfficial);
-          if (officialRoom) {
-              userRooms = [officialRoom];
-          } else {
-              userRooms = [userRooms[0]];
-          }
-      }
-      setMyRooms(userRooms);
-    }, (error) => {
-        console.error("Error fetching user's rooms: ", error);
-    });
-
-    return () => unsubMyRooms();
-  }, [firestore, user]);
-
-  // Fetch Public/Popular Rooms
-  useEffect(() => {
-    if (!firestore) return;
+    if (!firestore || !user) {
+        setLoading(false);
+        return;
+    }
     setLoading(true);
+
     const roomsRef = collection(firestore, 'rooms');
     const q = query(
       roomsRef,
-      where('isLocked', '!=', true), // Exclude locked rooms from popular list
-      orderBy('isLocked', 'asc'), 
       orderBy('memberCount', 'desc'),
       orderBy('createdAt', 'desc')
     );
 
-    const unsubPublicRooms = onSnapshot(q, (snapshot) => {
-      const allRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
-      const myRoomIds = myRooms.map(room => room.id);
-      // Filter out user's own room from the public list
-      const filteredPublicRooms = allRooms.filter(room => !myRoomIds.includes(room.id));
-      
-      setPublicRooms(filteredPublicRooms);
-      setLoading(false);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const allRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+        
+        const userRooms: Room[] = [];
+        const otherPublicRooms: Room[] = [];
+
+        allRooms.forEach(room => {
+            if (room.ownerId === user.uid) {
+                userRooms.push(room);
+            } else if (!room.isLocked) {
+                otherPublicRooms.push(room);
+            }
+        });
+        
+        // Logic to only show the single most relevant room for the user
+        if (userRooms.length > 1) {
+            const officialRoom = userRooms.find(r => r.ownerIsOfficial);
+            if (officialRoom) {
+                setMyRooms([officialRoom]);
+            } else {
+                 // Sort by creation date just in case and take the newest
+                userRooms.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
+                setMyRooms([userRooms[0]]);
+            }
+        } else {
+            setMyRooms(userRooms);
+        }
+
+        setPublicRooms(otherPublicRooms);
+        setLoading(false);
     }, (error) => {
-        console.error("Error fetching popular rooms: ", error);
+        console.error("Error fetching rooms: ", error);
         setLoading(false);
     });
 
-    return () => unsubPublicRooms();
-  }, [firestore, myRooms]); // Rerun when myRooms changes
+    return () => unsubscribe();
+  }, [firestore, user]);
   
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'R';
   
