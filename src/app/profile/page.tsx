@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useUser } from '@/firebase/auth/use-user';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, LogOut, Shield, Trash2, CheckCheck, Palette, Clock, UserCog } from 'lucide-react';
+import { ArrowLeft, LogOut, Shield, Trash2, CheckCheck, Palette, Clock, UserCog, Home } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase/provider';
 import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -165,6 +165,10 @@ export default function ProfilePage() {
                                 </Link>
                             </Button>
                          )}
+                        <Button variant="outline" className="w-full justify-start text-base py-6" onClick={() => toast({ title: 'Coming Soon!', description: 'Prop House feature will be available in a future update.' })}>
+                            <Home className="mr-4 h-5 w-5" />
+                            Prop House
+                        </Button>
                         <Button className="w-full justify-start text-base py-6" variant="outline" asChild>
                             <Link href="/settings">
                                 <Shield className="mr-4 h-5 w-5" />
