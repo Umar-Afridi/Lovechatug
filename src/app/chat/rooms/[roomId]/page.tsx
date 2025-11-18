@@ -85,6 +85,7 @@ import { ExitRoomDialog } from '@/components/chat/exit-room-dialog';
 const MIC_SLOTS = 8;
 const SUPER_ADMIN_SLOT = -1;
 const OWNER_SLOT = 0;
+const GURIA_SLOT = -2; // New special slot
 
 function applyNameColor(name: string, color?: UserProfile['nameColor']) {
     if (!color || color === 'default') {
@@ -416,6 +417,9 @@ export default function RoomPage() {
         const isSelf = memberInSlot?.userId === authUser.uid;
         
         const isOwnerSlot = slotNumber === OWNER_SLOT;
+        const isGuriaSlot = slotNumber === GURIA_SLOT;
+        const isSpecialSlot = isOwnerSlot || isGuriaSlot;
+
         
         const canTakeSeat = !memberInSlot && !isLocked && (isOwner || currentUserSlot?.micSlot === null);
 
@@ -442,8 +446,6 @@ export default function RoomPage() {
                             </>
                         ) : isLocked ? (
                              <Lock className="text-muted-foreground h-8 w-8" />
-                        ) : isOwnerSlot ? (
-                            <span className="text-sm font-bold text-muted-foreground">UMAR</span>
                         ) : (
                            <Mic className="text-muted-foreground h-8 w-8"/>
                         )}
@@ -463,7 +465,11 @@ export default function RoomPage() {
                             )}
                         </div>
                     ) : (
-                         !isLocked && !isOwnerSlot && <p className="text-sm text-muted-foreground">{slotNumber}</p>
+                        !isLocked && (
+                            <p className="text-sm text-muted-foreground">
+                                {isOwnerSlot ? 'UMAR BHAI' : isGuriaSlot ? 'GURIA' : slotNumber}
+                            </p>
+                        )
                     )}
                 </div>
             </div>
@@ -493,7 +499,7 @@ export default function RoomPage() {
                         </>
                     )}
                     
-                   {isOwner && !memberInSlot && !isOwnerSlot && (
+                   {isOwner && !memberInSlot && (
                        <DropdownMenuItem onClick={() => handleToggleLock(slotNumber)}>
                             {isLocked ? <Unlock className="mr-2 h-4 w-4"/> : <Lock className="mr-2 h-4 w-4"/>}
                             {isLocked ? 'Unlock Mic' : 'Lock Mic'}
@@ -653,8 +659,9 @@ export default function RoomPage() {
         </header>
         
         <main className="flex-1 flex flex-col items-center overflow-hidden p-4 md:p-6 space-y-4">
-            <div className="flex justify-center gap-x-4 md:gap-x-8">
+             <div className="flex justify-center gap-x-4 md:gap-x-8">
                 {renderSlot(OWNER_SLOT)}
+                {renderSlot(GURIA_SLOT)}
             </div>
 
             <div className="w-full max-w-4xl space-y-4">
