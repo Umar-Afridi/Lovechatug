@@ -421,7 +421,7 @@ function ChatAppLayout({
     );
 
     return () => unsubscribe();
-  }, [firestore, user?.uid, requestCount, playRequestSound]);
+  }, [firestore, user?.uid, playRequestSound]);
   
   // New listener for total unread messages
   useEffect(() => {
