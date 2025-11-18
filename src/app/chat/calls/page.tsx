@@ -204,7 +204,7 @@ export default function CallsPage() {
             ...new Set(callDocs.map(call => call.callerId === user.uid ? call.receiverId : call.callerId))
         ].filter(id => !usersCache.current.has(id));
 
-        if (otherUserIds.length > 0 && firestore) {
+        if (otherUserIds.length > 0) {
              try {
                 const usersRef = collection(firestore, 'users');
                 const chunks = [];
