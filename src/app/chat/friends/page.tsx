@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot, getDocs, writeBatch, setDoc, serverTimestamp, getDoc as getDocNonRealTime } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot, getDocs, writeBatch, setDoc, serverTimestamp, getDoc as getDocNonRealTime, addDoc } from 'firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -12,6 +12,12 @@ import type { UserProfile, FriendRequest as FriendRequestType } from '@/lib/type
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+import { Search } from 'lucide-react';
+import Link from 'next/link';
+import { Settings, Bell } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+
 
 interface FriendRequestWithUser extends FriendRequestType {
     id: string;
@@ -37,164 +43,163 @@ function applyNameColor(name: string, color?: UserProfile['nameColor']) {
     return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
 }
 
-export default function FriendsPage() {
-  const { user } = useUser();
-  const firestore = useFirestore();
-  const [requests, setRequests] = useState<FriendRequestWithUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
+const FriendRequestsList = () => {
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const [requests, setRequests] = useState<FriendRequestWithUser[]>([]);
+    const [loading, setLoading] = useState(true);
+    const { toast } = useToast();
 
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return 'U';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('');
-  };
-  
-  useEffect(() => {
-    if (!user || !firestore) {
-      setLoading(false);
-      return;
-    }
+    const getInitials = (name: string | null | undefined) => {
+        if (!name) return 'U';
+        return name
+        .split(' ')
+        .map((n) => n[0])
+        .join('');
+    };
 
-    setLoading(true);
-
-    const requestsQuery = query(
-        collection(firestore, 'friendRequests'), 
-        where('receiverId', '==', user.uid), 
-        where('status', '==', 'pending')
-    );
-
-    const unsubscribe = onSnapshot(requestsQuery, async (querySnapshot) => {
-        if (querySnapshot.empty) {
-            setRequests([]);
-            setLoading(false);
-            return;
+    useEffect(() => {
+        if (!user || !firestore) {
+        setLoading(false);
+        return;
         }
 
-        const requestsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequestWithUser));
-        
-        const senderIds = [...new Set(requestsData.map(req => req.senderId))].filter(Boolean);
-        
-        if (senderIds.length > 0) {
-            const usersRef = collection(firestore, 'users');
-            const usersQuery = query(usersRef, where('uid', 'in', senderIds));
-            
-            try {
-              const usersSnapshot = await getDocs(usersQuery);
-              const userProfiles = new Map(usersSnapshot.docs.map(doc => [doc.data().uid, doc.data() as UserProfile]));
-              
-              const populatedRequests = requestsData.map(req => ({
-                  ...req,
-                  fromUser: userProfiles.get(req.senderId)
-              }));
-              
-              setRequests(populatedRequests);
-            } catch (userError) {
-                console.error("Error fetching sender profiles: ", userError);
+        setLoading(true);
+
+        const requestsQuery = query(
+            collection(firestore, 'friendRequests'), 
+            where('receiverId', '==', user.uid), 
+            where('status', '==', 'pending')
+        );
+
+        const unsubscribe = onSnapshot(requestsQuery, async (querySnapshot) => {
+            if (querySnapshot.empty) {
+                setRequests([]);
+                setLoading(false);
+                return;
             }
 
-        } else {
-            setRequests([]);
-        }
+            const requestsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequestWithUser));
+            
+            const senderIds = [...new Set(requestsData.map(req => req.senderId))].filter(Boolean);
+            
+            if (senderIds.length > 0) {
+                const usersRef = collection(firestore, 'users');
+                const usersQuery = query(usersRef, where('uid', 'in', senderIds));
+                
+                try {
+                const usersSnapshot = await getDocs(usersQuery);
+                const userProfiles = new Map(usersSnapshot.docs.map(doc => [doc.data().uid, doc.data() as UserProfile]));
+                
+                const populatedRequests = requestsData.map(req => ({
+                    ...req,
+                    fromUser: userProfiles.get(req.senderId)
+                }));
+                
+                setRequests(populatedRequests);
+                } catch (userError) {
+                    console.error("Error fetching sender profiles: ", userError);
+                }
 
-        setLoading(false);
+            } else {
+                setRequests([]);
+            }
 
-    }, (error) => {
-        console.error("Error fetching friend requests:", error);
-        setLoading(false);
-    });
+            setLoading(false);
 
-    return () => unsubscribe();
-
-  }, [user, firestore]);
-
-  const handleAccept = async (request: FriendRequestWithUser) => {
-    if (!firestore || !user || !request.fromUser) return;
-    
-    const requestRef = doc(firestore, 'friendRequests', request.id);
-    const currentUserRef = doc(firestore, 'users', user.uid);
-    const friendUserRef = doc(firestore, 'users', request.senderId);
-    
-    const chatId = [user.uid, request.senderId].sort().join('_');
-    const chatRef = doc(firestore, 'chats', chatId);
-
-    try {
-        const batch = writeBatch(firestore);
-
-        // Add each other to friends lists and add the chatId to both user profiles
-        batch.update(currentUserRef, { 
-            friends: arrayUnion(request.senderId),
-            chatIds: arrayUnion(chatId) 
+        }, (error) => {
+            console.error("Error fetching friend requests:", error);
+            setLoading(false);
         });
-        batch.update(friendUserRef, { 
-            friends: arrayUnion(user.uid),
-            chatIds: arrayUnion(chatId)
-        });
+
+        return () => unsubscribe();
+
+    }, [user, firestore]);
+
+    const handleAccept = async (request: FriendRequestWithUser) => {
+        if (!firestore || !user || !request.fromUser) return;
         
-        const chatSnap = await getDocNonRealTime(chatRef);
-        if (!chatSnap.exists()) {
-            const currentUserProfile = (await getDocNonRealTime(currentUserRef)).data() as UserProfile;
-            batch.set(chatRef, {
-              members: [user.uid, request.senderId],
-              createdAt: serverTimestamp(),
-              lastMessage: {
-                  content: "No messages yet",
-                  timestamp: serverTimestamp(),
-                  senderId: ""
-              },
-              participantDetails: {
-                [user.uid]: {
-                  displayName: currentUserProfile?.displayName || user.displayName,
-                  photoURL: currentUserProfile?.photoURL || user.photoURL,
-                },
-                [request.senderId]: {
-                  displayName: request.fromUser.displayName,
-                  photoURL: request.fromUser.photoURL,
-                },
-              },
-               unreadCount: { [user.uid]: 0, [request.senderId]: 0 },
-               typing: { [user.uid]: false, [request.senderId]: false }
+        const requestRef = doc(firestore, 'friendRequests', request.id);
+        const currentUserRef = doc(firestore, 'users', user.uid);
+        const friendUserRef = doc(firestore, 'users', request.senderId);
+        
+        const chatId = [user.uid, request.senderId].sort().join('_');
+        const chatRef = doc(firestore, 'chats', chatId);
+
+        try {
+            const batch = writeBatch(firestore);
+
+            // Add each other to friends lists and add the chatId to both user profiles
+            batch.update(currentUserRef, { 
+                friends: arrayUnion(request.senderId),
+                chatIds: arrayUnion(chatId) 
             });
+            batch.update(friendUserRef, { 
+                friends: arrayUnion(user.uid),
+                chatIds: arrayUnion(chatId)
+            });
+            
+            const chatSnap = await getDocNonRealTime(chatRef);
+            if (!chatSnap.exists()) {
+                const currentUserProfile = (await getDocNonRealTime(currentUserRef)).data() as UserProfile;
+                batch.set(chatRef, {
+                members: [user.uid, request.senderId],
+                createdAt: serverTimestamp(),
+                lastMessage: {
+                    content: "No messages yet",
+                    timestamp: serverTimestamp(),
+                    senderId: ""
+                },
+                participantDetails: {
+                    [user.uid]: {
+                    displayName: currentUserProfile?.displayName || user.displayName,
+                    photoURL: currentUserProfile?.photoURL || user.photoURL,
+                    },
+                    [request.senderId]: {
+                    displayName: request.fromUser.displayName,
+                    photoURL: request.fromUser.photoURL,
+                    },
+                },
+                unreadCount: { [user.uid]: 0, [request.senderId]: 0 },
+                typing: { [user.uid]: false, [request.senderId]: false }
+                });
+            }
+
+
+            batch.delete(requestRef);
+
+            await batch.commit();
+
+            toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
+        } catch (error: any) {
+            toast({ title: 'Error', description: 'Could not accept friend request.', variant: 'destructive'});
+            console.error("Error accepting friend request:", error);
         }
+    };
 
+    const handleDecline = async (requestId: string) => {
+        if (!firestore) return;
+        const requestRef = doc(firestore, 'friendRequests', requestId);
+        try {
+            await deleteDoc(requestRef);
+            toast({ title: 'Request Declined' });
+        } catch (error) {
+            console.error("Error declining friend request:", error);
+            toast({ title: 'Error', description: 'Could not decline friend request.', variant: 'destructive' });
+        }
+    };
 
-        batch.delete(requestRef);
-
-        await batch.commit();
-
-        toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
-    } catch (error: any) {
-        toast({ title: 'Error', description: 'Could not accept friend request.', variant: 'destructive'});
-        console.error("Error accepting friend request:", error);
+    if (loading) {
+        return <div className="p-4 text-center text-muted-foreground"><p>Loading requests...</p></div>;
     }
-  };
 
-  const handleDecline = async (requestId: string) => {
-    if (!firestore) return;
-    const requestRef = doc(firestore, 'friendRequests', requestId);
-    try {
-        await deleteDoc(requestRef);
-        toast({ title: 'Request Declined' });
-    } catch (error) {
-        console.error("Error declining friend request:", error);
-        toast({ title: 'Error', description: 'Could not decline friend request.', variant: 'destructive' });
+    if (requests.length === 0) {
+        return <div className="p-4 text-center text-muted-foreground"><p>No new friend requests.</p></div>;
     }
-  };
 
-  if (loading) {
-    return <div className="flex h-full items-center justify-center text-muted-foreground"><p>Loading requests...</p></div>;
-  }
-
-  if (requests.length === 0) {
-    return <div className="flex h-full items-center justify-center text-muted-foreground"><p>No new friend requests.</p></div>;
-  }
-  
-  return (
-    <ScrollArea className="h-full">
+    return (
         <div className="p-4 space-y-4">
-            <h1 className="text-xl font-bold">Friend Requests</h1>
+            <h2 className="text-lg font-semibold">Friend Requests</h2>
             {requests.map(request => (
                 request.fromUser && (
                     <div key={request.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
@@ -230,6 +235,225 @@ export default function FriendsPage() {
                 )
             ))}
         </div>
-    </ScrollArea>
+    );
+}
+
+export default function FriendsPage() {
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [sentRequests, setSentRequests] = useState<FriendRequestType[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const { toast } = useToast();
+
+
+  useEffect(() => {
+    if (!user || !firestore) return;
+    
+    const unsubProfile = onSnapshot(doc(firestore, 'users', user.uid), (docSnap) => {
+        if (docSnap.exists()) {
+            setProfile(docSnap.data() as UserProfile);
+        }
+    });
+
+    const sentRequestsRef = collection(firestore, 'friendRequests');
+    const qSent = query(sentRequestsRef, where('senderId', '==', user.uid));
+    
+    const unsubscribeSent = onSnapshot(qSent, (snapshot) => {
+        const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequestType));
+        setSentRequests(requests);
+    });
+
+    const notificationsRef = collection(firestore, 'users', user.uid, 'notifications');
+    const qNotifications = query(notificationsRef, where('isRead', '==', false));
+
+    const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
+        setUnreadNotificationCount(snapshot.size);
+    });
+
+
+    return () => {
+        unsubProfile();
+        unsubscribeSent();
+        unsubscribeNotifications();
+    };
+
+  }, [user, firestore]);
+
+   const handleSearch = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (searchQuery.trim() === '') {
+        setSearchResults([]);
+        return;
+      }
+
+      if (firestore && user && profile) {
+        const usersRef = collection(firestore, 'users');
+        const q = query(
+          usersRef, 
+          where('username', '==', searchQuery.toLowerCase())
+        );
+        
+        try {
+          const querySnapshot = await getDocs(q);
+          const myBlockedList = profile.blockedUsers || [];
+          const whoBlockedMe = profile.blockedBy || [];
+
+          const filteredUsers = querySnapshot.docs
+                .map(doc => doc.data() as UserProfile)
+                .filter(u => 
+                    u.uid !== user.uid && // Not me
+                    !u.isDisabled && // Not disabled
+                    !myBlockedList.includes(u.uid) && // I haven't blocked them
+                    !whoBlockedMe.includes(u.uid) // They haven't blocked me
+                );
+            
+          setSearchResults(filteredUsers);
+        } catch (serverError) {
+            console.error("Error searching users:", serverError);
+        }
+      }
+    };
+    
+  const handleSendRequest = async (receiverId: string) => {
+      if (!firestore || !user) return;
+      const requestsRef = collection(firestore, 'friendRequests');
+      const newRequest = {
+          senderId: user.uid,
+          receiverId: receiverId,
+          status: 'pending' as const,
+          createdAt: serverTimestamp(),
+      };
+      
+      try {
+          await addDoc(requestsRef, newRequest);
+          toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
+      } catch (error) {
+          console.error("Error sending friend request:", error);
+          toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive'});
+      }
+  };
+  
+  const handleCancelRequest = async (receiverId: string) => {
+      if (!firestore || !user) return;
+      
+      const requestToCancel = sentRequests.find(req => req.receiverId === receiverId);
+      if (!requestToCancel || !requestToCancel.id) return;
+      
+      const requestRef = doc(firestore, 'friendRequests', requestToCancel.id);
+      
+      try {
+          await deleteDoc(requestRef);
+          toast({ title: 'Request Cancelled' });
+      } catch(error) {
+           console.error("Error cancelling friend request:", error);
+           toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
+      }
+  }
+
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return 'U';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('');
+  };
+  
+  return (
+    <div className="flex h-full flex-col bg-background">
+         <div className="p-4 space-y-4 border-b">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
+                <span>Home</span>
+            </h1>
+            <div className="flex items-center gap-2">
+                 <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full" asChild>
+                    <Link href="/chat/notifications">
+                      <Bell className="h-5 w-5" />
+                      {unreadNotificationCount > 0 && (
+                          <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{unreadNotificationCount}</Badge>
+                      )}
+                      <span className="sr-only">Notifications</span>
+                    </Link>
+                 </Button>
+                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
+                    <Link href="/settings">
+                        <Settings className="h-5 w-5" />
+                        <span className="sr-only">Settings</span>
+                    </Link>
+                 </Button>
+            </div>
+          </div>
+          <form onSubmit={handleSearch} className="relative flex items-center">
+            <Input 
+                placeholder="Search users by username..." 
+                className="pr-12 pl-4"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <Button type="submit" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8">
+                <Search className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          </form>
+        </div>
+        <ScrollArea className="flex-1">
+            {searchQuery.trim() !== '' ? (
+                <div>
+                     {searchResults.length === 0 ? (
+                        <div className="p-4 text-center text-muted-foreground">
+                            <p>No users found matching your search.</p>
+                        </div>
+                     ) : (
+                        searchResults.map(foundUser => {
+                        const isFriend = profile?.friends?.includes(foundUser.uid);
+                        const hasSentRequest = sentRequests.some(req => req.receiverId === foundUser.uid);
+                        
+                        return (
+                            <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
+                                <div className="flex items-center gap-4">
+                                <div className="relative">
+                                    <Avatar className="h-12 w-12">
+                                        <AvatarImage src={foundUser.photoURL || undefined} />
+                                        <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
+                                    </Avatar>
+                                    {foundUser.officialBadge?.isOfficial && (
+                                        <div className="absolute bottom-0 right-0">
+                                            <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                    <p className="font-semibold">
+                                        {applyNameColor(foundUser.displayName, foundUser.nameColor)}
+                                        </p>
+                                        {foundUser.verifiedBadge?.showBadge && (
+                                            <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
+                                        )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
+                                </div>
+                                </div>
+                                {isFriend ? (
+                                    <Button asChild size="sm">
+                                        <Link href={`/chat/${foundUser.uid}`}>Message</Link>
+                                    </Button>
+                                ) : hasSentRequest ? (
+                                    <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel Request</Button>
+                                ) : (
+                                    <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>Add friend</Button>
+                                )}
+                            </div>
+                        );
+                        })
+                     )}
+                </div>
+            ) : (
+                <FriendRequestsList />
+            )}
+        </ScrollArea>
+    </div>
   );
 }

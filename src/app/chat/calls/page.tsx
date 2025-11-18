@@ -33,7 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, where, onSnapshot, doc, getDocs, writeBatch, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDocs, writeBatch, orderBy } from 'firestore';
 import type { UserProfile, Call, Chat } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -87,7 +87,7 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
   }
 
   return (
-     <div className="flex items-center justify-between">
+     <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-4">
             <div className="relative">
                 <Avatar className="h-10 w-10">
@@ -271,12 +271,9 @@ export default function CallsPage() {
                 <p>Loading call history...</p>
             </div>
           ) : calls.length > 0 ? (
-            <div className="p-4 space-y-2">
-                {calls.map((call, index) => (
-                    <React.Fragment key={call.id}>
-                        <CallItem call={call} />
-                        {index < calls.length - 1 && <Separator />}
-                    </React.Fragment>
+            <div className="divide-y">
+                {calls.map((call) => (
+                    <CallItem key={call.id} call={call} />
                 ))}
             </div>
           ) : (

@@ -13,6 +13,7 @@ import {
   PlusSquare,
   Home,
   Inbox,
+  User as UserIcon,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -49,7 +50,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useEffect, useState, useRef, useCallback, createContext, useContext } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit, addDoc, deleteDoc, increment } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit, addDoc, deleteDoc, increment } from 'firestore';
 import type { UserProfile, Chat, Call, Notification } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -104,38 +105,6 @@ function useUserProfile(onAccountDisabled: () => void) {
 
     const userDocRef = doc(firestore, 'users', user.uid);
 
-    const sendOfficialStatusNotification = async (newStatus: boolean) => {
-        let message = '';
-        let notifType: Notification['type'];
-
-        if (newStatus) {
-            message = "Congratulations! You have been promoted to an Official user. Please use your new status to help and guide the community.";
-            notifType = 'official_badge_granted';
-        } else {
-            message = "Your Official user status has been revoked because it was not used in the intended way. We are sorry for this action.";
-            notifType = 'official_badge_removed';
-        }
-
-        const notification: any = {
-            userId: user.uid,
-            title: SYSTEM_SENDER_NAME,
-            message,
-            type: notifType,
-            isRead: false,
-            createdAt: serverTimestamp(),
-            senderId: SYSTEM_SENDER_ID,
-            senderName: SYSTEM_SENDER_NAME,
-            senderPhotoURL: SYSTEM_SENDER_PHOTO_URL,
-        };
-
-        try {
-            await addDoc(collection(firestore, 'users', user.uid, 'notifications'), notification);
-        } catch (e) {
-            console.error("Failed to send official status notification", e);
-        }
-    };
-
-
     const unsubscribe = onSnapshot(userDocRef, 
       (docSnap) => {
         if (docSnap.exists()) {
@@ -148,9 +117,6 @@ function useUserProfile(onAccountDisabled: () => void) {
 
           // Check for official status change
           const previousProfile = previousProfileRef.current;
-          if (previousProfile && previousProfile.officialBadge?.isOfficial !== data.officialBadge?.isOfficial) {
-              sendOfficialStatusNotification(data.officialBadge?.isOfficial ?? false);
-          }
           
           previousProfileRef.current = data; // Update ref with current data for next snapshot
 
@@ -204,17 +170,6 @@ function usePresence(profile: UserProfile | null) {
         
         // On disconnect, set user to offline in RTDB
         onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
-
-        // Also handle leaving a room on disconnect
-        if (profile.currentRoomId) {
-            const roomRef = doc(firestore, 'rooms', profile.currentRoomId);
-            const memberRef = doc(roomRef, 'members', user.uid);
-            onDisconnect(userStatusDatabaseRef).cancel(); // Cancel previous onDisconnect
-            onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() }).then(() => {
-                deleteDoc(memberRef);
-                updateDoc(roomRef, { memberCount: increment(-1) });
-            });
-        }
 
       }
     }, (error) => {
@@ -442,36 +397,6 @@ function ChatAppLayout({
 
   const playRequestSound = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a');
   const isFirstRequestLoad = useRef(true);
-  
-  const leaveCurrentRoom = useCallback(async () => {
-    if (!firestore || !user || !profile?.currentRoomId) {
-        return;
-    }
-    
-    const userRef = doc(firestore, 'users', user.uid);
-    const roomId = profile.currentRoomId;
-    const memberRef = doc(firestore, 'rooms', roomId, 'members', user.uid);
-    const roomRef = doc(firestore, 'rooms', roomId);
-
-    try {
-        const memberDoc = await getDoc(memberRef);
-        if (memberDoc.exists()) {
-            const batch = writeBatch(firestore);
-            batch.delete(memberRef);
-            
-            const roomDoc = await getDoc(roomRef);
-            if (roomDoc.exists() && roomDoc.data().memberCount > 0) {
-              batch.update(roomRef, { memberCount: increment(-1) });
-            }
-
-            batch.update(userRef, { currentRoomId: null });
-            await batch.commit();
-        }
-    } catch(e) {
-        console.warn("Could not leave room properly", e);
-    }
-  }, [firestore, user, profile]);
-
 
   useEffect(() => {
     if (!firestore || !user?.uid) {
@@ -535,9 +460,6 @@ function ChatAppLayout({
 
   const handleSignOut = async () => {
     if (auth && user && firestore) {
-      if(profile?.currentRoomId) {
-         await leaveCurrentRoom();
-      }
       const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
       const db = getDatabase();
       const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
@@ -580,35 +502,28 @@ function ChatAppLayout({
   
   const menuItems = [
     {
+      href: '/chat/friends',
+      icon: Home,
+      label: 'Home',
+      id: 'home',
+    },
+    {
       href: '/chat',
       icon: Inbox,
       label: 'Inbox',
       id: 'inbox',
-      count: inboxCount
     },
     {
-      href: '/chat/rooms',
-      icon: Home,
-      label: 'Rooms',
-    },
-    {
-       href: '/chat/friends',
-       icon: UserPlus,
-       label: 'Requests',
-       id: 'friend-requests',
-       count: requestCount,
-    },
-    {
-       href: '/chat/calls',
-       icon: Phone,
-       label: 'Calls',
+       href: '/profile',
+       icon: UserIcon,
+       label: 'Me',
+       id: 'me',
     },
   ];
 
   if (!user) {
       return <>{children}</>;
   }
-
 
   return (
     <>
@@ -657,14 +572,11 @@ function ChatAppLayout({
                     <SidebarMenuItem key={item.href}>
                         <Link href={item.href}>
                         <SidebarMenuButton
-                            isActive={pathname === item.href || (item.id === 'inbox' && pathname.startsWith('/chat') && !menuItems.slice(1).some(i => pathname.startsWith(i.href)))}
+                            isActive={pathname === item.href}
                             tooltip={item.label}
                         >
                             <item.icon />
                             <span>{item.label}</span>
-                             {item.count !== undefined && item.count > 0 && (
-                                <SidebarMenuBadge>{item.count}</SidebarMenuBadge>
-                            )}
                         </SidebarMenuButton>
                         </Link>
                     </SidebarMenuItem>
@@ -674,7 +586,7 @@ function ChatAppLayout({
                 <SidebarFooter>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                      <Link href="/profile" className="w-full">
+                      <Link href="/settings" className="w-full">
                         <SidebarMenuButton tooltip="Settings">
                             <Settings />
                             <span>Settings</span>
@@ -691,8 +603,28 @@ function ChatAppLayout({
                 </SidebarFooter>
             </Sidebar>
           )}
-          <SidebarInset>
-            {children}
+          <SidebarInset className='flex flex-col'>
+            <div className="flex-1 overflow-auto">
+              {children}
+            </div>
+             {isMobile && !isChatDetailPage && (
+                <div className="sticky bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur-sm">
+                    <nav className="flex items-center justify-around p-2">
+                        {menuItems.map((item) => {
+                            const isActive = item.href === '/chat' ? pathname === '/chat' : pathname.startsWith(item.href);
+                            return (
+                                <Link href={item.href} key={item.id} className={cn(
+                                    "flex flex-col items-center gap-1 rounded-md p-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+                                    isActive && "text-primary"
+                                )}>
+                                    <item.icon className="h-6 w-6" />
+                                    <span>{item.label}</span>
+                                </Link>
+                            )
+                        })}
+                    </nav>
+                </div>
+            )}
           </SidebarInset>
         </SidebarProvider>
       </div>
