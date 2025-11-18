@@ -395,7 +395,7 @@ function ChatAppLayout({
   const { profile, loading: profileLoading } = useUserProfile(handleAccountDisabled);
   usePresence(profile); // Initialize presence management
 
-  const playRequestSound = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a');
+  const { play: playRequestSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a');
   const isFirstRequestLoad = useRef(true);
 
   useEffect(() => {
@@ -410,7 +410,7 @@ function ChatAppLayout({
       (snapshot) => {
         const newSize = snapshot.size;
         if (!isFirstRequestLoad.current && newSize > requestCount) {
-          playRequestSound.play();
+          playRequestSound();
         }
         setRequestCount(newSize);
         isFirstRequestLoad.current = false;
@@ -503,13 +503,13 @@ function ChatAppLayout({
   const menuItems = [
     {
       href: '/chat/friends',
-      icon: Home,
+      icon: '🏠',
       label: 'Home',
       id: 'home',
     },
     {
       href: '/chat',
-      icon: Inbox,
+      icon: '📥',
       label: 'Inbox',
       id: 'inbox',
     },
@@ -568,19 +568,22 @@ function ChatAppLayout({
                 </SidebarHeader>
                 <SidebarContent>
                 <SidebarMenu>
-                    {menuItems.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                        <Link href={item.href}>
-                        <SidebarMenuButton
-                            isActive={pathname === item.href}
-                            tooltip={item.label}
-                        >
-                            <item.icon />
-                            <span>{item.label}</span>
-                        </SidebarMenuButton>
-                        </Link>
-                    </SidebarMenuItem>
-                    ))}
+                    {menuItems.map((item) => {
+                       const Icon = typeof item.icon === 'string' ? () => <span className="h-6 w-6 flex items-center justify-center text-xl">{item.icon}</span> : item.icon;
+                      return (
+                        <SidebarMenuItem key={item.href}>
+                            <Link href={item.href}>
+                            <SidebarMenuButton
+                                isActive={pathname === item.href}
+                                tooltip={item.label}
+                            >
+                                <Icon />
+                                <span>{item.label}</span>
+                            </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
+                      )
+                    })}
                 </SidebarMenu>
                 </SidebarContent>
                 <SidebarFooter>
@@ -612,12 +615,13 @@ function ChatAppLayout({
                     <nav className="flex items-center justify-around p-2">
                         {menuItems.map((item) => {
                             const isActive = item.href === '/chat' ? pathname === '/chat' : pathname.startsWith(item.href);
+                             const Icon = typeof item.icon === 'string' ? () => <span className="h-6 w-6 flex items-center justify-center text-xl">{item.icon}</span> : item.icon;
                             return (
                                 <Link href={item.href} key={item.id} className={cn(
                                     "flex flex-col items-center gap-1 rounded-md p-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
                                     isActive && "text-primary"
                                 )}>
-                                    <item.icon className="h-6 w-6" />
+                                    <Icon />
                                     <span>{item.label}</span>
                                 </Link>
                             )
