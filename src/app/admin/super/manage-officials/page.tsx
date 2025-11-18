@@ -48,10 +48,6 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Separator } from '@/components/ui/separator';
 
 const BadgeColors: Array<NonNullable<UserProfile['officialBadge']>['badgeColor']> = ['blue', 'gold', 'green', 'red', 'pink'];
-const SYSTEM_SENDER_ID = 'system_lovechat';
-const SYSTEM_SENDER_NAME = 'Love Chat';
-const SYSTEM_SENDER_PHOTO_URL = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/UG_LOGO_RED.png?alt=media&token=e632b0a9-4678-4384-9549-01e403d5b00c';
-
 
 function applyNameColor(name: string, color?: UserProfile['nameColor']) {
     if (!color || color === 'default') {
@@ -202,8 +198,6 @@ export default function ManageOfficialsPage() {
   const handleUpdateOfficialStatus = async (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => {
     if (!firestore) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
-    
-    const wasOfficial = targetUser.officialBadge?.isOfficial;
 
     let updatePayload: any = {
       'officialBadge.isOfficial': isOfficial,
