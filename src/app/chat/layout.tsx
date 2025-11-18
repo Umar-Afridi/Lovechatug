@@ -156,11 +156,11 @@ function useUserProfile(onAccountDisabled: () => void) {
 
 // Custom hook for presence management
 function usePresence() {
-  const { user } = useUser();
+  const { user, loading: authLoading } = useUser();
   const firestore = useFirestore();
 
   useEffect(() => {
-    if (!user || !firestore) return;
+    if (!user || !firestore || authLoading) return;
 
     const db = getDatabase();
     const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
@@ -168,21 +168,22 @@ function usePresence() {
     const connectedRef = ref(db, '.info/connected');
 
     let unsubscribe: (() => void) | null = null;
-    
+
     getDoc(userStatusFirestoreRef).then(docSnap => {
         if (docSnap.exists()) {
              const unsubscribeOnValue = onValue(connectedRef, async (snap) => {
               if (snap.val() === true) {
+                // Set online status in Realtime Database. This is what other clients will see in real-time.
                 const onlineStatus = { isOnline: true, lastSeen: rtdbServerTimestamp() };
                 await set(userStatusDatabaseRef, onlineStatus);
                 
-                // Only update firestore on initial connect, not every time.
-                // This prevents the infinite loop.
+                // Update Firestore ONLY if the user was previously offline. This prevents the write loop.
                 const currentData = docSnap.data() as UserProfile;
                 if (!currentData.isOnline) {
                     await updateDoc(userStatusFirestoreRef, { isOnline: true });
                 }
 
+                // Set up the disconnect hook for Realtime Database. This is crucial for presence.
                 onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
               }
             });
@@ -190,12 +191,13 @@ function usePresence() {
         }
     });
 
+
     return () => {
-       if (typeof unsubscribe === 'function') {
+      if (typeof unsubscribe === 'function') {
         unsubscribe();
       }
     };
-  }, [user, firestore]);
+  }, [user, firestore, authLoading]);
 }
 
 
