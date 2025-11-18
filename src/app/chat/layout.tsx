@@ -420,7 +420,7 @@ function ChatAppLayout({
     );
 
     return () => unsubscribe();
-  }, [firestore, user?.uid, playRequestSound, requestCount]);
+  }, [firestore, user?.uid, playRequestSound]);
   
   // Listener for total unread messages
   useEffect(() => {
@@ -506,18 +506,18 @@ function ChatAppLayout({
       id: 'home',
     },
     {
-      href: '/chat/friends',
-      icon: () => <UserPlus />,
-      label: 'Friends',
-      id: 'friends',
-      badgeCount: requestCount,
-    },
-    {
       href: '/chat',
       icon: () => <span className="h-6 w-6 flex items-center justify-center text-xl">📥</span>,
       label: 'Inbox',
       id: 'inbox',
       badgeCount: inboxCount,
+    },
+     {
+      href: '/chat/friends',
+      icon: () => <UserPlus />,
+      label: 'Friends',
+      id: 'friends',
+      badgeCount: requestCount,
     },
     {
        href: '/profile',

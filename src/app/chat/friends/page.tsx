@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useUser } from '@/firebase/auth/use-user';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot, getDocs, writeBatch, setDoc, serverTimestamp, getDoc as getDocNonRealTime, addDoc } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc, deleteDoc, arrayUnion, onSnapshot, getDocs, writeBatch, setDoc, serverTimestamp, getDoc as getDocNonRealTime, addDoc, or } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -288,38 +288,64 @@ export default function FriendsPage() {
 
   }, [user, firestore]);
 
-  const handleSearch = async (query: string) => {
-      setSearchQuery(query);
-      if (query.trim() === '') {
+ const handleSearch = async (queryText: string) => {
+      setSearchQuery(queryText);
+      const queryLower = queryText.toLowerCase();
+
+      if (queryLower.trim() === '') {
         setSearchResults([]);
         return;
       }
 
       if (firestore && user && profile) {
         const usersRef = collection(firestore, 'users');
-        const q = query(
+        const usernameQuery = query(
           usersRef, 
-          where('username', '>=', query.toLowerCase()),
-          where('username', '<=', query.toLowerCase() + '\uf8ff')
+          where('username', '>=', queryLower),
+          where('username', '<=', queryLower + '\uf8ff')
+        );
+        const displayNameQuery = query(
+          usersRef,
+          where('displayName', '>=', queryText),
+          where('displayName', '<=', queryText + '\uf8ff')
         );
         
         try {
-          const querySnapshot = await getDocs(q);
+          const [usernameSnapshot, displayNameSnapshot] = await Promise.all([
+            getDocs(usernameQuery),
+            getDocs(displayNameQuery)
+          ]);
+          
+          const resultsMap = new Map<string, UserProfile>();
+
+          const processSnapshot = (snapshot: any) => {
+              snapshot.docs.forEach((doc: any) => {
+                  const userData = doc.data() as UserProfile;
+                  if (userData.uid !== user.uid && !userData.isDisabled) {
+                    resultsMap.set(userData.uid, userData);
+                  }
+              });
+          };
+
+          processSnapshot(usernameSnapshot);
+          processSnapshot(displayNameSnapshot);
+            
           const myBlockedList = profile.blockedUsers || [];
           const whoBlockedMe = profile.blockedBy || [];
 
-          const filteredUsers = querySnapshot.docs
-                .map(doc => doc.data() as UserProfile)
-                .filter(u => 
-                    u.uid !== user.uid && 
-                    !u.isDisabled &&
-                    !myBlockedList.includes(u.uid) &&
-                    !whoBlockedMe.includes(u.uid)
-                );
-            
-          setSearchResults(filteredUsers);
+          const finalResults = Array.from(resultsMap.values()).filter(u => 
+                !myBlockedList.includes(u.uid) &&
+                !whoBlockedMe.includes(u.uid)
+          );
+
+          setSearchResults(finalResults);
         } catch (serverError) {
             console.error("Error searching users:", serverError);
+            toast({
+                variant: 'destructive',
+                title: 'Search Failed',
+                description: 'Could not perform search due to a server error.'
+            })
         }
       }
     };
@@ -450,7 +476,7 @@ export default function FriendsPage() {
           {isSearching && (
              <div className="relative">
                 <Input 
-                    placeholder="Search users..." 
+                    placeholder="Search by username or name..." 
                     className="pl-10"
                     value={searchQuery}
                     onChange={(e) => handleSearch(e.target.value)}

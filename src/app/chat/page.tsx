@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, onSnapshot, doc, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp, orderBy, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, doc, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp, orderBy, writeBatch, or } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow, isToday, isYesterday, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -218,38 +218,64 @@ export default function ChatPage() {
     };
   }, [user, firestore]);
 
-  const handleSearch = async (query: string) => {
-      setSearchQuery(query);
-      if (query.trim() === '') {
+ const handleSearch = async (queryText: string) => {
+      setSearchQuery(queryText);
+      const queryLower = queryText.toLowerCase();
+
+      if (queryLower.trim() === '') {
         setSearchResults([]);
         return;
       }
 
       if (firestore && user && profile) {
         const usersRef = collection(firestore, 'users');
-        const q = query(
+        const usernameQuery = query(
           usersRef, 
-          where('username', '>=', query.toLowerCase()),
-          where('username', '<=', query.toLowerCase() + '\uf8ff')
+          where('username', '>=', queryLower),
+          where('username', '<=', queryLower + '\uf8ff')
+        );
+        const displayNameQuery = query(
+          usersRef,
+          where('displayName', '>=', queryText),
+          where('displayName', '<=', queryText + '\uf8ff')
         );
         
         try {
-          const querySnapshot = await getDocs(q);
+          const [usernameSnapshot, displayNameSnapshot] = await Promise.all([
+            getDocs(usernameQuery),
+            getDocs(displayNameQuery)
+          ]);
+          
+          const resultsMap = new Map<string, UserProfile>();
+
+          const processSnapshot = (snapshot: any) => {
+              snapshot.docs.forEach((doc: any) => {
+                  const userData = doc.data() as UserProfile;
+                  if (userData.uid !== user.uid && !userData.isDisabled) {
+                    resultsMap.set(userData.uid, userData);
+                  }
+              });
+          };
+
+          processSnapshot(usernameSnapshot);
+          processSnapshot(displayNameSnapshot);
+            
           const myBlockedList = profile.blockedUsers || [];
           const whoBlockedMe = profile.blockedBy || [];
 
-          const filteredUsers = querySnapshot.docs
-                .map(doc => doc.data() as UserProfile)
-                .filter(u => 
-                    u.uid !== user.uid && 
-                    !u.isDisabled &&
-                    !myBlockedList.includes(u.uid) &&
-                    !whoBlockedMe.includes(u.uid)
-                );
-            
-          setSearchResults(filteredUsers);
+          const finalResults = Array.from(resultsMap.values()).filter(u => 
+                !myBlockedList.includes(u.uid) &&
+                !whoBlockedMe.includes(u.uid)
+          );
+
+          setSearchResults(finalResults);
         } catch (serverError) {
             console.error("Error searching users:", serverError);
+            toast({
+                variant: 'destructive',
+                title: 'Search Failed',
+                description: 'Could not perform search due to a server error.'
+            })
         }
       }
     };
@@ -382,9 +408,11 @@ export default function ChatPage() {
                 <span>Love Chat</span>
             </h1>
             <div className="flex items-center gap-2">
-                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={() => setIsSearching(true)}>
-                    <Search className="h-5 w-5" />
-                    <span className="sr-only">Search</span>
+                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
+                    <Link href="/chat/friends">
+                      <Search className="h-5 w-5" />
+                      <span className="sr-only">Search</span>
+                    </Link>
                  </Button>
                  <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full" asChild>
                     <Link href="/chat/notifications">
