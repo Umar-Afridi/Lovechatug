@@ -165,9 +165,11 @@ export default function ProfilePage() {
                                 </Link>
                             </Button>
                          )}
-                        <Button variant="outline" className="w-full justify-start text-base py-6" onClick={() => toast({ title: 'Coming Soon!', description: 'Prop House feature will be available in a future update.' })}>
-                            <Home className="mr-4 h-5 w-5" />
-                            Prop House
+                        <Button variant="outline" className="w-full justify-start text-base py-6" asChild>
+                           <Link href="/prop-house">
+                                <Home className="mr-4 h-5 w-5" />
+                                Prop House
+                           </Link>
                         </Button>
                         <Button className="w-full justify-start text-base py-6" variant="outline" asChild>
                             <Link href="/settings">
