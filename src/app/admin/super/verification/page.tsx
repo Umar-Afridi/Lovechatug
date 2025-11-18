@@ -178,24 +178,16 @@ export default function ManageVerificationPage() {
     if (!firestore) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
     
-    let updatePayload: any = {
-      'verificationApplicationStatus': status,
-    };
-    
     const wasPreviouslyApproved = targetUser.verifiedBadge?.showBadge;
 
-    if (status === 'approved') {
-      updatePayload['verifiedBadge'] = {
-        showBadge: true,
-        badgeColor: color || 'blue',
-      };
-    } else {
-       updatePayload['verifiedBadge'] = {
-        showBadge: false,
-        badgeColor: targetUser.verifiedBadge?.badgeColor || 'blue', // Keep old color
-      };
-    }
-
+    const updatePayload: any = {
+      verificationApplicationStatus: status,
+      verifiedBadge: {
+        showBadge: status === 'approved',
+        badgeColor: status === 'approved' ? (color || 'blue') : (targetUser.verifiedBadge?.badgeColor || 'blue'),
+      }
+    };
+    
     try {
       await updateDoc(userRef, updatePayload);
       

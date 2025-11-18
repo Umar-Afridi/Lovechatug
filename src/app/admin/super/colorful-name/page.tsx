@@ -273,7 +273,7 @@ export default function ManageColorfulNamePage() {
                                          </DropdownMenuItem>
                                     ))}
                                     <DropdownMenuSeparator />
-                                     <DropdownMenuItem onClick={() => handleUpdateNameColor(user, 'default')}>
+                                     <DropdownMenuItem onClick={() => handleUpdateNameColor(user, 'default')} className="text-destructive focus:text-destructive">
                                         <XCircle className="mr-2 h-4 w-4" />
                                         <span>Reset to Default</span>
                                     </DropdownMenuItem>

@@ -199,13 +199,13 @@ export default function ManageOfficialsPage() {
     if (!firestore) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
 
-    let updatePayload: any = {
-      'officialBadge.isOfficial': isOfficial,
+    // When removing official status, reset both properties to a default state
+    const updatePayload = {
+      officialBadge: {
+        isOfficial: isOfficial,
+        badgeColor: isOfficial ? (color || 'gold') : 'gold', // Reset color to default when removing
+      }
     };
-
-    if (isOfficial) {
-      updatePayload['officialBadge.badgeColor'] = color || 'gold';
-    }
 
     try {
       await updateDoc(userRef, updatePayload);
