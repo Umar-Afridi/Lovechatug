@@ -50,34 +50,14 @@ import {
 import { useEffect, useState, useRef, useCallback, createContext, useContext } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit, addDoc, deleteDoc, increment } from 'firebase/firestore';
-import type { UserProfile, Room, Chat, Call, Notification } from '@/lib/types';
+import type { UserProfile, Chat, Call, Notification } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getDatabase, ref, onValue, off, onDisconnect, serverTimestamp as rtdbServerTimestamp, set } from 'firebase/database';
 import { useSound } from '@/hooks/use-sound';
-import { FloatingRoomIndicator } from '@/components/chat/floating-room-indicator';
 import { IncomingCall } from '@/components/chat/incoming-call';
 import ActiveCallPage from './call/active/[callId]/page';
 import OutgoingCallPage from './call/outgoing/[userId]/page';
-
-
-// Context for sharing current room state
-interface RoomContextType {
-  currentRoom: Room | null;
-  setCurrentRoom: (room: Room | null) => void;
-  leaveCurrentRoom: () => void;
-  inboxCount: number;
-}
-
-const RoomContext = createContext<RoomContextType | null>(null);
-
-export const useRoomContext = () => {
-  const context = useContext(RoomContext);
-  if (!context) {
-    throw new Error('useRoomContext must be used within a ChatAppLayout');
-  }
-  return context;
-};
 
 // Context for Call State
 interface CallContextType {
@@ -453,8 +433,6 @@ function ChatAppLayout({
   const [isAccountDisabled, setAccountDisabled] = useState(false);
   const { toast } = useToast();
   
-  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
-  
   const handleAccountDisabled = useCallback(() => {
     setAccountDisabled(true);
   }, []);
@@ -466,21 +444,12 @@ function ChatAppLayout({
   const isFirstRequestLoad = useRef(true);
   
   const leaveCurrentRoom = useCallback(async () => {
-    if (!firestore || !user) {
-        setCurrentRoom(null);
+    if (!firestore || !user || !profile?.currentRoomId) {
         return;
     }
     
     const userRef = doc(firestore, 'users', user.uid);
-    const userSnap = await getDoc(userRef);
-    const userProfile = userSnap.data() as UserProfile;
-
-    if (!userProfile?.currentRoomId) {
-        setCurrentRoom(null);
-        return;
-    }
-
-    const roomId = userProfile.currentRoomId;
+    const roomId = profile.currentRoomId;
     const memberRef = doc(firestore, 'rooms', roomId, 'members', user.uid);
     const roomRef = doc(firestore, 'rooms', roomId);
 
@@ -501,9 +470,7 @@ function ChatAppLayout({
     } catch(e) {
         console.warn("Could not leave room properly", e);
     }
-    // This will clear the floating indicator
-    setCurrentRoom(null);
-  }, [firestore, user]);
+  }, [firestore, user, profile]);
 
 
   useEffect(() => {
@@ -644,7 +611,7 @@ function ChatAppLayout({
 
 
   return (
-    <RoomContext.Provider value={{ currentRoom, setCurrentRoom, leaveCurrentRoom, inboxCount }}>
+    <>
       <AlertDialog open={isAccountDisabled}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -726,13 +693,10 @@ function ChatAppLayout({
           )}
           <SidebarInset>
             {children}
-            {currentRoom && !pathname.startsWith(`/chat/rooms/${currentRoom.id}`) && (
-              <FloatingRoomIndicator room={currentRoom} />
-            )}
           </SidebarInset>
         </SidebarProvider>
       </div>
-    </RoomContext.Provider>
+    </>
   );
 }
 
