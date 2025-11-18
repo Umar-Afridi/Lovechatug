@@ -46,6 +46,7 @@ import {
   UserPlus,
   ArrowDownToLine,
   LogOut,
+  Armchair,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -56,6 +57,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
@@ -195,20 +197,33 @@ export default function RoomPage() {
                 router.push('/chat/rooms');
                 return;
             }
+            
+            const isRoomOwner = roomData.ownerId === authUser.uid;
 
             const memberRef = doc(roomRef, 'members', authUser.uid);
             const memberSnap = await getDoc(memberRef);
             if (!memberSnap.exists()) {
-                await setDoc(memberRef, {
+                const batch = writeBatch(firestore);
+                batch.set(memberRef, {
                     userId: authUser.uid,
-                    micSlot: roomData.ownerId === authUser.uid ? OWNER_SLOT : null,
+                    micSlot: isRoomOwner ? OWNER_SLOT : null,
                     isMuted: true,
                 }, { merge: true });
-                if (roomData.ownerId !== authUser.uid) {
-                    await updateDoc(roomRef, { memberCount: increment(1) });
+
+                if (!isRoomOwner) {
+                   batch.update(roomRef, { memberCount: increment(1) });
                 }
+                batch.update(userRef, { currentRoomId: roomId });
+                await batch.commit();
+
+            } else {
+                // If user is already a member (e.g. rejoining), ensure their owner status is correct
+                 if (isRoomOwner && memberSnap.data()?.micSlot !== OWNER_SLOT) {
+                    await updateDoc(memberRef, { micSlot: OWNER_SLOT });
+                 }
+                 await updateDoc(userRef, { currentRoomId: roomId });
             }
-            await updateDoc(userRef, { currentRoomId: roomId });
+            
             setStatus('joined');
 
             unsubRoom = onSnapshot(roomRef, (docSnap) => {
@@ -275,7 +290,8 @@ export default function RoomPage() {
         unsubMembers?.();
         unsubMessages?.();
     };
-}, [roomId, authUser?.uid, firestore]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, authUser?.uid, firestore]);
 
   const handleDeleteRoom = async () => {
      if (!firestore || !isOwner || !room) return;
@@ -396,7 +412,7 @@ export default function RoomPage() {
         
         const isOwnerSlot = slotNumber === OWNER_SLOT;
         
-        const canTakeSeat = !memberInSlot && !isLocked && currentUserSlot?.micSlot === null && !isOwner;
+        const canTakeSeat = !memberInSlot && !isLocked && (isOwner || currentUserSlot?.micSlot === null);
 
         const content = (
              <div className="relative flex flex-col items-center justify-center space-y-1 w-20 md:w-24">
@@ -462,7 +478,8 @@ export default function RoomPage() {
 
                     {isOwner && memberInSlot && !isSelf && (
                         <>
-                           <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })}>
+                           <DropdownMenuSeparator />
+                           <DropdownMenuItem onClick={() => setDialogState({ isOpen: true, action: 'kick', targetMember: memberInSlot })} className="text-destructive focus:text-destructive">
                                 <UserX className="mr-2 h-4 w-4"/> Kick User
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleForceLeaveMic(memberInSlot)}>
@@ -480,13 +497,13 @@ export default function RoomPage() {
                     
                     {canTakeSeat && (
                         <DropdownMenuItem onClick={() => handleTakeSeat(slotNumber)}>
-                            <Mic className="mr-2 h-4 w-4"/> Take Seat
+                            <Armchair className="mr-2 h-4 w-4"/> Take Seat
                         </DropdownMenuItem>
                     )}
                     
-                    {isSelf && currentUserSlot?.micSlot !== null && !isOwnerSlot && (
+                    {(isSelf && currentUserSlot?.micSlot !== null && !isOwnerSlot) && (
                          <DropdownMenuItem onClick={handleLeaveSeat}>
-                            <MicOff className="mr-2 h-4 w-4"/> Leave Seat
+                            <Armchair className="mr-2 h-4 w-4 text-destructive"/> Leave Seat
                          </DropdownMenuItem>
                     )}
                 </DropdownMenuContent>
