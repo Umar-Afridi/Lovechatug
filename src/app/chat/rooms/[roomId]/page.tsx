@@ -171,7 +171,6 @@ export default function RoomPage() {
     router.push('/chat/rooms');
   }, [router]);
   
-  // This is the main effect for handling the room logic
   useEffect(() => {
     if (!firestore || !roomId || !authUser?.uid) return;
 
@@ -182,6 +181,7 @@ export default function RoomPage() {
     const joinAndListen = async () => {
       const roomRef = doc(firestore, 'rooms', roomId);
       const userRef = doc(firestore, 'users', authUser.uid);
+      const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
 
       try {
         // 1. Check if room exists and user is not kicked
@@ -198,8 +198,20 @@ export default function RoomPage() {
           router.push('/chat/rooms');
           return;
         }
+        
+        // 2. Add/update user as a member IN A SINGLE STEP
+        const isRoomOwner = roomData.ownerId === authUser.uid;
+        await setDoc(memberRef, {
+            userId: authUser.uid,
+            isMuted: true,
+            micSlot: isRoomOwner ? OWNER_SLOT : null
+        }, { merge: true });
+        
+        // 3. Update user's current room
+        await updateDoc(userRef, { currentRoomId: roomId });
 
-        // 2. Setup Listeners
+
+        // 4. Setup Listeners
         unsubRoom = onSnapshot(roomRef, (docSnap) => {
           if (docSnap.exists()) {
             const updatedRoomData = { id: docSnap.id, ...docSnap.data() } as Room;
@@ -219,10 +231,10 @@ export default function RoomPage() {
         const membersQuery = query(collection(roomRef, 'members'));
         unsubMembers = onSnapshot(membersQuery, async (snapshot) => {
             const membersList = snapshot.docs.map(d => d.data() as RoomMember);
-            setMembers(membersList);
-
-            const currentProfileIds = Object.keys(memberProfiles);
-            const newMemberIds = membersList.map(m => m.userId).filter(id => !currentProfileIds.includes(id));
+            
+            const newMemberIds = membersList
+                .map(m => m.userId)
+                .filter(id => !memberProfiles[id]);
 
             if (newMemberIds.length > 0) {
                 const profilesRef = collection(firestore, 'users');
@@ -235,21 +247,12 @@ export default function RoomPage() {
                 }
                 setMemberProfiles(prev => ({...prev, ...newProfiles}));
             }
+            
+            setMembers(membersList);
         }, (error) => {
             console.error("Error listening to room members:", error);
         });
         
-        // 3. Set user as member and update their currentRoomId
-        const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
-        const isRoomOwner = roomData.ownerId === authUser.uid;
-        const memberData: RoomMember = {
-            userId: authUser.uid,
-            isMuted: true,
-            micSlot: isRoomOwner ? OWNER_SLOT : null
-        };
-        await setDoc(memberRef, memberData, { merge: true });
-        await updateDoc(userRef, { currentRoomId: roomId });
-
         setStatus('joined');
 
         const joinTime = Timestamp.now();
@@ -277,7 +280,7 @@ export default function RoomPage() {
       unsubMembers?.();
       unsubMessages?.();
     };
-  }, [firestore, roomId, authUser?.uid, router, toast, contextLeaveRoom, handleLeaveRoom, memberProfiles, setCurrentRoom]);
+  }, [firestore, roomId, authUser?.uid]); // Removed dependencies causing re-runs
 
   const handleDeleteRoom = async () => {
      if (!firestore || !isOwner || !room) return;
