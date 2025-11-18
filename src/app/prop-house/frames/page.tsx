@@ -18,20 +18,6 @@ const frameItems = [
     quantity: 1,
     durationDays: 7,
   },
-   {
-    id: 'placeholder-2',
-    name: 'Golden Wreath',
-    imageUrl: 'https://picsum.photos/seed/frame2/200/200',
-    quantity: 3,
-    durationDays: 3,
-  },
-  {
-    id: 'placeholder-3',
-    name: 'Neon Circle',
-    imageUrl: 'https://picsum.photos/seed/frame3/200/200',
-    quantity: 10,
-    durationDays: 1,
-  },
 ];
 
 
