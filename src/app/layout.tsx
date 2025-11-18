@@ -3,6 +3,7 @@ import { Toaster } from '@/components/ui/toaster';
 import './globals.css';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { ThemeProvider } from '@/components/theme-provider';
+import { ProfileFrameProvider } from '@/hooks/use-profile-frame-provider';
 
 export const metadata: Metadata = {
   title: 'Love Chat',
@@ -36,7 +37,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <FirebaseClientProvider>
-            {children}
+            <ProfileFrameProvider>
+              {children}
+            </ProfileFrameProvider>
           </FirebaseClientProvider>
           <Toaster />
         </ThemeProvider>

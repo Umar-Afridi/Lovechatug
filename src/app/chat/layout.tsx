@@ -52,7 +52,6 @@ import ActiveCallPage from './call/active/[callId]/page';
 import OutgoingCallPage from './call/outgoing/[userId]/page';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
-import { ProfileFrameProvider } from '@/hooks/use-profile-frame-provider';
 import { useProfileFrame } from '@/hooks/use-profile-frame';
 
 // Context for Call State
@@ -168,20 +167,21 @@ function usePresence() {
     const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
     const connectedRef = ref(db, '.info/connected');
 
-    const unsubscribe = onValue(connectedRef, async (snap) => {
-      if (snap.val() === true) {
-        // User is online
-        const onlineStatus = { isOnline: true, lastSeen: rtdbServerTimestamp() };
-        await set(userStatusDatabaseRef, onlineStatus);
-        
-        // This is a one-time update when connection is established.
-        await updateDoc(userStatusFirestoreRef, { isOnline: true, lastSeen: serverTimestamp() });
-        
-        // On disconnect, set user to offline in RTDB
-        onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
-      }
-    }, (error) => {
-      console.error("Error with presence listener:", error);
+    let unsubscribe: (() => void) | null = null;
+    
+    getDoc(userStatusFirestoreRef).then(docSnap => {
+        if (docSnap.exists()) {
+             unsubscribe = onValue(connectedRef, async (snap) => {
+              if (snap.val() === true) {
+                const onlineStatus = { isOnline: true, lastSeen: rtdbServerTimestamp() };
+                await set(userStatusDatabaseRef, onlineStatus);
+                
+                await updateDoc(userStatusFirestoreRef, { isOnline: true });
+
+                onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
+              }
+            });
+        }
     });
 
     return () => {
@@ -436,7 +436,7 @@ function ChatAppLayout({
     );
 
     return () => unsubscribe();
-  }, [firestore, user?.uid, playRequestSound]);
+  }, [firestore, user?.uid, playRequestSound, requestCount]);
   
   // Listener for total unread messages
   useEffect(() => {
@@ -683,10 +683,8 @@ function ChatAppLayout({
 
 export default function ChatAppLayoutWithProvider({ children }: { children: React.ReactNode }) {
     return (
-      <ProfileFrameProvider>
-        <CallProvider>
-            <ChatAppLayout>{children}</ChatAppLayout>
-        </CallProvider>
-      </ProfileFrameProvider>
+      <CallProvider>
+        <ChatAppLayout>{children}</ChatAppLayout>
+      </CallProvider>
     );
 }
