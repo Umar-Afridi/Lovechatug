@@ -87,6 +87,7 @@ function useUserProfile(onAccountDisabled: () => void) {
   const firestore = useFirestore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const profileDataRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (authLoading) {
@@ -103,11 +104,35 @@ function useUserProfile(onAccountDisabled: () => void) {
       (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data() as UserProfile;
-          setProfile(data);
-
+          
           if (data.isDisabled) {
             onAccountDisabled();
+            setProfile(data); // Set profile even if disabled to trigger UI change
+            return;
           }
+          
+          // To prevent infinite loops from rapid `lastSeen` updates, we only update
+          // the state if other, more significant data has changed.
+          const significantData = {
+              displayName: data.displayName,
+              photoURL: data.photoURL,
+              username: data.username,
+              friends: data.friends,
+              chatIds: data.chatIds,
+              blockedUsers: data.blockedUsers,
+              blockedBy: data.blockedBy,
+              verifiedBadge: data.verifiedBadge,
+              officialBadge: data.officialBadge,
+              nameColor: data.nameColor,
+              isDisabled: data.isDisabled,
+          };
+          const significantDataString = JSON.stringify(significantData);
+
+          if (profileDataRef.current !== significantDataString) {
+              setProfile(data);
+              profileDataRef.current = significantDataString;
+          }
+
 
         } else {
           // This case might happen for a brand new user before the doc is created
@@ -133,13 +158,14 @@ function useUserProfile(onAccountDisabled: () => void) {
   return { profile, loading };
 }
 
+
 // Custom hook for presence management
-function usePresence(profile: UserProfile | null) {
+function usePresence() {
   const { user } = useUser();
   const firestore = useFirestore();
 
   useEffect(() => {
-    if (!user || !firestore || !profile) return;
+    if (!user || !firestore) return;
 
     const db = getDatabase();
     const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
@@ -152,11 +178,12 @@ function usePresence(profile: UserProfile | null) {
         const onlineStatus = { isOnline: true, lastSeen: rtdbServerTimestamp() };
         await set(userStatusDatabaseRef, onlineStatus);
         
+        // This is a one-time update when connection is established.
+        // It won't trigger loops because it's not based on profile changes.
         await updateDoc(userStatusFirestoreRef, { isOnline: true, lastSeen: serverTimestamp() });
         
         // On disconnect, set user to offline in RTDB
         onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
-
       }
     }, (error) => {
       console.error("Error with presence listener:", error);
@@ -167,7 +194,7 @@ function usePresence(profile: UserProfile | null) {
         off(connectedRef, 'value', unsubscribe);
       }
     };
-  }, [user, firestore, profile]);
+  }, [user, firestore]); // The dependency array is stable and won't cause loops.
 }
 
 
@@ -379,7 +406,7 @@ function ChatAppLayout({
   }, []);
   
   const { profile, loading: profileLoading } = useUserProfile(handleAccountDisabled);
-  usePresence(profile); // Initialize presence management
+  usePresence(); // Initialize presence management
 
   const { play: playRequestSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a');
   const isFirstRequestLoad = useRef(true);
