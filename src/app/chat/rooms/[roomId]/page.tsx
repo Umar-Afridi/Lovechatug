@@ -217,7 +217,6 @@ export default function RoomPage() {
                 await batch.commit();
 
             } else {
-                // If user is already a member (e.g. rejoining), ensure their owner status is correct
                  if (isRoomOwner && memberSnap.data()?.micSlot !== OWNER_SLOT) {
                     await updateDoc(memberRef, { micSlot: OWNER_SLOT });
                  }
@@ -290,7 +289,6 @@ export default function RoomPage() {
         unsubMembers?.();
         unsubMessages?.();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, authUser?.uid, firestore]);
 
   const handleDeleteRoom = async () => {
@@ -371,12 +369,24 @@ export default function RoomPage() {
   
   const handleTakeSeat = async (slotNumber: number) => {
       if (!currentUserSlot || !authUser) return;
+      
+      // Optimistic UI update
+      setMembers(prevMembers => prevMembers.map(m => 
+          m.userId === authUser.uid ? { ...m, micSlot: slotNumber } : m
+      ));
+      
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       await updateDoc(memberRef, { micSlot: slotNumber });
   };
         
   const handleLeaveSeat = async () => {
       if (!currentUserSlot || currentUserSlot.micSlot === null || !authUser) return;
+      
+       // Optimistic UI update
+      setMembers(prevMembers => prevMembers.map(m => 
+          m.userId === authUser.uid ? { ...m, micSlot: null } : m
+      ));
+
       const memberRef = doc(firestore, 'rooms', roomId, 'members', authUser.uid);
       await updateDoc(memberRef, { micSlot: null });
   }
@@ -629,7 +639,7 @@ export default function RoomPage() {
             </Avatar>
             <div className="overflow-hidden">
                 <h1 className="truncate font-bold text-lg">{room.name}</h1>
-                <p className="text-xs text-muted-foreground">{members.length} people here</p>
+                <p className="text-xs text-muted-foreground">{room.memberCount || 0} people here</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
