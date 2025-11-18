@@ -2,80 +2,50 @@
 
 import Image from 'next/image';
 import { Button } from '../ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { Badge } from '../ui/badge';
 
 interface FrameCardProps {
-  frame: {
+  item: {
     id: string;
     name: string;
     imageUrl: string;
-    price: number;
-    currency: string;
+    quantity: number;
+    durationDays: number;
   };
 }
 
-export function FrameCard({ frame }: FrameCardProps) {
+export function FrameCard({ item }: FrameCardProps) {
   return (
-    <div className="group relative aspect-[3/4] overflow-hidden rounded-xl border-2 border-primary/20 bg-gradient-to-br from-card to-muted/50 p-4 flex flex-col justify-between items-center text-center shadow-lg transition-all duration-300 hover:shadow-primary/20 hover:scale-105">
+    <div className="group relative flex flex-col justify-between overflow-hidden rounded-xl border bg-card p-2 text-center shadow-sm transition-all duration-300 hover:shadow-lg hover:border-primary/50">
       
-      {/* Animated Shine Effect */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden rounded-xl z-10">
-        <div className="absolute top-0 -left-full w-1/2 h-full bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-20 group-hover:animate-shine" />
+      <Badge variant="secondary" className="absolute top-2 right-2 z-10">
+        x{item.quantity}
+      </Badge>
+      
+      <div className="relative w-full aspect-square flex-shrink-0 flex items-center justify-center p-4">
+        <Image
+            src={item.imageUrl}
+            alt={item.name}
+            fill
+            className="object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
+            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+        />
       </div>
 
-      {/* Frame Preview Area */}
-      <div className="relative w-full aspect-square flex-shrink-0 animate-breathing-scale flex items-center justify-center">
-        {/* Dummy Avatar */}
-        <Avatar className="h-4/5 w-4/5">
-            <AvatarImage src="https://picsum.photos/seed/123/200/200" alt="avatar-preview" />
-            <AvatarFallback>U</AvatarFallback>
-        </Avatar>
-
-        {/* Frame Image Overlay */}
-        <div className="absolute inset-0">
-             <Image
-                src={frame.imageUrl}
-                alt={frame.name}
-                fill
-                className="object-contain drop-shadow-[0_5px_15px_rgba(236,72,153,0.3)]"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            />
-        </div>
+      <div className="mt-2 flex-grow flex flex-col justify-center px-2">
+        <p className="text-xs text-muted-foreground">
+          {item.durationDays} days
+        </p>
       </div>
 
-      {/* Frame Name */}
-      <div className="mt-4 flex-grow flex flex-col justify-center">
-        <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-500">
-          {frame.name}
-        </h3>
+      <div className="mt-2 grid grid-cols-2 gap-px rounded-lg bg-muted overflow-hidden">
+         <Button variant="ghost" size="sm" className="rounded-none text-muted-foreground hover:bg-muted/80">
+            Send
+         </Button>
+         <Button size="sm" className="rounded-none">
+            Use
+         </Button>
       </div>
-
-      {/* Select Button */}
-      <Button className="w-full mt-4 bg-primary/90 hover:bg-primary shadow-lg z-20" size="sm">
-         Select
-      </Button>
-
-      <style jsx>{`
-        @keyframes shine {
-          0% {
-            left: -100%;
-          }
-          100% {
-            left: 100%;
-          }
-        }
-        .group-hover\:animate-shine {
-          animation: shine 1.5s ease-in-out;
-        }
-
-        @keyframes breathing-scale {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.03); }
-        }
-        .animate-breathing-scale {
-            animation: breathing-scale 8s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }
