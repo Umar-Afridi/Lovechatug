@@ -42,6 +42,48 @@ export function OfficialBadge({ color, size, className, isOwner = false }: Offic
     pink: 'text-pink-500',
   }[color || 'gold'];
 
+  if (isOwner && size === 'icon') {
+     return (
+        <div className={cn("relative", className)}>
+            <svg
+            width="100%"
+            height="100%"
+            viewBox="0 0 100 100"
+            className="official-badge-circle-animation"
+            >
+            <circle
+                cx="50"
+                cy="50"
+                r="45"
+                fill="none"
+                stroke="url(#official-gradient)"
+                strokeWidth="5"
+                strokeDasharray="282.74"
+                strokeDashoffset="0"
+                pathLength="1"
+                style={{ strokeDasharray: '10 18.27' }}
+            ></circle>
+            <defs>
+                <linearGradient
+                id="official-gradient"
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="100%"
+                >
+                <stop offset="0%" stopColor="#8A2BE2" />
+                <stop offset="50%" stopColor="#FF1493" />
+                <stop offset="100%" stopColor="#00BFFF" />
+                </linearGradient>
+            </defs>
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+                <Crown className={cn("h-[50%] w-[50%]", colorClass)} />
+            </div>
+        </div>
+     );
+  }
+
   const badgeText = isOwner ? 'Owner' : 'Official';
 
   return (
