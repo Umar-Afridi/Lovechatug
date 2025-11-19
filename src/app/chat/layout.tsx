@@ -81,7 +81,6 @@ function useUserProfile(onAccountDisabled: () => void) {
   const firestore = useFirestore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const profileDataRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (authLoading) {
@@ -105,29 +104,7 @@ function useUserProfile(onAccountDisabled: () => void) {
             return;
           }
           
-          // To prevent infinite loops from rapid `lastSeen` updates, we only update
-          // the state if other, more significant data has changed.
-          const significantData = {
-              displayName: data.displayName,
-              photoURL: data.photoURL,
-              username: data.username,
-              friends: data.friends,
-              chatIds: data.chatIds,
-              blockedUsers: data.blockedUsers,
-              blockedBy: data.blockedBy,
-              verifiedBadge: data.verifiedBadge,
-              officialBadge: data.officialBadge,
-              nameColor: data.nameColor,
-              isDisabled: data.isDisabled,
-              activeFrame: data.activeFrame,
-          };
-          const significantDataString = JSON.stringify(significantData);
-
-          if (profileDataRef.current !== significantDataString) {
-              setProfile(data);
-              profileDataRef.current = significantDataString;
-          }
-
+          setProfile(data);
 
         } else {
           // This case might happen for a brand new user before the doc is created
@@ -169,28 +146,19 @@ function usePresence() {
 
     let unsubscribe: (() => void) | null = null;
 
-    getDoc(userStatusFirestoreRef).then(docSnap => {
-        if (docSnap.exists()) {
-             const unsubscribeOnValue = onValue(connectedRef, async (snap) => {
-              if (snap.val() === true) {
-                // Set online status in Realtime Database. This is what other clients will see in real-time.
-                const onlineStatus = { isOnline: true, lastSeen: rtdbServerTimestamp() };
-                await set(userStatusDatabaseRef, onlineStatus);
-                
-                // Update Firestore ONLY if the user was previously offline. This prevents the write loop.
-                const currentData = docSnap.data() as UserProfile;
-                if (!currentData.isOnline) {
-                    await updateDoc(userStatusFirestoreRef, { isOnline: true });
-                }
+    const onValueChange = onValue(connectedRef, async (snap) => {
+      if (snap.val() === true) {
+        await set(userStatusDatabaseRef, { isOnline: true, lastSeen: rtdbServerTimestamp() });
+        
+        // Update Firestore when user comes online.
+        // This is less frequent than the onDisconnect write, so it's safer.
+        await updateDoc(userStatusFirestoreRef, { isOnline: true });
 
-                // Set up the disconnect hook for Realtime Database. This is crucial for presence.
-                onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
-              }
-            });
-            unsubscribe = () => off(connectedRef, 'value', unsubscribeOnValue);
-        }
+        onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
+      }
     });
 
+    unsubscribe = () => off(connectedRef, 'value', onValueChange);
 
     return () => {
       if (typeof unsubscribe === 'function') {

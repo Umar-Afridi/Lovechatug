@@ -285,42 +285,49 @@ export default function FriendsPage() {
 
  const handleSearch = useCallback(async (queryText: string) => {
     setSearchQuery(queryText);
-    const queryLower = queryText.toLowerCase();
+    const queryLower = queryText.toLowerCase().trim();
 
-    if (queryLower.trim().length < 2) { // Only search if query is 2+ chars
+    if (queryLower.length < 2) { 
       setSearchResults([]);
       return;
     }
 
     if (firestore && user && profile) {
       const usersRef = collection(firestore, 'users');
-      // Using 'or' to query both username and displayName
-      // Note: This requires a composite index on username and displayName,
-      // or Firestore will suggest creating it. For this prototype, separate queries are safer.
+      // Using 'or' to query both username and displayName is not directly supported for complex queries.
+      // A client-side merge of two separate queries is a common pattern.
+      
       const usernameQuery = query(
         usersRef, 
         where('username', '>=', queryLower),
-        where('username', '<=', queryLower + '\uf8ff'),
-        where('username', '!=', profile.username)
+        where('username', '<=', queryLower + '\uf8ff')
+      );
+       const displayNameQuery = query(
+        usersRef, 
+        where('displayName', '>=', queryText),
+        where('displayName', '<=', queryText + '\uf8ff')
       );
       
       try {
-        const usernameSnapshot = await getDocs(usernameQuery);
+        const [usernameSnapshot, displayNameSnapshot] = await Promise.all([getDocs(usernameQuery), getDocs(displayNameQuery)]);
         const resultsMap = new Map<string, UserProfile>();
 
         usernameSnapshot.forEach((doc) => {
-            const userData = doc.data() as UserProfile;
-             if (userData.uid !== user.uid && !userData.isDisabled) {
-                resultsMap.set(userData.uid, userData);
-             }
+            resultsMap.set(doc.id, doc.data() as UserProfile);
+        });
+        displayNameSnapshot.forEach((doc) => {
+            resultsMap.set(doc.id, doc.data() as UserProfile);
         });
             
           const myBlockedList = profile.blockedUsers || [];
           const whoBlockedMe = profile.blockedBy || [];
+          const myFriends = profile.friends || [];
 
           const finalResults = Array.from(resultsMap.values()).filter(u => 
-                !myBlockedList.includes(u.uid) &&
-                !whoBlockedMe.includes(u.uid)
+                u.uid !== user.uid && // Not myself
+                !u.isDisabled && // Not disabled
+                !myBlockedList.includes(u.uid) && // Not blocked by me
+                !whoBlockedMe.includes(u.uid) // Not blocking me
           );
 
           setSearchResults(finalResults);
@@ -461,7 +468,7 @@ export default function FriendsPage() {
           {isSearching && (
              <div className="relative">
                 <Input 
-                    placeholder="Search by username..." 
+                    placeholder="Search by username or display name..." 
                     className="pl-10"
                     value={searchQuery}
                     onChange={(e) => handleSearch(e.target.value)}
@@ -474,9 +481,9 @@ export default function FriendsPage() {
             </div>
           )}
         </div>
-        <ScrollArea className="flex-1">
+        <div className="flex-1 flex flex-col overflow-hidden">
             {renderContent()}
-        </ScrollArea>
+        </div>
     </div>
   );
 }
