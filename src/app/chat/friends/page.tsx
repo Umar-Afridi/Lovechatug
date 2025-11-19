@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Search, Settings, Bell, X, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
+import { useSound } from '@/hooks/use-sound';
 
 
 interface FriendRequestWithUser extends FriendRequestType {
@@ -242,6 +243,7 @@ export default function FriendsPage() {
   const { user } = useUser();
   const firestore = useFirestore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const { play: playSendRequestSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/sound/short_click.mp3');
 
   // Search state
   const [isSearching, setIsSearching] = useState(false);
@@ -294,8 +296,11 @@ export default function FriendsPage() {
 
     if (firestore && user && profile) {
       const usersRef = collection(firestore, 'users');
-      // Using 'or' to query both username and displayName is not directly supported for complex queries.
-      // A client-side merge of two separate queries is a common pattern.
+      // A case-insensitive search requires matching on a dedicated lowercase field,
+      // or fetching more data and filtering on the client. For this prototype,
+      // we'll fetch based on >= and <= to simulate a "starts with" search which
+      // is case-sensitive, but better than nothing. A better solution would be
+      // a third-party search service like Algolia.
       
       const usernameQuery = query(
         usersRef, 
@@ -304,7 +309,7 @@ export default function FriendsPage() {
       );
        const displayNameQuery = query(
         usersRef, 
-        where('displayName', '>=', queryText),
+        where('displayName', '>=', queryText), // Display name search can be case-sensitive
         where('displayName', '<=', queryText + '\uf8ff')
       );
       
@@ -313,15 +318,20 @@ export default function FriendsPage() {
         const resultsMap = new Map<string, UserProfile>();
 
         usernameSnapshot.forEach((doc) => {
-            resultsMap.set(doc.id, doc.data() as UserProfile);
+            const userData = doc.data() as UserProfile;
+             if (userData.username.toLowerCase().startsWith(queryLower)) {
+                resultsMap.set(doc.id, userData);
+             }
         });
         displayNameSnapshot.forEach((doc) => {
-            resultsMap.set(doc.id, doc.data() as UserProfile);
+             const userData = doc.data() as UserProfile;
+             if (userData.displayName.toLowerCase().includes(queryLower)) {
+                resultsMap.set(doc.id, userData);
+             }
         });
             
           const myBlockedList = profile.blockedUsers || [];
           const whoBlockedMe = profile.blockedBy || [];
-          const myFriends = profile.friends || [];
 
           const finalResults = Array.from(resultsMap.values()).filter(u => 
                 u.uid !== user.uid && // Not myself
@@ -354,6 +364,7 @@ export default function FriendsPage() {
       
       try {
           await addDoc(requestsRef, newRequest);
+          playSendRequestSound();
           toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
       } catch (error) {
           console.error("Error sending friend request:", error);
