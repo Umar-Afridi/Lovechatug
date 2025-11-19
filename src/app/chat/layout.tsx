@@ -181,7 +181,7 @@ function CallProvider({ children }: { children: React.ReactNode }) {
         const callIdToDelete = incomingCall?.id || outgoingCall?.callId || activeCall?.id;
         
         setIncomingCall(null);
-        setActiveCall(null);
+setActiveCall(null);
         setOutgoingCall(null);
 
         if (firestore && callIdToDelete) {

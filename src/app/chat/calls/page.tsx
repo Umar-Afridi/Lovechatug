@@ -68,7 +68,30 @@ function applyNameColor(name: string, color?: UserProfile['nameColor']) {
 }
 
 const CallItem = ({ call }: { call: CallWithUser }) => {
-  if (!call.otherUser) return null;
+  const [otherUser, setOtherUser] = useState<UserProfile | null>(call.otherUser ?? null);
+  const firestore = useFirestore();
+
+  useEffect(() => {
+    if (!firestore || !call) return;
+    
+    const otherUserId = call.callerId === call.participants.find(p => p !== call.callerId)
+      ? call.receiverId
+      : call.callerId;
+
+    if (!otherUserId) return;
+
+    const userDocRef = doc(firestore, 'users', otherUserId);
+    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setOtherUser(docSnap.data() as UserProfile);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [firestore, call]);
+
+
+  if (!otherUser) return null;
 
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
 
@@ -95,12 +118,12 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
         <div className="flex items-center gap-4">
             <div className="relative">
                 <Avatar className="h-10 w-10">
-                    <AvatarImage src={call.otherUser?.photoURL} />
-                    <AvatarFallback>{getInitials(call.otherUser?.displayName)}</AvatarFallback>
+                    <AvatarImage src={otherUser?.photoURL} />
+                    <AvatarFallback>{getInitials(otherUser?.displayName)}</AvatarFallback>
                 </Avatar>
-                 {call.otherUser?.officialBadge?.isOfficial && (
+                 {otherUser?.officialBadge?.isOfficial && (
                   <div className="absolute bottom-0 right-0">
-                    <OfficialBadge color={call.otherUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={call.otherUser.canManageOfficials} />
+                    <OfficialBadge color={otherUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={otherUser.canManageOfficials} />
                   </div>
                 )}
             </div>
@@ -110,7 +133,7 @@ const CallItem = ({ call }: { call: CallWithUser }) => {
                         "font-semibold",
                         call.status === 'missed' || call.status === 'declined' ? 'text-destructive' : ''
                     )}>
-                        {applyNameColor(call.otherUser?.displayName, call.otherUser?.nameColor)}
+                        {applyNameColor(otherUser?.displayName, otherUser?.nameColor)}
                     </p>
                 </div>
                 <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -134,8 +157,6 @@ export default function CallsPage() {
   const [isClearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const { toast } = useToast();
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  
-  const usersCache = React.useRef(new Map<string, UserProfile>());
 
   useEffect(() => {
     if (!user || !firestore) return;
@@ -202,37 +223,27 @@ export default function CallsPage() {
         
         const otherUserIds = [
             ...new Set(callDocs.map(call => call.callerId === user.uid ? call.receiverId : call.callerId))
-        ].filter(id => !usersCache.current.has(id));
+        ];
 
+        const usersData = new Map<string, UserProfile>();
+        
+        // Fetch users in chunks to avoid Firestore's 'in' query limit
         if (otherUserIds.length > 0) {
-             try {
-                const usersRef = collection(firestore, 'users');
-                // Firestore 'in' query supports up to 30 items per query. Chunking handles more.
-                const chunks: string[][] = [];
-                for (let i = 0; i < otherUserIds.length; i += 30) {
-                    chunks.push(otherUserIds.slice(i, i + 30));
-                }
-
-                for (const chunk of chunks) {
-                    if (chunk.length === 0) continue;
-                    const usersQuery = query(usersRef, where('uid', 'in', chunk));
-                    const usersSnapshot = await getDocs(usersQuery);
-                    usersSnapshot.forEach(doc => {
-                        usersCache.current.set(doc.id, doc.data() as UserProfile);
-                    });
-                }
-            } catch (e) {
-                console.error("Error pre-fetching user details for calls:", e);
+          for (let i = 0; i < otherUserIds.length; i += 10) {
+            const chunk = otherUserIds.slice(i, i + 10);
+            if (chunk.length > 0) {
+              const usersQuery = query(collection(firestore, 'users'), where('uid', 'in', chunk));
+              const usersSnapshot = await getDocs(usersQuery);
+              usersSnapshot.forEach(doc => usersData.set(doc.id, doc.data() as UserProfile));
             }
+          }
         }
         
         const populatedCalls = callDocs.map(call => {
             const otherUserId = call.callerId === user.uid ? call.receiverId : call.callerId;
-            const otherUserData = usersCache.current.get(otherUserId);
-            
             return {
                 ...call,
-                otherUser: otherUserData,
+                otherUser: usersData.get(otherUserId),
                 direction: call.callerId === user.uid ? 'outgoing' : 'incoming',
             };
         }).filter(call => call.otherUser) as CallWithUser[];

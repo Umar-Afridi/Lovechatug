@@ -13,7 +13,7 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { cn, applyNameColor } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
-import { Search, Settings, Bell, X, UserPlus, Check } from 'lucide-react';
+import { Search, Settings, Bell, X, UserPlus, Check, MessageSquare, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { useSound } from '@/hooks/use-sound';
@@ -66,34 +66,27 @@ const FriendRequestsList = () => {
             const senderIds = [...new Set(requestsData.map(req => req.senderId))].filter(Boolean);
             
             if (senderIds.length > 0) {
-                try {
-                    const userProfiles = new Map<string, UserProfile>();
-                    const usersRef = collection(firestore, 'users');
-                    const chunks: string[][] = [];
-                    for (let i = 0; i < senderIds.length; i += 30) {
-                        chunks.push(senderIds.slice(i, i + 30));
-                    }
-
-                    for (const chunk of chunks) {
-                        if (chunk.length === 0) continue;
+                const userProfiles = new Map<string, UserProfile>();
+                const usersRef = collection(firestore, 'users');
+                
+                // Batch fetching user profiles to improve performance
+                for (let i = 0; i < senderIds.length; i += 10) {
+                    const chunk = senderIds.slice(i, i + 10);
+                    if (chunk.length > 0) {
                         const usersQuery = query(usersRef, where('uid', 'in', chunk));
                         const usersSnapshot = await getDocs(usersQuery);
                         usersSnapshot.forEach(doc => {
                             userProfiles.set(doc.id, doc.data() as UserProfile);
                         });
                     }
-
-                    const populatedRequests = requestsData.map(req => ({
-                        ...req,
-                        fromUser: userProfiles.get(req.senderId)
-                    })).filter(req => req.fromUser);
-                    
-                    setRequests(populatedRequests);
-
-                } catch (userError) {
-                    console.error("Error fetching sender profiles: ", userError);
                 }
 
+                const populatedRequests = requestsData.map(req => ({
+                    ...req,
+                    fromUser: userProfiles.get(req.senderId)
+                })).filter(req => req.fromUser);
+                
+                setRequests(populatedRequests);
             } else {
                 setRequests([]);
             }
@@ -122,14 +115,8 @@ const FriendRequestsList = () => {
         try {
             const batch = writeBatch(firestore);
 
-            batch.update(currentUserRef, { 
-                friends: arrayUnion(request.senderId),
-                chatIds: arrayUnion(chatId) 
-            });
-            batch.update(friendUserRef, { 
-                friends: arrayUnion(user.uid),
-                chatIds: arrayUnion(chatId)
-            });
+            batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
+            batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
             
             const chatSnap = await getDocNonRealTime(chatRef);
             if (!chatSnap.exists()) {
@@ -353,17 +340,22 @@ export default function FriendsPage() {
   const handleCancelRequest = async (receiverId: string) => {
       if (!firestore || !user) return;
       
-      const requestToCancel = sentRequests.find(req => req.receiverId === receiverId);
-      if (!requestToCancel || !requestToCancel.id) return;
+      const q = query(
+          collection(firestore, 'friendRequests'),
+          where('senderId', '==', user.uid),
+          where('receiverId', '==', receiverId)
+      );
+      const querySnapshot = await getDocs(q);
       
-      const requestRef = doc(firestore, 'friendRequests', requestToCancel.id);
-      
-      try {
-          await deleteDoc(requestRef);
-          toast({ title: 'Request Cancelled' });
-      } catch(error) {
-           console.error("Error cancelling friend request:", error);
-           toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
+      if (!querySnapshot.empty) {
+        const docToDelete = querySnapshot.docs[0];
+        try {
+            await deleteDoc(docToDelete.ref);
+            toast({ title: 'Request Cancelled' });
+        } catch(error) {
+            console.error("Error cancelling friend request:", error);
+            toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
+        }
       }
   }
 
@@ -406,13 +398,16 @@ export default function FriendsPage() {
                                     <p className="text-sm text-muted-foreground truncate">@{foundUser.username}</p>
                                 </div>
                             </div>
-                            {isFriend ? (
-                                <Button size="sm" variant="secondary" disabled>
-                                    <Check className="mr-2 h-4 w-4"/>
-                                    Friends
+                             {isFriend ? (
+                                <Button size="sm" variant="secondary" onClick={() => router.push(`/chat/${foundUser.uid}`)}>
+                                    <MessageSquare className="mr-2 h-4 w-4"/>
+                                    Message
                                 </Button>
                             ) : hasSentRequest ? (
-                                <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel</Button>
+                                <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>
+                                    <Clock className="mr-2 h-4 w-4"/>
+                                    Sent
+                                </Button>
                             ) : (
                                 <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>
                                     <UserPlus className="mr-2 h-4 w-4"/>

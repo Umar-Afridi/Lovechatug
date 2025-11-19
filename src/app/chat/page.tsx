@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Bell, Settings, X, UserPlus, Check, MessageSquare } from 'lucide-react';
+import { Search, Bell, Settings, X, UserPlus, Check, MessageSquare, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -279,17 +279,22 @@ export default function ChatPage() {
   const handleCancelRequest = async (receiverId: string) => {
       if (!firestore || !user) return;
       
-      const requestToCancel = sentRequests.find(req => req.receiverId === receiverId);
-      if (!requestToCancel || !requestToCancel.id) return;
-      
-      const requestRef = doc(firestore, 'friendRequests', requestToCancel.id);
-      
-      try {
-          await deleteDoc(requestRef);
-          toast({ title: 'Request Cancelled' });
-      } catch(error) {
-           console.error("Error cancelling friend request:", error);
-           toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
+      const q = query(
+        collection(firestore, "friendRequests"),
+        where("senderId", "==", user.uid),
+        where("receiverId", "==", receiverId)
+      );
+
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const docToDelete = querySnapshot.docs[0];
+        try {
+            await deleteDoc(docToDelete.ref);
+            toast({ title: 'Request Cancelled' });
+        } catch(error) {
+            console.error("Error cancelling friend request:", error);
+            toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
+        }
       }
   };
     
@@ -363,7 +368,8 @@ export default function ChatPage() {
                       variant="outline"
                       onClick={() => handleCancelRequest(foundUser.uid)}
                     >
-                      Cancel
+                      <Clock className="mr-2 h-4 w-4"/>
+                      Sent
                     </Button>
                   ) : (
                     <Button
