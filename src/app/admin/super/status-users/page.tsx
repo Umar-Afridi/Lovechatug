@@ -53,7 +53,7 @@ const getColorBadge = (color: UserProfile['nameColor']) => {
 }
 
 const UserListItem = ({ user }: { user: UserProfile }) => (
-  <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
+  <div key={user.uid} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
     <div className="flex items-center gap-4">
       <Avatar className="h-12 w-12">
         <AvatarImage src={user.photoURL} />
