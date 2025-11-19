@@ -20,6 +20,34 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { useSound } from '@/hooks/use-sound';
 
+// A dedicated hook to get the current user's profile in real-time.
+// This is crucial for reacting to changes like new friends being added.
+function useUserProfile() {
+  const { user, loading: authLoading } = useUser();
+  const firestore = useFirestore();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    if (!user || !firestore) {
+      setProfile(null);
+      return;
+    }
+
+    const userDocRef = doc(firestore, 'users', user.uid);
+    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setProfile(docSnap.data() as UserProfile);
+      } else {
+        setProfile(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user, firestore]);
+
+  return profile;
+}
+
 const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: string }) => {
     const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
     const firestore = useFirestore();
@@ -119,7 +147,7 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
 export default function ChatPage() {
   const firestore = useFirestore();
   const { user } = useUser();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const profile = useUserProfile(); // Use the dedicated hook
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<Chat[]>([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
@@ -141,30 +169,46 @@ export default function ChatPage() {
       .join('');
   };
 
+  // Effect to fetch chats based on the user's profile (specifically chatIds)
   useEffect(() => {
-    if (!user || !firestore) {
+    if (!user || !firestore || !profile) {
         setLoading(false);
+        setChats([]);
         return;
     }
+    
+    if (!profile.chatIds || profile.chatIds.length === 0) {
+        setLoading(false);
+        setChats([]);
+        return;
+    }
+    
     setLoading(true);
-
-    const unsubProfile = onSnapshot(doc(firestore, 'users', user.uid), (docSnap) => {
-        if (docSnap.exists()) {
-            setProfile(docSnap.data() as UserProfile);
-        }
-    });
-
     const chatsRef = collection(firestore, 'chats');
+    // Use the 'in' query to fetch all chats the user is a member of in a single go.
     const chatsQuery = query(
         chatsRef,
-        where('members', 'array-contains', user.uid),
+        where('__name__', 'in', profile.chatIds),
         orderBy('lastMessage.timestamp', 'desc')
     );
+
     const unsubChats = onSnapshot(chatsQuery, (snapshot) => {
         const chatsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
         setChats(chatsData);
         setLoading(false);
+    }, (error) => {
+        console.error("Error fetching chats:", error);
+        setLoading(false);
     });
+
+    return () => unsubChats();
+
+  }, [user, firestore, profile]); // Rerun this effect when the profile changes
+
+
+  // Effect for notifications and sent friend requests (can stay as is)
+  useEffect(() => {
+    if (!user || !firestore) return;
 
     const notificationsRef = collection(firestore, 'users', user.uid, 'notifications');
     const qNotifications = query(notificationsRef, where('isRead', '==', false));
@@ -180,8 +224,6 @@ export default function ChatPage() {
     });
 
     return () => {
-        unsubProfile();
-        unsubChats();
         unsubNotifications();
         unsubSent();
     };
@@ -445,3 +487,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
