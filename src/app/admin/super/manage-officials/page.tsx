@@ -196,19 +196,40 @@ export default function ManageOfficialsPage() {
   }, [searchQuery, allUsers]);
   
   const handleUpdateOfficialStatus = async (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => {
-    if (!firestore) return;
+    if (!firestore || !currentUserProfile) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
 
-    // When removing official status, reset both properties to a default state
     const updatePayload = {
       officialBadge: {
         isOfficial: isOfficial,
-        badgeColor: isOfficial ? (color || 'gold') : 'gold', // Reset color to default when removing
-      }
+        badgeColor: isOfficial ? (color || 'gold') : 'gold',
+      },
+       // Also reset canManageOfficials if their main official status is removed
+      canManageOfficials: isOfficial ? targetUser.canManageOfficials : false,
+    };
+    
+     const notificationType = isOfficial ? 'official_badge_granted' : 'official_badge_removed';
+    const notificationMessage = isOfficial 
+        ? `You have been granted Official status by ${currentUserProfile.displayName}.`
+        : `Your Official status has been removed by ${currentUserProfile.displayName}.`;
+
+    const notification: any = {
+        userId: targetUser.uid,
+        title: 'Admin Update',
+        message: notificationMessage,
+        type: notificationType,
+        isRead: false,
+        createdAt: serverTimestamp(),
+        senderId: currentUserProfile.uid,
+        senderName: currentUserProfile.displayName,
+        senderPhotoURL: currentUserProfile.photoURL,
+        senderOfficialBadge: currentUserProfile.officialBadge,
+        senderNameColor: currentUserProfile.nameColor,
     };
 
     try {
       await updateDoc(userRef, updatePayload);
+      await addDoc(collection(firestore, 'users', targetUser.uid, 'notifications'), notification);
       
       toast({
         title: 'Official Status Updated',

@@ -1201,5 +1201,3 @@ export default function ChatIdPage() {
     </>
   );
 }
-
-    

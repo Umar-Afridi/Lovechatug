@@ -297,35 +297,21 @@ export default function FriendsPage() {
     if (firestore && user && profile) {
       const usersRef = collection(firestore, 'users');
       // A case-insensitive search requires matching on a dedicated lowercase field,
-      // or fetching more data and filtering on the client. For this prototype,
-      // we'll fetch based on >= and <= to simulate a "starts with" search which
-      // is case-sensitive, but better than nothing. A better solution would be
-      // a third-party search service like Algolia.
+      // or fetching more data and filtering on the client. We will search only by username.
       
       const usernameQuery = query(
         usersRef, 
         where('username', '>=', queryLower),
         where('username', '<=', queryLower + '\uf8ff')
       );
-       const displayNameQuery = query(
-        usersRef, 
-        where('displayName', '>=', queryText), // Display name search can be case-sensitive
-        where('displayName', '<=', queryText + '\uf8ff')
-      );
       
       try {
-        const [usernameSnapshot, displayNameSnapshot] = await Promise.all([getDocs(usernameQuery), getDocs(displayNameQuery)]);
+        const usernameSnapshot = await getDocs(usernameQuery);
         const resultsMap = new Map<string, UserProfile>();
 
         usernameSnapshot.forEach((doc) => {
             const userData = doc.data() as UserProfile;
              if (userData.username.toLowerCase().startsWith(queryLower)) {
-                resultsMap.set(doc.id, userData);
-             }
-        });
-        displayNameSnapshot.forEach((doc) => {
-             const userData = doc.data() as UserProfile;
-             if (userData.displayName.toLowerCase().includes(queryLower)) {
                 resultsMap.set(doc.id, userData);
              }
         });
@@ -337,7 +323,8 @@ export default function FriendsPage() {
                 u.uid !== user.uid && // Not myself
                 !u.isDisabled && // Not disabled
                 !myBlockedList.includes(u.uid) && // Not blocked by me
-                !whoBlockedMe.includes(u.uid) // Not blocking me
+                !whoBlockedMe.includes(u.uid) && // Not blocking me
+                !profile?.friends?.includes(u.uid) // Not already friends
           );
 
           setSearchResults(finalResults);
@@ -479,7 +466,7 @@ export default function FriendsPage() {
           {isSearching && (
              <div className="relative">
                 <Input 
-                    placeholder="Search by username or display name..." 
+                    placeholder="Search by username..." 
                     className="pl-10"
                     value={searchQuery}
                     onChange={(e) => handleSearch(e.target.value)}
