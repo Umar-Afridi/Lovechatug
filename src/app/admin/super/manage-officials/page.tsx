@@ -50,7 +50,7 @@ import { Separator } from '@/components/ui/separator';
 
 const BadgeColors: Array<NonNullable<UserProfile['officialBadge']>['badgeColor']> = ['blue', 'gold', 'green', 'red', 'pink'];
 
-const UserListItem = ({ user, onUpdate }: { user: UserProfile, onUpdate: (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => void }) => {
+const UserListItem = ({ user, onUpdate, isCurrentOfficial }: { user: UserProfile, onUpdate: (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => void, isCurrentOfficial: boolean }) => {
     const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
     
     return (
@@ -79,32 +79,35 @@ const UserListItem = ({ user, onUpdate }: { user: UserProfile, onUpdate: (target
                     <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Manage Official Status</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                         <DropdownMenuSub>
-                            <DropdownMenuSubTrigger disabled={user.officialBadge?.isOfficial}>
-                                <ShieldCheck className="mr-2 h-4 w-4 text-green-500" />
-                                <span>Make Official</span>
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuPortal>
-                                <DropdownMenuSubContent>
-                                    <DropdownMenuLabel>Choose Badge Color</DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    {BadgeColors.map(color => (
-                                        <DropdownMenuItem 
-                                            key={color} 
-                                            onClick={() => onUpdate(user, true, color)}
-                                            className="capitalize flex items-center gap-2"
-                                        >
-                                            <Palette className="h-4 w-4" style={{ color }}/>
-                                            {color}
-                                        </DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuSubContent>
-                            </DropdownMenuPortal>
-                        </DropdownMenuSub>
-                        <DropdownMenuItem onClick={() => onUpdate(user, false)} disabled={!user.officialBadge?.isOfficial} className="text-destructive focus:text-destructive">
-                            <ShieldOff className="mr-2 h-4 w-4" />
-                            <span>Remove Official</span>
-                        </DropdownMenuItem>
+                        {isCurrentOfficial ? (
+                            <DropdownMenuItem onClick={() => onUpdate(user, false)} className="text-destructive focus:text-destructive">
+                                <ShieldOff className="mr-2 h-4 w-4" />
+                                <span>Remove Official</span>
+                            </DropdownMenuItem>
+                        ) : (
+                             <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <ShieldCheck className="mr-2 h-4 w-4 text-green-500" />
+                                    <span>Make Official</span>
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuPortal>
+                                    <DropdownMenuSubContent>
+                                        <DropdownMenuLabel>Choose Badge Color</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {BadgeColors.map(color => (
+                                            <DropdownMenuItem 
+                                                key={color} 
+                                                onClick={() => onUpdate(user, true, color)}
+                                                className="capitalize flex items-center gap-2"
+                                            >
+                                                <Palette className="h-4 w-4" style={{ color }}/>
+                                                {color}
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuPortal>
+                            </DropdownMenuSub>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
@@ -129,6 +132,7 @@ export default function ManageOfficialsPage() {
   // Authorization check
   useEffect(() => {
     if (!authUser || !firestore) return;
+    setLoading(true);
     const userDocRef = doc(firestore, 'users', authUser.uid);
     const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -136,8 +140,6 @@ export default function ManageOfficialsPage() {
         setCurrentUserProfile(profile);
         if (!profile.officialBadge?.isOfficial || !profile.canManageOfficials) {
           router.push('/chat');
-        } else {
-            setLoading(false);
         }
       } else {
         router.push('/chat');
@@ -161,8 +163,10 @@ export default function ManageOfficialsPage() {
         .map((d) => d.data() as UserProfile)
         .filter(u => u.uid !== authUser.uid); // Exclude self
       setOfficialUsers(officialsList);
+      setLoading(false);
     }, (error) => {
         console.error("Error fetching officials:", error);
+        setLoading(false);
     });
 
     return () => unsubscribe();
@@ -200,7 +204,7 @@ export default function ManageOfficialsPage() {
     const updatePayload = {
       'officialBadge.isOfficial': isOfficial,
       'officialBadge.badgeColor': isOfficial ? (color || 'gold') : 'gold',
-      canManageOfficials: isOfficial ? targetUser.canManageOfficials : false,
+       canManageOfficials: isOfficial ? targetUser.canManageOfficials ?? false : false,
     };
     
      const notificationType = isOfficial ? 'official_badge_granted' : 'official_badge_removed';
@@ -230,6 +234,11 @@ export default function ManageOfficialsPage() {
         title: 'Official Status Updated',
         description: `${targetUser.displayName} is ${isOfficial ? 'now an official' : 'no longer an official'}.`,
       });
+      // After making someone official, clear the search results so they move to the current officials list
+      if (isOfficial) {
+          setSearchQuery('');
+          setSearchedUsers([]);
+      }
 
     } catch (error) {
        toast({ title: 'Error', description: 'Could not update official status.', variant: 'destructive'});
@@ -238,10 +247,18 @@ export default function ManageOfficialsPage() {
   };
 
 
-  if (loading || !currentUserProfile?.canManageOfficials) {
+  if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
         <p>Loading Official Management Panel...</p>
+      </div>
+    );
+  }
+  
+  if (!currentUserProfile?.canManageOfficials) {
+     return (
+      <div className="flex h-full items-center justify-center">
+        <p>You do not have permission to access this page.</p>
       </div>
     );
   }
@@ -271,12 +288,12 @@ export default function ManageOfficialsPage() {
             {searchedUsers.length > 0 ? (
                 <div className="space-y-2">
                     {searchedUsers.map((user) => (
-                       <UserListItem key={user.uid} user={user} onUpdate={handleUpdateOfficialStatus} />
+                       <UserListItem key={user.uid} user={user} onUpdate={handleUpdateOfficialStatus} isCurrentOfficial={false} />
                     ))}
                 </div>
             ) : (
                 <div className="flex flex-1 items-center justify-center text-muted-foreground p-8 h-full">
-                    <p>{searchQuery ? "No users found." : "Search for a user to manage their official status."}</p>
+                    <p>{searchQuery ? "No users found." : "Search for a user to make them an official."}</p>
                 </div>
             )}
         </div>
@@ -288,7 +305,7 @@ export default function ManageOfficialsPage() {
             {officialUsers.length > 0 ? (
                 <div className="space-y-2 rounded-lg border p-2">
                     {officialUsers.map((user) => (
-                        <UserListItem key={user.uid} user={user} onUpdate={handleUpdateOfficialStatus} />
+                        <UserListItem key={user.uid} user={user} onUpdate={handleUpdateOfficialStatus} isCurrentOfficial={true}/>
                     ))}
                 </div>
             ) : (
