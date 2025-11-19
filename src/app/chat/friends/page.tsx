@@ -401,7 +401,10 @@ export default function FriendsPage() {
                             ) : hasSentRequest ? (
                                 <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel</Button>
                             ) : (
-                                <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>Add</Button>
+                                <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>
+                                    <UserPlus className="mr-2 h-4 w-4"/>
+                                    Add
+                                </Button>
                             )}
                         </div>
                     );

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { Search, Bell, Settings, X, UserPlus, Check } from 'lucide-react';
+import { Search, Bell, Settings, X, UserPlus, Check, MessageSquare } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -130,6 +130,7 @@ export default function ChatPage() {
   const [sentRequests, setSentRequests] = useState<FriendRequestType[]>([]);
   const { toast } = useToast();
   const { play: playSendRequestSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/sound/short_click.mp3');
+  const router = useRouter();
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
@@ -274,62 +275,91 @@ export default function ChatPage() {
     
   const renderContent = () => {
     if (isSearching) {
-        return (
-            <ScrollArea className="flex-1">
-                {searchResults.length === 0 && searchQuery ? (
-                    <div className="p-4 text-center text-muted-foreground">
-                        <p>No users found for "{searchQuery}".</p>
-                    </div>
-                ) : (
-                    searchResults.map(foundUser => {
-                      const isFriend = profile?.friends?.includes(foundUser.uid);
-                      const hasSentRequest = sentRequests.some(req => req.receiverId === foundUser.uid);
+      return (
+        <ScrollArea className="flex-1">
+          {searchResults.length === 0 && searchQuery ? (
+            <div className="p-4 text-center text-muted-foreground">
+              <p>No users found for "{searchQuery}".</p>
+            </div>
+          ) : (
+            searchResults.map((foundUser) => {
+              const isFriend = profile?.friends?.includes(foundUser.uid);
+              const hasSentRequest = sentRequests.some(
+                (req) => req.receiverId === foundUser.uid
+              );
 
-                      return (
-                        <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
-                            <div className="flex items-center gap-4 overflow-hidden">
-                                <div className="relative">
-                                    <Avatar className="h-12 w-12">
-                                        <AvatarImage src={foundUser.photoURL || undefined} />
-                                        <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
-                                    </Avatar>
-                                    {foundUser.officialBadge?.isOfficial && (
-                                        <div className="absolute bottom-0 right-0">
-                                            <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
-                                        </div>
-                                    )}
-                                </div>
-                                <div className='overflow-hidden'>
-                                    <div className="flex items-center gap-2">
-                                        <p className="font-semibold truncate">
-                                            {applyNameColor(foundUser.displayName, foundUser.nameColor)}
-                                        </p>
-                                        {foundUser.verifiedBadge?.showBadge && (
-                                            <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
-                                        )}
-                                    </div>
-                                    <p className="text-sm text-muted-foreground truncate">@{foundUser.username}</p>
-                                </div>
-                            </div>
-                              {isFriend ? (
-                                <Button size="sm" variant="secondary" disabled>
-                                    <Check className="mr-2 h-4 w-4"/>
-                                    Friends
-                                </Button>
-                            ) : hasSentRequest ? (
-                                <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel</Button>
-                            ) : (
-                                <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>
-                                  <UserPlus className="mr-2 h-4 w-4"/>
-                                  Add
-                                </Button>
-                            )}
+              return (
+                <div
+                  key={foundUser.uid}
+                  className="flex items-center justify-between p-4 hover:bg-muted/50"
+                >
+                  <div className="flex items-center gap-4 overflow-hidden">
+                    <div className="relative">
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage src={foundUser.photoURL || undefined} />
+                        <AvatarFallback>
+                          {getInitials(foundUser.displayName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      {foundUser.officialBadge?.isOfficial && (
+                        <div className="absolute bottom-0 right-0">
+                          <OfficialBadge
+                            color={foundUser.officialBadge.badgeColor}
+                            size="icon"
+                            className="h-4 w-4"
+                            isOwner={foundUser.canManageOfficials}
+                          />
                         </div>
-                      )
-                    })
-                )}
-            </ScrollArea>
-        );
+                      )}
+                    </div>
+                    <div className="overflow-hidden">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold truncate">
+                          {applyNameColor(
+                            foundUser.displayName,
+                            foundUser.nameColor
+                          )}
+                        </p>
+                        {foundUser.verifiedBadge?.showBadge && (
+                          <VerifiedBadge
+                            color={foundUser.verifiedBadge.badgeColor}
+                          />
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground truncate">
+                        @{foundUser.username}
+                      </p>
+                    </div>
+                  </div>
+
+                  {isFriend ? (
+                     <Button size="sm" variant="secondary" onClick={() => router.push(`/chat/${foundUser.uid}`)}>
+                        <MessageSquare className="mr-2 h-4 w-4"/>
+                        Message
+                    </Button>
+                  ) : hasSentRequest ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleCancelRequest(foundUser.uid)}
+                    >
+                      Cancel
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={() => handleSendRequest(foundUser.uid)}
+                    >
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Add
+                    </Button>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </ScrollArea>
+      );
     }
 
     if (loading || !user) {
