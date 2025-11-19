@@ -53,7 +53,7 @@ const getColorBadge = (color: UserProfile['nameColor']) => {
 }
 
 const UserListItem = ({ user }: { user: UserProfile }) => (
-  <div key={user.uid} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
+  <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
     <div className="flex items-center gap-4">
       <Avatar className="h-12 w-12">
         <AvatarImage src={user.photoURL} />
@@ -68,7 +68,7 @@ const UserListItem = ({ user }: { user: UserProfile }) => (
         <p className="text-xs text-muted-foreground">@{user.username}</p>
       </div>
     </div>
-    {user.nameColor !== 'default' && getColorBadge(user.nameColor)}
+    {user.nameColor && user.nameColor !== 'default' && getColorBadge(user.nameColor)}
   </div>
 );
 
@@ -89,20 +89,14 @@ const StatusUserList = ({ type }: { type: 'verified' | 'colorful' }) => {
       if (type === 'verified') {
         q = query(usersRef, where('verifiedBadge.showBadge', '==', true));
       } else {
-        // Firestore doesn't support 'not-equal' queries directly.
-        // We can query for each color or fetch all and filter. Fetching all is simpler for a limited number of users.
-        // For larger scale, multiple queries would be better.
-        q = query(usersRef, orderBy('nameColor'));
+        // More efficient query for colorful names using 'not-in'.
+        // It fetches users where nameColor is not 'default' and not null.
+        q = query(usersRef, where('nameColor', 'not-in', ['default', null, '']));
       }
 
       try {
         const querySnapshot = await getDocs(q);
-        let usersList = querySnapshot.docs.map(doc => doc.data() as UserProfile);
-
-        if (type === 'colorful') {
-          usersList = usersList.filter(user => user.nameColor && user.nameColor !== 'default');
-        }
-
+        const usersList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as UserProfile);
         setUsers(usersList);
       } catch (error) {
         console.error(`Error fetching ${type} users:`, error);
