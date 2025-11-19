@@ -65,22 +65,13 @@ const FriendRequestsList = () => {
             const senderIds = [...new Set(requestsData.map(req => req.senderId))].filter(Boolean);
             
             if (senderIds.length > 0) {
-                const usersRef = collection(firestore, 'users');
-                
                 try {
-                    // Optimized: Fetch all sender profiles in chunks of 30 (Firestore 'in' query limit)
                     const userProfiles = new Map<string, UserProfile>();
-                    const chunks = [];
-                    for (let i = 0; i < senderIds.length; i += 30) {
-                        chunks.push(senderIds.slice(i, i + 30));
-                    }
-
-                    for (const chunk of chunks) {
-                        const usersQuery = query(usersRef, where('uid', 'in', chunk));
-                        const usersSnapshot = await getDocs(usersQuery);
-                        usersSnapshot.forEach(doc => {
-                            userProfiles.set(doc.data().uid, doc.data() as UserProfile);
-                        });
+                    for (const senderId of senderIds) {
+                        const userDoc = await getDocNonRealTime(doc(firestore, 'users', senderId));
+                        if (userDoc.exists()) {
+                            userProfiles.set(senderId, userDoc.data() as UserProfile);
+                        }
                     }
 
                     const populatedRequests = requestsData.map(req => ({
