@@ -17,6 +17,7 @@ import { Search, Settings, Bell, X, UserPlus, Check } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { useSound } from '@/hooks/use-sound';
+import { useRouter } from 'next/navigation';
 
 
 interface FriendRequestWithUser extends FriendRequestType {
@@ -67,7 +68,8 @@ const FriendRequestsList = () => {
             if (senderIds.length > 0) {
                 try {
                     const userProfiles = new Map<string, UserProfile>();
-                    for (const senderId of senderIds) {
+                    // Fetch all sender profiles in one go for efficiency
+                     for (const senderId of senderIds) {
                         const userDoc = await getDocNonRealTime(doc(firestore, 'users', senderId));
                         if (userDoc.exists()) {
                             userProfiles.set(senderId, userDoc.data() as UserProfile);
