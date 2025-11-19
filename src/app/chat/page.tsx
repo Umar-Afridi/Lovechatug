@@ -8,34 +8,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Chat, UserProfile, FriendRequest as FriendRequestType } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { cn, applyNameColor } from '@/lib/utils';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, onSnapshot, doc, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp, orderBy, writeBatch, or } from 'firebase/firestore';
+import { collection, onSnapshot, doc, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow, isToday, isYesterday, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
-
-function applyNameColor(name: string, color?: UserProfile['nameColor']) {
-    if (!color || color === 'default') {
-        return name;
-    }
-    if (color === 'gradient') {
-        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
-    }
-    
-    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
-        green: 'text-green-500',
-        yellow: 'text-yellow-500',
-        pink: 'text-pink-500',
-        purple: 'text-purple-500',
-        red: 'text-red-500',
-    };
-
-    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
-}
 
 const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: string }) => {
     const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
@@ -67,15 +48,21 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
     useEffect(() => {
         if (!firestore || !participantId) return;
 
+        // Immediately use prefilled details if available for faster initial render
         const prefilledDetails = chat.participantDetails?.[participantId];
         if (prefilledDetails?.displayName) {
-             setParticipant({
-                uid: participantId,
-                displayName: prefilledDetails.displayName,
-                photoURL: prefilledDetails.photoURL,
-                email: '',
-                username: '',
-             } as UserProfile);
+             setParticipant(prev => {
+                // Avoid unnecessary re-renders if the basic data is already there
+                if (prev && prev.uid === participantId && prev.displayName === prefilledDetails.displayName) return prev;
+                return {
+                    uid: participantId,
+                    displayName: prefilledDetails.displayName,
+                    photoURL: prefilledDetails.photoURL,
+                    // Add other non-real-time fields as placeholders
+                    email: '',
+                    username: '',
+                } as UserProfile
+             });
         }
 
         const userDocRef = doc(firestore, 'users', participantId);
@@ -161,7 +148,6 @@ export default function ChatPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
-  const [sentRequests, setSentRequests] = useState<FriendRequestType[]>([]);
   const { toast } = useToast();
 
   const getInitials = (name: string | null | undefined) => {
@@ -203,18 +189,10 @@ export default function ChatPage() {
         setUnreadNotificationCount(snapshot.size);
     });
 
-    const sentRequestsRef = collection(firestore, 'friendRequests');
-    const qSent = query(sentRequestsRef, where('senderId', '==', user.uid));
-    const unsubSent = onSnapshot(qSent, (snapshot) => {
-        const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequestType));
-        setSentRequests(requests);
-    });
-
     return () => {
         unsubProfile();
         unsubChats();
         unsubNotifications();
-        unsubSent();
     };
   }, [user, firestore]);
 
@@ -234,31 +212,17 @@ export default function ChatPage() {
           where('username', '>=', queryLower),
           where('username', '<=', queryLower + '\uf8ff')
         );
-        const displayNameQuery = query(
-          usersRef,
-          where('displayName', '>=', queryText),
-          where('displayName', '<=', queryText + '\uf8ff')
-        );
         
         try {
-          const [usernameSnapshot, displayNameSnapshot] = await Promise.all([
-            getDocs(usernameQuery),
-            getDocs(displayNameQuery)
-          ]);
-          
+          const usernameSnapshot = await getDocs(usernameQuery);
           const resultsMap = new Map<string, UserProfile>();
 
-          const processSnapshot = (snapshot: any) => {
-              snapshot.docs.forEach((doc: any) => {
-                  const userData = doc.data() as UserProfile;
-                  if (userData.uid !== user.uid && !userData.isDisabled) {
-                    resultsMap.set(userData.uid, userData);
-                  }
-              });
-          };
-
-          processSnapshot(usernameSnapshot);
-          processSnapshot(displayNameSnapshot);
+          usernameSnapshot.forEach((doc: any) => {
+              const userData = doc.data() as UserProfile;
+              if (userData.uid !== user.uid && !userData.isDisabled) {
+                resultsMap.set(userData.uid, userData);
+              }
+          });
             
           const myBlockedList = profile.blockedUsers || [];
           const whoBlockedMe = profile.blockedBy || [];
@@ -280,42 +244,6 @@ export default function ChatPage() {
       }
     };
     
-  const handleSendRequest = async (receiverId: string) => {
-      if (!firestore || !user) return;
-      const requestsRef = collection(firestore, 'friendRequests');
-      const newRequest = {
-          senderId: user.uid,
-          receiverId: receiverId,
-          status: 'pending' as const,
-          createdAt: serverTimestamp(),
-      };
-      
-      try {
-          await addDoc(requestsRef, newRequest);
-          toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
-      } catch (error) {
-          console.error("Error sending friend request:", error);
-          toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive'});
-      }
-  };
-  
-  const handleCancelRequest = async (receiverId: string) => {
-      if (!firestore || !user) return;
-      
-      const requestToCancel = sentRequests.find(req => req.receiverId === receiverId);
-      if (!requestToCancel || !requestToCancel.id) return;
-      
-      const requestRef = doc(firestore, 'friendRequests', requestToCancel.id);
-      
-      try {
-          await deleteDoc(requestRef);
-          toast({ title: 'Request Cancelled' });
-      } catch(error) {
-           console.error("Error cancelling friend request:", error);
-           toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
-      }
-  }
-
   const renderContent = () => {
     if (isSearching) {
         return (
@@ -325,48 +253,36 @@ export default function ChatPage() {
                         <p>No users found for "{searchQuery}".</p>
                     </div>
                 ) : (
-                    searchResults.map(foundUser => {
-                    const isFriend = profile?.friends?.includes(foundUser.uid);
-                    const hasSentRequest = sentRequests.some(req => req.receiverId === foundUser.uid);
-                    
-                    return (
-                        <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
-                            <div className="flex items-center gap-4">
-                            <div className="relative">
-                                <Avatar className="h-12 w-12">
-                                    <AvatarImage src={foundUser.photoURL || undefined} />
-                                    <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
-                                </Avatar>
-                                {foundUser.officialBadge?.isOfficial && (
-                                    <div className="absolute bottom-0 right-0">
-                                        <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
-                                    </div>
-                                )}
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                <p className="font-semibold">
-                                    {applyNameColor(foundUser.displayName, foundUser.nameColor)}
-                                    </p>
-                                    {foundUser.verifiedBadge?.showBadge && (
-                                        <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
+                    searchResults.map(foundUser => (
+                        <Link href={`/chat/${foundUser.uid}`} key={foundUser.uid}>
+                            <div className="flex items-center justify-between p-4 hover:bg-muted/50 cursor-pointer">
+                                <div className="flex items-center gap-4">
+                                <div className="relative">
+                                    <Avatar className="h-12 w-12">
+                                        <AvatarImage src={foundUser.photoURL || undefined} />
+                                        <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
+                                    </Avatar>
+                                    {foundUser.officialBadge?.isOfficial && (
+                                        <div className="absolute bottom-0 right-0">
+                                            <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
+                                        </div>
                                     )}
                                 </div>
-                                <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                    <p className="font-semibold">
+                                        {applyNameColor(foundUser.displayName, foundUser.nameColor)}
+                                        </p>
+                                        {foundUser.verifiedBadge?.showBadge && (
+                                            <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
+                                        )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
+                                </div>
+                                </div>
                             </div>
-                            </div>
-                            {isFriend ? (
-                                <Button asChild size="sm">
-                                    <Link href={`/chat/${foundUser.uid}`}>Message</Link>
-                                </Button>
-                            ) : hasSentRequest ? (
-                                <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel</Button>
-                            ) : (
-                                <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>Add</Button>
-                            )}
-                        </div>
-                    );
-                    })
+                        </Link>
+                    ))
                 )}
             </ScrollArea>
         );
@@ -408,11 +324,8 @@ export default function ChatPage() {
                 <span>Love Chat</span>
             </h1>
             <div className="flex items-center gap-2">
-                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
-                    <Link href="/chat/friends">
+                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={() => setIsSearching(prev => !prev)}>
                       <Search className="h-5 w-5" />
-                      <span className="sr-only">Search</span>
-                    </Link>
                  </Button>
                  <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full" asChild>
                     <Link href="/chat/notifications">
@@ -434,7 +347,7 @@ export default function ChatPage() {
            {isSearching && (
              <div className="relative">
                 <Input 
-                    placeholder="Search users..." 
+                    placeholder="Search users by username..." 
                     className="pl-10"
                     value={searchQuery}
                     onChange={(e) => handleSearch(e.target.value)}

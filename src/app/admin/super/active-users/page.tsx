@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Crown } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, applyNameColor } from '@/lib/utils';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
@@ -19,31 +19,14 @@ type TimeRange = 'daily' | 'weekly' | 'monthly';
 
 const getInitials = (name: string) => (name ? name.split(' ').map(n => n[0]).join('') : 'U');
 
-const applyNameColor = (name: string, color?: UserProfile['nameColor']) => {
-  if (!color || color === 'default') {
-    return name;
-  }
-  if (color === 'gradient') {
-    return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
-  }
-  const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
-    green: 'text-green-500',
-    yellow: 'text-yellow-500',
-    pink: 'text-pink-500',
-    purple: 'text-purple-500',
-    red: 'text-red-500',
-  };
-  return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
-};
-
 const RankingBadge = ({ rank }: { rank: number }) => {
   if (rank > 3) return null;
-  const colors = {
+  const colors: Record<number, string> = {
     1: 'bg-yellow-400 text-yellow-900',
     2: 'bg-gray-300 text-gray-800',
     3: 'bg-yellow-600 text-white',
   };
-  const text = {
+  const text: Record<number, string> = {
     1: '1st',
     2: '2nd',
     3: '3rd',

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useUser } from '@/firebase/auth/use-user';
@@ -14,6 +14,8 @@ import {
   deleteDoc,
   addDoc,
   serverTimestamp,
+  where,
+  getDocs,
 } from 'firebase/firestore';
 import {
   MoreVertical,
@@ -45,29 +47,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { cn } from '@/lib/utils';
+import { cn, applyNameColor } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
-
-
-function applyNameColor(name: string, color?: UserProfile['nameColor']) {
-    if (!color || color === 'default') {
-        return name;
-    }
-    if (color === 'gradient') {
-        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
-    }
-    
-    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
-        green: 'text-green-500',
-        yellow: 'text-yellow-500',
-        pink: 'text-pink-500',
-        purple: 'text-purple-500',
-        red: 'text-red-500',
-    };
-
-    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
-}
 
 
 export default function ManageUsersPage() {
@@ -77,9 +59,10 @@ export default function ManageUsersPage() {
   const { toast } = useToast();
 
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
-  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [searchedUsers, setSearchedUsers] = useState<UserProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
@@ -102,6 +85,8 @@ export default function ManageUsersPage() {
             variant: 'destructive',
           });
           router.push('/chat');
+        } else {
+            setLoading(false);
         }
       } else {
         router.push('/chat');
@@ -112,38 +97,31 @@ export default function ManageUsersPage() {
     return () => unsubscribe();
   }, [authUser, firestore, router, toast]);
 
-  // 2. Fetch all users, excluding other official users
-  useEffect(() => {
-    if (!currentUserProfile?.officialBadge?.isOfficial || !firestore || !authUser) return;
+ const handleSearch = useCallback(async () => {
+    if (!firestore || !currentUserProfile || searchQuery.trim().length < 2) {
+      setSearchedUsers([]);
+      return;
+    }
+    setSearching(true);
+    const usersRef = collection(firestore, "users");
+    const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
+    
+    try {
+        const querySnapshot = await getDocs(q);
+        let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
 
-    const usersRef = collection(firestore, 'users');
-    const q = query(usersRef);
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      let usersList = snapshot.docs.map((d) => d.data() as UserProfile);
-
-      // If the current admin CANNOT manage officials, filter other officials out.
-      if (!currentUserProfile.canManageOfficials) {
-        usersList = usersList.filter(u => u.uid === authUser.uid || !u.officialBadge?.isOfficial);
-      }
-      
-      setAllUsers(usersList);
-      setLoading(false);
-    }, (error) => {
-        console.error("Error fetching users:", error);
-        setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [currentUserProfile, firestore, authUser]);
-
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery) return []; // Don't show any users if search is empty
-    return allUsers.filter(u => 
-        u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.username.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [searchQuery, allUsers]);
+        if (!currentUserProfile.canManageOfficials) {
+            usersList = usersList.filter(u => u.uid === authUser?.uid || !u.officialBadge?.isOfficial);
+        }
+        
+        setSearchedUsers(usersList);
+    } catch (error) {
+        console.error("Error searching users:", error);
+        toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
+    } finally {
+        setSearching(false);
+    }
+  }, [firestore, searchQuery, currentUserProfile, authUser, toast]);
 
   const openConfirmationDialog = (action: 'disable' | 'delete' | 'enable' | 'warn', targetUser: UserProfile) => {
     setDialogState({ isOpen: true, action, targetUser });
@@ -261,20 +239,23 @@ export default function ManageUsersPage() {
       </AlertDialog>
 
         <div className="p-4 border-b space-y-4">
-             <div className="relative">
+             <div className="flex gap-2">
                 <Input 
-                    placeholder="Search by username or display name..."
+                    placeholder="Search by username..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 />
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                 <Button onClick={handleSearch} disabled={searching}>
+                    <Search className="mr-2 h-4 w-4" />
+                    {searching ? 'Searching...' : 'Search'}
+                </Button>
             </div>
         </div>
           <ScrollArea className="flex-1">
-            {searchQuery && filteredUsers.length > 0 ? (
+            {searchedUsers.length > 0 ? (
                 <div className="space-y-2 p-2">
-                    {filteredUsers.map((user) => (
+                    {searchedUsers.map((user) => (
                         <div key={user.uid} className={cn("flex items-center justify-between p-2 rounded-lg", user.isDisabled && "bg-destructive/10")}>
                             <div className="flex items-center gap-3 overflow-hidden">
                                 <Avatar className="h-10 w-10">

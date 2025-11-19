@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import type { UserProfile, FriendRequest as FriendRequestType } from '@/lib/types';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
-import { cn } from '@/lib/utils';
+import { cn, applyNameColor } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Search, Settings, Bell, X, UserPlus } from 'lucide-react';
 import Link from 'next/link';
@@ -22,25 +22,6 @@ import { useSound } from '@/hooks/use-sound';
 interface FriendRequestWithUser extends FriendRequestType {
     id: string;
     fromUser?: UserProfile;
-}
-
-function applyNameColor(name: string, color?: UserProfile['nameColor']) {
-    if (!color || color === 'default') {
-        return name;
-    }
-    if (color === 'gradient') {
-        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
-    }
-    
-    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
-        green: 'text-green-500',
-        yellow: 'text-yellow-500',
-        pink: 'text-pink-500',
-        purple: 'text-purple-500',
-        red: 'text-red-500',
-    };
-
-    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
 }
 
 const FriendRequestsList = () => {

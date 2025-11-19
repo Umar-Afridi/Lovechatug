@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useUser } from '@/firebase/auth/use-user';
@@ -14,6 +14,7 @@ import {
   where,
   addDoc,
   serverTimestamp,
+  getDocs,
 } from 'firebase/firestore';
 import {
   Shield,
@@ -42,31 +43,12 @@ import {
   DropdownMenuPortal,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
+import { cn, applyNameColor } from '@/lib/utils';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { Separator } from '@/components/ui/separator';
 
 const BadgeColors: Array<NonNullable<UserProfile['officialBadge']>['badgeColor']> = ['blue', 'gold', 'green', 'red', 'pink'];
-
-function applyNameColor(name: string, color?: UserProfile['nameColor']) {
-    if (!color || color === 'default') {
-        return name;
-    }
-    if (color === 'gradient') {
-        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
-    }
-    
-    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
-        green: 'text-green-500',
-        yellow: 'text-yellow-500',
-        pink: 'text-pink-500',
-        purple: 'text-purple-500',
-        red: 'text-red-500',
-    };
-
-    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
-}
 
 const UserListItem = ({ user, onUpdate }: { user: UserProfile, onUpdate: (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => void }) => {
     const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
@@ -138,10 +120,11 @@ export default function ManageOfficialsPage() {
   const { toast } = useToast();
 
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
-  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [officialUsers, setOfficialUsers] = useState<UserProfile[]>([]);
+  const [searchedUsers, setSearchedUsers] = useState<UserProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
 
   // Authorization check
   useEffect(() => {
@@ -153,58 +136,70 @@ export default function ManageOfficialsPage() {
         setCurrentUserProfile(profile);
         if (!profile.officialBadge?.isOfficial || !profile.canManageOfficials) {
           router.push('/chat');
+        } else {
+            setLoading(false);
         }
       } else {
         router.push('/chat');
       }
     }, (error) => {
         console.error("Error fetching admin profile:", error);
+        setLoading(false);
     });
     return () => unsubscribe();
   }, [authUser, firestore, router]);
 
-  // Fetch all users
+  // Fetch current officials
   useEffect(() => {
     if (!currentUserProfile?.canManageOfficials || !firestore || !authUser) return;
 
     const usersRef = collection(firestore, 'users');
-    const q = query(usersRef);
+    const q = query(usersRef, where('officialBadge.isOfficial', '==', true));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const usersList = snapshot.docs.map((d) => d.data() as UserProfile);
-      
-      const officials = usersList.filter(u => u.officialBadge?.isOfficial && u.uid !== authUser.uid);
-      const others = usersList.filter(u => !u.officialBadge?.isOfficial);
-
-      setOfficialUsers(officials);
-      setAllUsers(others); // `allUsers` will now only contain non-officials for searching
-      setLoading(false);
+      const officialsList = snapshot.docs
+        .map((d) => d.data() as UserProfile)
+        .filter(u => u.uid !== authUser.uid); // Exclude self
+      setOfficialUsers(officialsList);
     }, (error) => {
-        console.error("Error fetching users:", error);
-        setLoading(false);
+        console.error("Error fetching officials:", error);
     });
 
     return () => unsubscribe();
   }, [currentUserProfile?.canManageOfficials, firestore, authUser]);
 
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery) return []; 
-    return allUsers.filter(u => 
-        u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.username.toLowerCase().includes(searchQuery.toLowerCase())
+  const handleSearch = useCallback(async () => {
+    if (!firestore || searchQuery.trim().length < 2) {
+      setSearchedUsers([]);
+      return;
+    }
+    setSearching(true);
+    const usersRef = collection(firestore, "users");
+    const q = query(usersRef, 
+        where("username", ">=", searchQuery.toLowerCase()), 
+        where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'),
+        where('officialBadge.isOfficial', '==', false) // Only search non-officials
     );
-  }, [searchQuery, allUsers]);
+    
+    try {
+        const querySnapshot = await getDocs(q);
+        const usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
+        setSearchedUsers(usersList);
+    } catch (error) {
+        console.error("Error searching users:", error);
+        toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
+    } finally {
+        setSearching(false);
+    }
+  }, [firestore, searchQuery, toast]);
   
   const handleUpdateOfficialStatus = async (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => {
     if (!firestore || !currentUserProfile) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
 
     const updatePayload = {
-      officialBadge: {
-        isOfficial: isOfficial,
-        badgeColor: isOfficial ? (color || 'gold') : 'gold',
-      },
-       // Also reset canManageOfficials if their main official status is removed
+      'officialBadge.isOfficial': isOfficial,
+      'officialBadge.badgeColor': isOfficial ? (color || 'gold') : 'gold',
       canManageOfficials: isOfficial ? targetUser.canManageOfficials : false,
     };
     
@@ -261,18 +256,21 @@ export default function ManageOfficialsPage() {
       </div>
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
-            <div className="relative">
+            <div className="flex gap-2">
                 <Input 
-                    placeholder="Search users to make official..."
+                    placeholder="Search non-officials by username..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 />
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                 <Button onClick={handleSearch} disabled={searching}>
+                    <Search className="mr-2 h-4 w-4" />
+                    {searching ? 'Searching...' : 'Search'}
+                </Button>
             </div>
-            {searchQuery && filteredUsers.length > 0 ? (
+            {searchedUsers.length > 0 ? (
                 <div className="space-y-2">
-                    {filteredUsers.map((user) => (
+                    {searchedUsers.map((user) => (
                        <UserListItem key={user.uid} user={user} onUpdate={handleUpdateOfficialStatus} />
                     ))}
                 </div>
