@@ -66,18 +66,30 @@ const FriendRequestsList = () => {
             
             if (senderIds.length > 0) {
                 const usersRef = collection(firestore, 'users');
-                const usersQuery = query(usersRef, where('uid', 'in', senderIds));
                 
                 try {
-                const usersSnapshot = await getDocs(usersQuery);
-                const userProfiles = new Map(usersSnapshot.docs.map(doc => [doc.data().uid, doc.data() as UserProfile]));
-                
-                const populatedRequests = requestsData.map(req => ({
-                    ...req,
-                    fromUser: userProfiles.get(req.senderId)
-                }));
-                
-                setRequests(populatedRequests);
+                    // Optimized: Fetch all sender profiles in chunks of 30 (Firestore 'in' query limit)
+                    const userProfiles = new Map<string, UserProfile>();
+                    const chunks = [];
+                    for (let i = 0; i < senderIds.length; i += 30) {
+                        chunks.push(senderIds.slice(i, i + 30));
+                    }
+
+                    for (const chunk of chunks) {
+                        const usersQuery = query(usersRef, where('uid', 'in', chunk));
+                        const usersSnapshot = await getDocs(usersQuery);
+                        usersSnapshot.forEach(doc => {
+                            userProfiles.set(doc.data().uid, doc.data() as UserProfile);
+                        });
+                    }
+
+                    const populatedRequests = requestsData.map(req => ({
+                        ...req,
+                        fromUser: userProfiles.get(req.senderId)
+                    }));
+                    
+                    setRequests(populatedRequests);
+
                 } catch (userError) {
                     console.error("Error fetching sender profiles: ", userError);
                 }
@@ -232,6 +244,7 @@ export default function FriendsPage() {
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [sentRequests, setSentRequests] = useState<FriendRequestType[]>([]);
   const { toast } = useToast();
+  const router = useRouter();
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
