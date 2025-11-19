@@ -186,6 +186,7 @@ export default function ChatPage() {
     setLoading(true);
     const chatsRef = collection(firestore, 'chats');
     // Use the 'in' query to fetch all chats the user is a member of in a single go.
+    // Firestore 'in' query is limited to 30 items. If a user can have more chats, this would need chunking.
     const chatsQuery = query(
         chatsRef,
         where('__name__', 'in', profile.chatIds),
