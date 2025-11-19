@@ -66,7 +66,7 @@ export function ContactProfileSheet({
 
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [friendshipStatus, setFriendshipStatus] = useState<'friends' | 'request_sent' | 'not_friends' | 'self'>('not_friends');
-  const [sentRequest, setSentRequest] = useState<FriendRequest | null>(null);
+  const [sentRequest, setSentRequest] = useState<(FriendRequest & {id: string}) | null>(null);
 
   // Fetch current user's profile for friend list
   useEffect(() => {
@@ -101,7 +101,7 @@ export function ContactProfileSheet({
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
         if (!querySnapshot.empty) {
             setFriendshipStatus('request_sent');
-            setSentRequest({id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data()} as FriendRequest);
+            setSentRequest({id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data()} as (FriendRequest & {id: string}));
         } else {
             setFriendshipStatus('not_friends');
             setSentRequest(null);

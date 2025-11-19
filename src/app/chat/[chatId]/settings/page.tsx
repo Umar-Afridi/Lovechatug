@@ -12,6 +12,7 @@ import {
   arrayRemove,
   writeBatch,
   serverTimestamp,
+  deleteDoc,
 } from 'firebase/firestore';
 import { ArrowLeft, User, Trash2, UserX, ShieldX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
