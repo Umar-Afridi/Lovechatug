@@ -22,6 +22,7 @@ import {
   Timestamp,
   getDocs,
   setDoc,
+  arrayRemove,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -42,6 +43,9 @@ import {
   Ban,
   DoorOpen,
   PhoneMissed,
+  User as UserIcon,
+  UserX,
+  ShieldX,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
@@ -51,6 +55,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import type { Message as MessageType, UserProfile, Chat as ChatType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -64,6 +69,7 @@ import { cn } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { useCallContext } from '../layout';
+import { ClearChatDialog } from '@/components/chat/clear-chat-dialog';
 
 function applyNameColor(name: string, color?: UserProfile['nameColor']) {
     if (!color || color === 'default') {
@@ -101,6 +107,7 @@ export default function ChatIdPage() {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [loading, setLoading] = useState(true);
   const [isContactSheetOpen, setContactSheetOpen] = useState(false);
+  const [isClearChatDialogOpen, setClearChatDialogOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<MessageType | null>(null);
 
@@ -758,6 +765,53 @@ export default function ChatIdPage() {
         if (!otherUser || !callContext) return;
         callContext.startCall(otherUser.uid, type);
     };
+
+    // --- Menu Actions ---
+    const handleBlockUser = async () => {
+        if (!firestore || !authUser || !otherUser) return;
+        const currentUserRef = doc(firestore, 'users', authUser.uid);
+        try {
+            await updateDoc(currentUserRef, { blockedUsers: arrayUnion(otherUser.uid) });
+            toast({ title: 'User Blocked', description: `${otherUser.displayName} has been blocked.` });
+        } catch (error) {
+            toast({ title: 'Error', description: 'Could not block user.', variant: 'destructive' });
+        }
+    };
+
+    const handleUnfriend = async () => {
+        if (!firestore || !authUser || !otherUser) return;
+        const currentUserRef = doc(firestore, 'users', authUser.uid);
+        const otherUserRef = doc(firestore, 'users', otherUser.uid);
+        if (!chatId) return;
+        const chatRef = doc(firestore, 'chats', chatId);
+
+        const batch = writeBatch(firestore);
+        batch.update(currentUserRef, { friends: arrayRemove(otherUser.uid), chatIds: arrayRemove(chatId) });
+        batch.update(otherUserRef, { friends: arrayRemove(authUser.uid), chatIds: arrayRemove(chatId) });
+        batch.delete(chatRef);
+        try {
+            await batch.commit();
+            toast({ title: 'Unfriended', description: `You are no longer friends with ${otherUser.displayName}.` });
+            router.push('/chat');
+        } catch (error) {
+            toast({ title: 'Error', description: 'Could not unfriend user.', variant: 'destructive' });
+        }
+    };
+    
+    const handleClearChat = async () => {
+        if (!firestore || !authUser || !chatId) return;
+        const currentUserRef = doc(firestore, 'users', authUser.uid);
+        const fieldPath = `chatsCleared.${chatId}`;
+        const payload = { [fieldPath]: serverTimestamp() };
+        try {
+            await updateDoc(currentUserRef, payload);
+            toast({ title: "Chat Cleared", description: "Your view of this chat has been cleared."});
+        } catch(error) {
+            toast({ title: "Error", description: "Could not clear chat.", variant: "destructive" });
+        } finally {
+            setClearChatDialogOpen(false);
+        }
+    };
   
   const MessageStatus = ({ status }: { status: MessageType['status'] }) => {
     if (status === 'read') {
@@ -860,6 +914,12 @@ export default function ChatIdPage() {
           onOpenChange={setContactSheetOpen}
           userProfile={otherUser}
       />
+      <ClearChatDialog
+        isOpen={isClearChatDialogOpen}
+        onOpenChange={setClearChatDialogOpen}
+        onConfirm={handleClearChat}
+        userName={otherUser.displayName}
+      />
       <div className="h-screen flex flex-col bg-background">
         {/* Chat Header */}
           <header className="flex shrink-0 items-center gap-4 border-b bg-muted/40 px-4 py-3">
@@ -913,11 +973,22 @@ export default function ChatIdPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem asChild>
-                      <Link href={`/chat/${otherUserIdFromParams}/settings`}>
-                        <Settings className="mr-2 h-4 w-4" />
-                        <span>More settings</span>
-                      </Link>
+                   <DropdownMenuItem onClick={() => setContactSheetOpen(true)}>
+                        <UserIcon className="mr-2 h-4 w-4" />
+                        <span>View Contact</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleBlockUser} className="text-destructive focus:text-destructive">
+                        <ShieldX className="mr-2 h-4 w-4" />
+                        <span>Block User</span>
+                    </DropdownMenuItem>
+                     <DropdownMenuItem onClick={handleUnfriend} className="text-destructive focus:text-destructive">
+                        <UserX className="mr-2 h-4 w-4" />
+                        <span>Unfriend</span>
+                    </DropdownMenuItem>
+                     <DropdownMenuItem onClick={() => setClearChatDialogOpen(true)} className="text-destructive focus:text-destructive">
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        <span>Clear Chat</span>
                     </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
