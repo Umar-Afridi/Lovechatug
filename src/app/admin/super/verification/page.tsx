@@ -170,6 +170,15 @@ export default function ManageVerificationPage() {
     try {
       await updateDoc(userRef, updatePayload);
       
+      // OPTIMISTIC UI UPDATE: Update local state immediately for faster feedback
+      setSearchedUsers(prevUsers => 
+        prevUsers.map(u => 
+          u.uid === targetUser.uid 
+            ? { ...u, ...updatePayload, verifiedBadge: { ...u.verifiedBadge, ...updatePayload.verifiedBadge } } 
+            : u
+        )
+      );
+
       if (status === 'approved') {
         await sendNotification(targetUser, 'approved');
       } else if (status === 'rejected') {
