@@ -14,7 +14,6 @@ import {
   where,
   addDoc,
   serverTimestamp,
-  getDocs,
 } from 'firebase/firestore';
 import {
   Shield,
@@ -128,6 +127,7 @@ export default function ManageOfficialsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const searchUnsubscribeRef = React.useRef<() => void | null>(null);
 
   // Authorization check
   useEffect(() => {
@@ -172,9 +172,14 @@ export default function ManageOfficialsPage() {
     return () => unsubscribe();
   }, [currentUserProfile?.canManageOfficials, firestore, authUser]);
 
-  const handleSearch = useCallback(async () => {
+  const handleSearch = useCallback(() => {
+    if (searchUnsubscribeRef.current) {
+        searchUnsubscribeRef.current();
+    }
+    
     if (!firestore || searchQuery.trim().length < 2) {
       setSearchedUsers([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
@@ -185,26 +190,37 @@ export default function ManageOfficialsPage() {
         where('officialBadge.isOfficial', '==', false) // Only search non-officials
     );
     
-    try {
-        const querySnapshot = await getDocs(q);
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
         setSearchedUsers(usersList);
-    } catch (error) {
+        setSearching(false);
+    }, (error) => {
         console.error("Error searching users:", error);
         toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
-    } finally {
         setSearching(false);
-    }
+    });
+    searchUnsubscribeRef.current = unsubscribe;
   }, [firestore, searchQuery, toast]);
+
+  useEffect(() => {
+      return () => {
+          if(searchUnsubscribeRef.current) {
+              searchUnsubscribeRef.current();
+          }
+      }
+  }, []);
   
   const handleUpdateOfficialStatus = async (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => {
     if (!firestore || !currentUserProfile) return;
     const userRef = doc(firestore, 'users', targetUser.uid);
 
+    // If we are removing official status, also remove canManageOfficials power.
+    const canManage = isOfficial ? (targetUser.canManageOfficials ?? false) : false;
+
     const updatePayload = {
       'officialBadge.isOfficial': isOfficial,
       'officialBadge.badgeColor': isOfficial ? (color || 'gold') : 'gold',
-       canManageOfficials: isOfficial ? targetUser.canManageOfficials ?? false : false,
+      canManageOfficials: canManage,
     };
     
      const notificationType = isOfficial ? 'official_badge_granted' : 'official_badge_removed';
@@ -285,7 +301,9 @@ export default function ManageOfficialsPage() {
                     {searching ? 'Searching...' : 'Search'}
                 </Button>
             </div>
-            {searchedUsers.length > 0 ? (
+             {searching ? (
+                 <div className="text-center p-4 text-muted-foreground">Searching...</div>
+            ) : searchedUsers.length > 0 ? (
                 <div className="space-y-2">
                     {searchedUsers.map((user) => (
                        <UserListItem key={user.uid} user={user} onUpdate={handleUpdateOfficialStatus} isCurrentOfficial={false} />

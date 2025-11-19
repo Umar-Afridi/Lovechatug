@@ -13,7 +13,7 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { cn, applyNameColor } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
-import { Search, Settings, Bell, X, UserPlus } from 'lucide-react';
+import { Search, Settings, Bell, X, UserPlus, Check } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { useSound } from '@/hooks/use-sound';
@@ -394,8 +394,9 @@ export default function FriendsPage() {
                                 </div>
                             </div>
                             {isFriend ? (
-                                <Button asChild size="sm" variant="secondary" disabled>
-                                    <span>Friends</span>
+                                <Button size="sm" variant="secondary" disabled>
+                                    <Check className="mr-2 h-4 w-4"/>
+                                    Friends
                                 </Button>
                             ) : hasSentRequest ? (
                                 <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel</Button>

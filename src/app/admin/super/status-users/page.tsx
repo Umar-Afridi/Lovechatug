@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import type { UserProfile } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,28 +11,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
-import { cn } from '@/lib/utils';
+import { cn, applyNameColor } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
 
 const getInitials = (name: string) => (name ? name.split(' ').map(n => n[0]).join('') : 'U');
-
-const applyNameColor = (name: string, color?: UserProfile['nameColor']) => {
-  if (!color || color === 'default') {
-    return name;
-  }
-  if (color === 'gradient') {
-    return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
-  }
-  const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
-    green: 'text-green-500',
-    yellow: 'text-yellow-500',
-    pink: 'text-pink-500',
-    purple: 'text-purple-500',
-    red: 'text-red-500',
-  };
-  return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
-};
 
 const getColorBadge = (color: UserProfile['nameColor']) => {
      if (!color || color === 'default') {
@@ -53,7 +36,7 @@ const getColorBadge = (color: UserProfile['nameColor']) => {
 }
 
 const UserListItem = ({ user }: { user: UserProfile }) => (
-  <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
+  <div key={user.uid} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
     <div className="flex items-center gap-4">
       <Avatar className="h-12 w-12">
         <AvatarImage src={user.photoURL} />
@@ -79,33 +62,28 @@ const StatusUserList = ({ type }: { type: 'verified' | 'colorful' }) => {
   const firestore = useFirestore();
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      if (!firestore) return;
-      setLoading(true);
+    if (!firestore) return;
+    setLoading(true);
 
-      const usersRef = collection(firestore, 'users');
-      let q;
+    const usersRef = collection(firestore, 'users');
+    let q;
 
-      if (type === 'verified') {
-        q = query(usersRef, where('verifiedBadge.showBadge', '==', true));
-      } else {
-        // More efficient query for colorful names using 'not-in'.
-        // It fetches users where nameColor is not 'default' and not null.
-        q = query(usersRef, where('nameColor', 'not-in', ['default', null, '']));
-      }
+    if (type === 'verified') {
+      q = query(usersRef, where('verifiedBadge.showBadge', '==', true));
+    } else {
+      q = query(usersRef, where('nameColor', 'not-in', ['default', null, '']));
+    }
 
-      try {
-        const querySnapshot = await getDocs(q);
-        const usersList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as UserProfile);
-        setUsers(usersList);
-      } catch (error) {
-        console.error(`Error fetching ${type} users:`, error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const usersList = querySnapshot.docs.map(doc => doc.data() as UserProfile);
+      setUsers(usersList);
+      setLoading(false);
+    }, (error) => {
+      console.error(`Error fetching ${type} users:`, error);
+      setLoading(false);
+    });
 
-    fetchUsers();
+    return () => unsubscribe();
   }, [firestore, type]);
 
   if (loading) {

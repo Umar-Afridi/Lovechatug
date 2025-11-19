@@ -15,7 +15,6 @@ import {
   addDoc,
   serverTimestamp,
   where,
-  getDocs,
 } from 'firebase/firestore';
 import {
   MoreVertical,
@@ -63,6 +62,7 @@ export default function ManageUsersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const searchUnsubscribeRef = React.useRef<() => void | null>(null);
   
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
@@ -97,9 +97,14 @@ export default function ManageUsersPage() {
     return () => unsubscribe();
   }, [authUser, firestore, router, toast]);
 
- const handleSearch = useCallback(async () => {
+ const handleSearch = useCallback(() => {
+    if(searchUnsubscribeRef.current) {
+        searchUnsubscribeRef.current();
+    }
+
     if (!firestore || !currentUserProfile || searchQuery.trim().length < 2) {
       setSearchedUsers([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
@@ -121,7 +126,17 @@ export default function ManageUsersPage() {
       setSearching(false);
     });
 
+    searchUnsubscribeRef.current = unsubscribe;
+
   }, [firestore, searchQuery, currentUserProfile, authUser, toast]);
+
+  useEffect(() => {
+      return () => {
+          if (searchUnsubscribeRef.current) {
+              searchUnsubscribeRef.current();
+          }
+      }
+  }, []);
 
   const openConfirmationDialog = (action: 'disable' | 'delete' | 'enable' | 'warn', targetUser: UserProfile) => {
     setDialogState({ isOpen: true, action, targetUser });

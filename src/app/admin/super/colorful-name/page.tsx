@@ -12,7 +12,6 @@ import {
   updateDoc,
   addDoc,
   serverTimestamp,
-  getDocs,
   where,
 } from 'firebase/firestore';
 import {
@@ -56,6 +55,7 @@ export default function ManageColorfulNamePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const searchUnsubscribeRef = React.useRef<() => void | null>(null);
 
   // Authorization check
   useEffect(() => {
@@ -80,16 +80,20 @@ export default function ManageColorfulNamePage() {
     return () => unsubscribe();
   }, [authUser, firestore, router]);
 
-  const handleSearch = useCallback(async () => {
+  const handleSearch = useCallback(() => {
+    if (searchUnsubscribeRef.current) {
+        searchUnsubscribeRef.current();
+    }
+
     if (!firestore || !currentUserProfile || searchQuery.trim().length < 2) {
       setSearchedUsers([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
     const usersRef = collection(firestore, "users");
     const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
     
-    // Using onSnapshot for real-time updates of search results
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
 
@@ -105,9 +109,18 @@ export default function ManageColorfulNamePage() {
       setSearching(false);
     });
     
-    // We might need a way to unsubscribe when the search query changes or component unmounts.
-    // For now, this provides real-time updates for the current search.
+    searchUnsubscribeRef.current = unsubscribe;
+
   }, [firestore, searchQuery, currentUserProfile, authUser, toast]);
+
+  useEffect(() => {
+      // Cleanup the listener when the component unmounts
+      return () => {
+          if(searchUnsubscribeRef.current) {
+              searchUnsubscribeRef.current();
+          }
+      }
+  }, []);
 
   const sendNotification = async (targetUser: UserProfile, type: 'granted', color: NameColor | 'default') => {
     if (!firestore || !currentUserProfile) return;

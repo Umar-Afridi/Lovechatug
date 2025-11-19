@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useFirestore } from '@/firebase/provider';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import type { UserProfile } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -72,28 +72,22 @@ const Leaderboard = ({ timeRange }: { timeRange: TimeRange }) => {
   const firestore = useFirestore();
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      if (!firestore) return;
-      setLoading(true);
+    if (!firestore) return;
+    setLoading(true);
 
-      // Note: For a real app, you would have separate fields for daily, weekly, monthly scores
-      // and reset them with a scheduled function. For this prototype, we use the single
-      // `activityScore` for all tabs.
-      const usersRef = collection(firestore, 'users');
-      const q = query(usersRef, orderBy('activityScore', 'desc'), limit(100));
+    const usersRef = collection(firestore, 'users');
+    const q = query(usersRef, orderBy('activityScore', 'desc'), limit(100));
 
-      try {
-        const querySnapshot = await getDocs(q);
-        const usersList = querySnapshot.docs.map(doc => doc.data() as UserProfile);
-        setUsers(usersList);
-      } catch (error) {
-        console.error(`Error fetching ${timeRange} leaderboard:`, error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const usersList = querySnapshot.docs.map(doc => doc.data() as UserProfile);
+      setUsers(usersList);
+      setLoading(false);
+    }, (error) => {
+      console.error(`Error fetching ${timeRange} leaderboard:`, error);
+      setLoading(false);
+    });
 
-    fetchUsers();
+    return () => unsubscribe();
   }, [firestore, timeRange]);
 
   if (loading) {

@@ -12,7 +12,6 @@ import {
   updateDoc,
   addDoc,
   serverTimestamp,
-  getDocs,
   where,
 } from 'firebase/firestore';
 import {
@@ -62,6 +61,7 @@ export default function ManageVerificationPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const searchUnsubscribeRef = React.useRef<() => void | null>(null);
 
   // Authorization check
   useEffect(() => {
@@ -86,16 +86,20 @@ export default function ManageVerificationPage() {
     return () => unsubscribe();
   }, [authUser, firestore, router]);
 
-  const handleSearch = useCallback(async () => {
+  const handleSearch = useCallback(() => {
+    if (searchUnsubscribeRef.current) {
+        searchUnsubscribeRef.current();
+    }
+
     if (!firestore || !currentUserProfile || searchQuery.trim().length < 2) {
       setSearchedUsers([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
     const usersRef = collection(firestore, "users");
     const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
     
-    // Using onSnapshot for real-time updates of search results
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
         let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
 
@@ -111,8 +115,16 @@ export default function ManageVerificationPage() {
         setSearching(false);
     });
 
-    // We need a way to unsubscribe when component unmounts or search changes, but for now this is a simple implementation.
+    searchUnsubscribeRef.current = unsubscribe;
   }, [firestore, searchQuery, currentUserProfile, authUser, toast]);
+
+  useEffect(() => {
+    return () => {
+        if(searchUnsubscribeRef.current) {
+            searchUnsubscribeRef.current();
+        }
+    }
+  }, []);
 
   const sendNotification = async (targetUser: UserProfile, status: 'approved' | 'rejected' | 'removed') => {
     if (!firestore || !currentUserProfile) return;

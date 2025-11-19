@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { Search, Bell, Settings, X } from 'lucide-react';
+import { Search, Bell, Settings, X, UserPlus, Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,12 +11,13 @@ import { Button } from '@/components/ui/button';
 import { cn, applyNameColor } from '@/lib/utils';
 import { useFirestore } from '@/firebase/provider';
 import { useUser } from '@/firebase/auth/use-user';
-import { collection, onSnapshot, doc, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, doc, query, where, getDocs, orderBy, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow, isToday, isYesterday, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
+import { useSound } from '@/hooks/use-sound';
 
 const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: string }) => {
     const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
@@ -48,28 +49,13 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
     useEffect(() => {
         if (!firestore || !participantId) return;
 
-        // Immediately use prefilled details if available for faster initial render
-        const prefilledDetails = chat.participantDetails?.[participantId];
-        if (prefilledDetails?.displayName) {
-             setParticipant(prev => {
-                // Avoid unnecessary re-renders if the basic data is already there
-                if (prev && prev.uid === participantId && prev.displayName === prefilledDetails.displayName) return prev;
-                return {
-                    uid: participantId,
-                    displayName: prefilledDetails.displayName,
-                    photoURL: prefilledDetails.photoURL,
-                    // Add other non-real-time fields as placeholders
-                    email: '',
-                    username: '',
-                } as UserProfile
-             });
-        }
-
         const userDocRef = doc(firestore, 'users', participantId);
         const unsubscribe = onSnapshot(userDocRef, 
             (docSnap) => {
                 if (docSnap.exists()) {
                     setParticipant(docSnap.data() as UserProfile);
+                } else {
+                     setParticipant(null); // User might have been deleted
                 }
             }, 
             (error) => {
@@ -78,18 +64,11 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
         );
 
         return () => unsubscribe();
-    }, [firestore, participantId, chat.participantDetails]);
+    }, [firestore, participantId]);
 
     if (!participant) {
-        return (
-             <div className='flex items-center gap-4 p-4 animate-pulse'>
-                <div className='h-12 w-12 rounded-full bg-muted'></div>
-                <div className="flex-1 overflow-hidden space-y-2">
-                    <div className="h-4 bg-muted rounded w-3/4"></div>
-                    <div className="h-3 bg-muted rounded w-1/2"></div>
-                </div>
-            </div>
-        );
+        // Don't render anything if the other participant doesn't exist, chat will be cleaned up eventually
+        return null;
     }
     
     return (
@@ -148,7 +127,9 @@ export default function ChatPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [sentRequests, setSentRequests] = useState<FriendRequestType[]>([]);
   const { toast } = useToast();
+  const { play: playSendRequestSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/sound/short_click.mp3');
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
@@ -189,18 +170,26 @@ export default function ChatPage() {
         setUnreadNotificationCount(snapshot.size);
     });
 
+    const sentRequestsRef = collection(firestore, 'friendRequests');
+    const qSent = query(sentRequestsRef, where('senderId', '==', user.uid), where('status', '==', 'pending'));
+    const unsubSent = onSnapshot(qSent, (snapshot) => {
+        const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequestType));
+        setSentRequests(requests);
+    });
+
     return () => {
         unsubProfile();
         unsubChats();
         unsubNotifications();
+        unsubSent();
     };
   }, [user, firestore]);
 
  const handleSearch = async (queryText: string) => {
       setSearchQuery(queryText);
-      const queryLower = queryText.toLowerCase();
+      const queryLower = queryText.toLowerCase().trim();
 
-      if (queryLower.trim() === '') {
+      if (queryLower.length < 2) {
         setSearchResults([]);
         return;
       }
@@ -219,8 +208,8 @@ export default function ChatPage() {
 
           usernameSnapshot.forEach((doc: any) => {
               const userData = doc.data() as UserProfile;
-              if (userData.uid !== user.uid && !userData.isDisabled) {
-                resultsMap.set(userData.uid, userData);
+              if (userData.username.toLowerCase().startsWith(queryLower)) {
+                 resultsMap.set(userData.uid, userData);
               }
           });
             
@@ -228,6 +217,8 @@ export default function ChatPage() {
           const whoBlockedMe = profile.blockedBy || [];
 
           const finalResults = Array.from(resultsMap.values()).filter(u => 
+                u.uid !== user.uid &&
+                !u.isDisabled &&
                 !myBlockedList.includes(u.uid) &&
                 !whoBlockedMe.includes(u.uid)
           );
@@ -243,6 +234,43 @@ export default function ChatPage() {
         }
       }
     };
+
+    const handleSendRequest = async (receiverId: string) => {
+      if (!firestore || !user) return;
+      const requestsRef = collection(firestore, 'friendRequests');
+      const newRequest = {
+          senderId: user.uid,
+          receiverId: receiverId,
+          status: 'pending' as const,
+          createdAt: serverTimestamp(),
+      };
+      
+      try {
+          await addDoc(requestsRef, newRequest);
+          playSendRequestSound();
+          toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
+      } catch (error) {
+          console.error("Error sending friend request:", error);
+          toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive'});
+      }
+  };
+  
+  const handleCancelRequest = async (receiverId: string) => {
+      if (!firestore || !user) return;
+      
+      const requestToCancel = sentRequests.find(req => req.receiverId === receiverId);
+      if (!requestToCancel || !requestToCancel.id) return;
+      
+      const requestRef = doc(firestore, 'friendRequests', requestToCancel.id);
+      
+      try {
+          await deleteDoc(requestRef);
+          toast({ title: 'Request Cancelled' });
+      } catch(error) {
+           console.error("Error cancelling friend request:", error);
+           toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
+      }
+  };
     
   const renderContent = () => {
     if (isSearching) {
@@ -253,34 +281,52 @@ export default function ChatPage() {
                         <p>No users found for "{searchQuery}".</p>
                     </div>
                 ) : (
-                    searchResults.map(foundUser => (
-                        <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50 cursor-pointer">
-                            <div className="flex items-center gap-4">
-                            <div className="relative">
-                                <Avatar className="h-12 w-12">
-                                    <AvatarImage src={foundUser.photoURL || undefined} />
-                                    <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
-                                </Avatar>
-                                {foundUser.officialBadge?.isOfficial && (
-                                    <div className="absolute bottom-0 right-0">
-                                        <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
-                                    </div>
-                                )}
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                <p className="font-semibold">
-                                    {applyNameColor(foundUser.displayName, foundUser.nameColor)}
-                                    </p>
-                                    {foundUser.verifiedBadge?.showBadge && (
-                                        <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
+                    searchResults.map(foundUser => {
+                      const isFriend = profile?.friends?.includes(foundUser.uid);
+                      const hasSentRequest = sentRequests.some(req => req.receiverId === foundUser.uid);
+
+                      return (
+                        <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
+                            <div className="flex items-center gap-4 overflow-hidden">
+                                <div className="relative">
+                                    <Avatar className="h-12 w-12">
+                                        <AvatarImage src={foundUser.photoURL || undefined} />
+                                        <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
+                                    </Avatar>
+                                    {foundUser.officialBadge?.isOfficial && (
+                                        <div className="absolute bottom-0 right-0">
+                                            <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
+                                        </div>
                                     )}
                                 </div>
-                                <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
+                                <div className='overflow-hidden'>
+                                    <div className="flex items-center gap-2">
+                                        <p className="font-semibold truncate">
+                                            {applyNameColor(foundUser.displayName, foundUser.nameColor)}
+                                        </p>
+                                        {foundUser.verifiedBadge?.showBadge && (
+                                            <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
+                                        )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground truncate">@{foundUser.username}</p>
+                                </div>
                             </div>
-                            </div>
+                              {isFriend ? (
+                                <Button size="sm" variant="secondary" disabled>
+                                    <Check className="mr-2 h-4 w-4"/>
+                                    Friends
+                                </Button>
+                            ) : hasSentRequest ? (
+                                <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>Cancel</Button>
+                            ) : (
+                                <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>
+                                  <UserPlus className="mr-2 h-4 w-4"/>
+                                  Add
+                                </Button>
+                            )}
                         </div>
-                    ))
+                      )
+                    })
                 )}
             </ScrollArea>
         );
@@ -345,7 +391,7 @@ export default function ChatPage() {
            {isSearching && (
              <div className="relative">
                 <Input 
-                    placeholder="Search users by username..." 
+                    placeholder="Search by username..." 
                     className="pl-10"
                     value={searchQuery}
                     onChange={(e) => handleSearch(e.target.value)}
