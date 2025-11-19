@@ -503,6 +503,12 @@ function ChatAppLayout({
       id: 'inbox',
       badgeCount: inboxCount,
     },
+    {
+      href: '/chat/calls',
+      icon: () => <Phone />,
+      label: 'Calls',
+      id: 'calls'
+    },
      {
       href: '/chat/friends',
       icon: () => <UserPlus />,
@@ -581,6 +587,7 @@ function ChatAppLayout({
                        let isActive = pathname === item.href || (item.href !== '/chat' && pathname.startsWith(item.href));
                        if (item.id === 'inbox') isActive = pathname === '/chat';
                        if (item.id === 'home') isActive = pathname === '/chat/rooms';
+                       if (item.id === 'calls') isActive = pathname === '/chat/calls';
 
                       return (
                         <SidebarMenuItem key={item.id}>
@@ -632,6 +639,7 @@ function ChatAppLayout({
                            let isActive = pathname === item.href || (item.href !== '/chat' && pathname.startsWith(item.href));
                            if (item.id === 'inbox') isActive = pathname === '/chat';
                            if (item.id === 'home') isActive = pathname === '/chat/rooms';
+                           if (item.id === 'calls') isActive = pathname === '/chat/calls';
                            const Icon = item.icon;
                             return (
                                 <Link href={item.href} key={item.id} className={cn(

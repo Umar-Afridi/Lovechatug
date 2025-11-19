@@ -207,12 +207,14 @@ export default function CallsPage() {
         if (otherUserIds.length > 0) {
              try {
                 const usersRef = collection(firestore, 'users');
-                const chunks = [];
+                // Firestore 'in' query supports up to 30 items per query. Chunking handles more.
+                const chunks: string[][] = [];
                 for (let i = 0; i < otherUserIds.length; i += 30) {
                     chunks.push(otherUserIds.slice(i, i + 30));
                 }
 
                 for (const chunk of chunks) {
+                    if (chunk.length === 0) continue;
                     const usersQuery = query(usersRef, where('uid', 'in', chunk));
                     const usersSnapshot = await getDocs(usersQuery);
                     usersSnapshot.forEach(doc => {
