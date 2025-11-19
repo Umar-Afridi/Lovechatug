@@ -23,6 +23,7 @@ import {
   getDocs,
   setDoc,
   arrayRemove,
+  deleteDoc,
 } from 'firebase/firestore';
 import {
   Phone,
@@ -779,22 +780,31 @@ export default function ChatIdPage() {
     };
 
     const handleUnfriend = async () => {
-        if (!firestore || !authUser || !otherUser) return;
+        if (!firestore || !authUser || !otherUser || !chatId) return;
         const currentUserRef = doc(firestore, 'users', authUser.uid);
         const otherUserRef = doc(firestore, 'users', otherUser.uid);
-        if (!chatId) return;
         const chatRef = doc(firestore, 'chats', chatId);
 
         const batch = writeBatch(firestore);
         batch.update(currentUserRef, { friends: arrayRemove(otherUser.uid), chatIds: arrayRemove(chatId) });
         batch.update(otherUserRef, { friends: arrayRemove(authUser.uid), chatIds: arrayRemove(chatId) });
-        batch.delete(chatRef);
+        
         try {
+             // To delete a chat, first delete all its messages
+            const messagesRef = collection(firestore, 'chats', chatId, 'messages');
+            const messagesSnapshot = await getDocs(messagesRef);
+            messagesSnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            // Then delete the chat document itself
+            batch.delete(chatRef);
+        
             await batch.commit();
-            toast({ title: 'Unfriended', description: `You are no longer friends with ${otherUser.displayName}.` });
+            toast({ title: 'Unfriended', description: `You are no longer friends with ${otherUser.displayName}. The chat has been deleted.` });
             router.push('/chat');
         } catch (error) {
             toast({ title: 'Error', description: 'Could not unfriend user.', variant: 'destructive' });
+            console.error("Unfriend error: ", error);
         }
     };
     
@@ -1191,3 +1201,5 @@ export default function ChatIdPage() {
     </>
   );
 }
+
+    
