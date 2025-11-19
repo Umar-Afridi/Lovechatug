@@ -254,34 +254,32 @@ export default function ChatPage() {
                     </div>
                 ) : (
                     searchResults.map(foundUser => (
-                        <Link href={`/chat/${foundUser.uid}`} key={foundUser.uid}>
-                            <div className="flex items-center justify-between p-4 hover:bg-muted/50 cursor-pointer">
-                                <div className="flex items-center gap-4">
-                                <div className="relative">
-                                    <Avatar className="h-12 w-12">
-                                        <AvatarImage src={foundUser.photoURL || undefined} />
-                                        <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
-                                    </Avatar>
-                                    {foundUser.officialBadge?.isOfficial && (
-                                        <div className="absolute bottom-0 right-0">
-                                            <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
-                                        </div>
+                        <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50 cursor-pointer">
+                            <div className="flex items-center gap-4">
+                            <div className="relative">
+                                <Avatar className="h-12 w-12">
+                                    <AvatarImage src={foundUser.photoURL || undefined} />
+                                    <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
+                                </Avatar>
+                                {foundUser.officialBadge?.isOfficial && (
+                                    <div className="absolute bottom-0 right-0">
+                                        <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
+                                    </div>
+                                )}
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                <p className="font-semibold">
+                                    {applyNameColor(foundUser.displayName, foundUser.nameColor)}
+                                    </p>
+                                    {foundUser.verifiedBadge?.showBadge && (
+                                        <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
                                     )}
                                 </div>
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                    <p className="font-semibold">
-                                        {applyNameColor(foundUser.displayName, foundUser.nameColor)}
-                                        </p>
-                                        {foundUser.verifiedBadge?.showBadge && (
-                                            <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
-                                        )}
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
-                                </div>
-                                </div>
+                                <p className="text-sm text-muted-foreground">@{foundUser.username}</p>
                             </div>
-                        </Link>
+                            </div>
+                        </div>
                     ))
                 )}
             </ScrollArea>

@@ -252,7 +252,7 @@ export default function FriendsPage() {
     });
 
     const sentRequestsRef = collection(firestore, 'friendRequests');
-    const qSent = query(sentRequestsRef, where('senderId', '==', user.uid));
+    const qSent = query(sentRequestsRef, where('senderId', '==', user.uid), where('status', '==', 'pending'));
     const unsubSent = onSnapshot(qSent, (snapshot) => {
         const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequestType));
         setSentRequests(requests);
@@ -277,8 +277,6 @@ export default function FriendsPage() {
 
     if (firestore && user && profile) {
       const usersRef = collection(firestore, 'users');
-      // A case-insensitive search requires matching on a dedicated lowercase field,
-      // or fetching more data and filtering on the client. We will search only by username.
       
       const usernameQuery = query(
         usersRef, 
@@ -304,8 +302,7 @@ export default function FriendsPage() {
                 u.uid !== user.uid && // Not myself
                 !u.isDisabled && // Not disabled
                 !myBlockedList.includes(u.uid) && // Not blocked by me
-                !whoBlockedMe.includes(u.uid) && // Not blocking me
-                !profile?.friends?.includes(u.uid) // Not already friends
+                !whoBlockedMe.includes(u.uid)
           );
 
           setSearchResults(finalResults);
