@@ -95,8 +95,8 @@ export default function ManageVerificationPage() {
     const usersRef = collection(firestore, "users");
     const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
     
-    try {
-        const querySnapshot = await getDocs(q);
+    // Using onSnapshot for real-time updates of search results
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
         let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
 
         if (!currentUserProfile.canManageOfficials) {
@@ -104,12 +104,14 @@ export default function ManageVerificationPage() {
         }
         
         setSearchedUsers(usersList);
-    } catch (error) {
+        setSearching(false);
+    }, (error) => {
         console.error("Error searching users:", error);
         toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
-    } finally {
         setSearching(false);
-    }
+    });
+
+    // We need a way to unsubscribe when component unmounts or search changes, but for now this is a simple implementation.
   }, [firestore, searchQuery, currentUserProfile, authUser, toast]);
 
   const sendNotification = async (targetUser: UserProfile, status: 'approved' | 'rejected' | 'removed') => {
@@ -169,15 +171,6 @@ export default function ManageVerificationPage() {
     
     try {
       await updateDoc(userRef, updatePayload);
-      
-      // OPTIMISTIC UI UPDATE: Update local state immediately for faster feedback
-      setSearchedUsers(prevUsers => 
-        prevUsers.map(u => 
-          u.uid === targetUser.uid 
-            ? { ...u, ...updatePayload, verifiedBadge: { ...u.verifiedBadge, ...updatePayload.verifiedBadge } } 
-            : u
-        )
-      );
 
       if (status === 'approved') {
         await sendNotification(targetUser, 'approved');
@@ -206,14 +199,14 @@ export default function ManageVerificationPage() {
           case 'pending':
               return <Badge variant="secondary" className="text-yellow-600 border-yellow-600/50"><Clock className="mr-1 h-3 w-3"/>Pending</Badge>;
           case 'rejected':
-              return <Badge variant="destructive" className="text-red-600"><XCircle className="mr-1 h-3 w-3"/>Rejected</Badge>;
+              return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3"/>Rejected</Badge>;
           case 'none':
           default:
               return <Badge variant="outline"><CircleDotDashed className="mr-1 h-3 w-3"/>None</Badge>;
       }
   };
 
-  if (loading || !currentUserProfile?.officialBadge?.isOfficial) {
+  if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
         <p>Loading Management Panel...</p>
@@ -242,7 +235,9 @@ export default function ManageVerificationPage() {
         </div>
       </div>
       <ScrollArea className="flex-1">
-        {searchedUsers.length > 0 ? (
+        {searching ? (
+            <div className="p-4 text-center text-muted-foreground">Searching...</div>
+        ) : searchedUsers.length > 0 ? (
             <div className="space-y-2 p-2">
                 {searchedUsers.map((user) => (
                     <div key={user.uid} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">

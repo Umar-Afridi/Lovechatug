@@ -106,21 +106,21 @@ export default function ManageUsersPage() {
     const usersRef = collection(firestore, "users");
     const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
     
-    try {
-        const querySnapshot = await getDocs(q);
-        let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
 
-        if (!currentUserProfile.canManageOfficials) {
-            usersList = usersList.filter(u => u.uid === authUser?.uid || !u.officialBadge?.isOfficial);
-        }
-        
-        setSearchedUsers(usersList);
-    } catch (error) {
-        console.error("Error searching users:", error);
-        toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
-    } finally {
-        setSearching(false);
-    }
+      if (!currentUserProfile.canManageOfficials) {
+          usersList = usersList.filter(u => u.uid === authUser?.uid || !u.officialBadge?.isOfficial);
+      }
+      
+      setSearchedUsers(usersList);
+      setSearching(false);
+    }, (error) => {
+      console.error("Error searching users:", error);
+      toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
+      setSearching(false);
+    });
+
   }, [firestore, searchQuery, currentUserProfile, authUser, toast]);
 
   const openConfirmationDialog = (action: 'disable' | 'delete' | 'enable' | 'warn', targetUser: UserProfile) => {
@@ -204,7 +204,7 @@ export default function ManageUsersPage() {
 
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
 
-  if (loading || !currentUserProfile?.officialBadge?.isOfficial) {
+  if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
         <p>Loading User Management Panel...</p>
@@ -253,7 +253,9 @@ export default function ManageUsersPage() {
             </div>
         </div>
           <ScrollArea className="flex-1">
-            {searchedUsers.length > 0 ? (
+            {searching ? (
+                <div className="p-4 text-center text-muted-foreground">Searching...</div>
+            ) : searchedUsers.length > 0 ? (
                 <div className="space-y-2 p-2">
                     {searchedUsers.map((user) => (
                         <div key={user.uid} className={cn("flex items-center justify-between p-2 rounded-lg", user.isDisabled && "bg-destructive/10")}>

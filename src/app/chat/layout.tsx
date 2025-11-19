@@ -151,8 +151,7 @@ function usePresence() {
         await set(userStatusDatabaseRef, { isOnline: true, lastSeen: rtdbServerTimestamp() });
         
         // Update Firestore when user comes online.
-        // This is less frequent than the onDisconnect write, so it's safer.
-        await updateDoc(userStatusFirestoreRef, { isOnline: true });
+        await updateDoc(userStatusFirestoreRef, { isOnline: true, lastSeen: serverTimestamp() });
 
         onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
       }

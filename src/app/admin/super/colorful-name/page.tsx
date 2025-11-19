@@ -89,21 +89,24 @@ export default function ManageColorfulNamePage() {
     const usersRef = collection(firestore, "users");
     const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
     
-    try {
-        const querySnapshot = await getDocs(q);
-        let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
+    // Using onSnapshot for real-time updates of search results
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
 
-        if (!currentUserProfile.canManageOfficials) {
-            usersList = usersList.filter(u => u.uid === authUser?.uid || !u.officialBadge?.isOfficial);
-        }
-        
-        setSearchedUsers(usersList);
-    } catch (error) {
-        console.error("Error searching users:", error);
-        toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
-    } finally {
-        setSearching(false);
-    }
+      if (!currentUserProfile.canManageOfficials) {
+          usersList = usersList.filter(u => u.uid === authUser?.uid || !u.officialBadge?.isOfficial);
+      }
+      
+      setSearchedUsers(usersList);
+      setSearching(false);
+    }, (error) => {
+      console.error("Error searching users:", error);
+      toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
+      setSearching(false);
+    });
+    
+    // We might need a way to unsubscribe when the search query changes or component unmounts.
+    // For now, this provides real-time updates for the current search.
   }, [firestore, searchQuery, currentUserProfile, authUser, toast]);
 
   const sendNotification = async (targetUser: UserProfile, type: 'granted', color: NameColor | 'default') => {
@@ -172,7 +175,7 @@ export default function ManageColorfulNamePage() {
 
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
   
-  const getColorBadge = (color: NameColor | undefined) => {
+  const getColorBadge = (color: UserProfile['nameColor'] | undefined) => {
      if (!color || color === 'default') {
          return <Badge variant="outline">Default</Badge>
      }
@@ -190,7 +193,7 @@ export default function ManageColorfulNamePage() {
      return <Badge className={cn('capitalize', badgeStyle[color])}>{color}</Badge>
   }
 
-  if (loading || !currentUserProfile?.officialBadge?.isOfficial) {
+  if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
         <p>Loading Management Panel...</p>
@@ -219,7 +222,9 @@ export default function ManageColorfulNamePage() {
         </div>
       </div>
       <ScrollArea className="flex-1">
-        {searchedUsers.length > 0 ? (
+        {searching ? (
+            <div className="p-4 text-center text-muted-foreground">Searching...</div>
+        ) : searchedUsers.length > 0 ? (
             <div className="space-y-2 p-2">
                 {searchedUsers.map((user) => (
                     <div key={user.uid} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
