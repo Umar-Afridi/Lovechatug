@@ -398,31 +398,28 @@ export default function ChatAppLayout({
 
   useEffect(() => {
     if (!emblaApi) return;
-    const onSelect = () => {
-        const newPath = TABS[emblaApi.selectedScrollSnap()];
-        // Check if the current path is already correct to avoid unnecessary pushes
-        if (newPath && newPath !== pathname) {
-             router.push(newPath);
-        }
-    };
-    emblaApi.on('select', onSelect);
-    
-    const initialIndex = TABS.indexOf(pathname);
-    if(initialIndex !== -1) {
-        emblaApi.scrollTo(initialIndex, true);
-    } else if (TABS.some(tab => pathname.startsWith(tab) && tab !== '/chat')){
-        // Handles cases like /chat/friends
-        const tabIndex = TABS.findIndex(tab => pathname.startsWith(tab));
-        if (tabIndex !== -1) {
-             emblaApi.scrollTo(tabIndex, true);
-        }
-    } else {
-        emblaApi.scrollTo(1, true); // Default to inbox
-    }
 
+    const onSelect = () => {
+      const newPath = TABS[emblaApi.selectedScrollSnap()];
+      if (newPath && newPath !== pathname) {
+        // Use replace to avoid adding to history stack during swipe
+        router.replace(newPath);
+      }
+    };
+
+    emblaApi.on('select', onSelect);
 
     return () => { emblaApi.off('select', onSelect) };
   }, [emblaApi, pathname, router]);
+
+  // Effect to sync URL changes back to the carousel
+  useEffect(() => {
+    if (!emblaApi) return;
+    const tabIndex = TABS.indexOf(pathname);
+    if (tabIndex !== -1 && tabIndex !== emblaApi.selectedScrollSnap()) {
+        emblaApi.scrollTo(tabIndex, true); // Use true for instant scroll
+    }
+  }, [pathname, emblaApi]);
   
    if (authLoading) {
     return <div className="flex h-screen w-full items-center justify-center">Loading...</div>;
