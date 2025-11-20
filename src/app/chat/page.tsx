@@ -18,17 +18,25 @@ import {
   query,
   where,
   orderBy,
+  getDocs,
 } from 'firebase/firestore';
 import type { Chat as ChatType, UserProfile } from '@/lib/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { applyNameColor } from '@/lib/utils';
+import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { OfficialBadge } from '@/components/ui/official-badge';
+
+
+interface ChatWithParticipant extends ChatType {
+    otherParticipant: UserProfile | null;
+}
 
 // This component was previously in list/page.tsx, now integrated here.
 function ChatListPage() {
   const { user } = useUser();
   const firestore = useFirestore();
-  const [chats, setChats] = useState<ChatType[]>([]);
+  const [chats, setChats] = useState<ChatWithParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -46,14 +54,36 @@ function ChatListPage() {
       orderBy('lastMessage.timestamp', 'desc')
     );
 
-    const unsubscribe = onSnapshot(
-      q,
-      (querySnapshot) => {
-        const chatsData = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as ChatType[];
-        setChats(chatsData);
+    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+        const chatsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatType));
+
+        const otherUserIds = chatsData.map(chat => chat.members.find(id => id !== user.uid)).filter(Boolean) as string[];
+
+        let usersMap: Map<string, UserProfile> = new Map();
+
+        if (otherUserIds.length > 0) {
+            // Firestore 'in' query can take up to 30 elements. Chunking for safety.
+            const chunks = [];
+            for (let i = 0; i < otherUserIds.length; i += 30) {
+                chunks.push(otherUserIds.slice(i, i + 30));
+            }
+            
+            for (const chunk of chunks) {
+                const usersQuery = query(collection(firestore, 'users'), where('uid', 'in', chunk));
+                const usersSnapshot = await getDocs(usersQuery);
+                usersSnapshot.forEach(doc => {
+                    usersMap.set(doc.id, doc.data() as UserProfile);
+                });
+            }
+        }
+        
+        const populatedChats = chatsData.map(chat => {
+            const otherUserId = chat.members.find(id => id !== user.uid);
+            const otherParticipant = otherUserId ? usersMap.get(otherUserId) ?? null : null;
+            return { ...chat, otherParticipant };
+        });
+
+        setChats(populatedChats);
         setLoading(false);
       },
       (error) => {
@@ -92,19 +122,6 @@ function ChatListPage() {
     }
   };
 
-  const getOtherParticipant = (chat: ChatType) => {
-    if (!user) return null;
-    const otherUserId = chat.members.find((id) => id !== user.uid);
-    if (!otherUserId || !chat.participantDetails?.[otherUserId]) {
-        return {
-            displayName: 'Unknown User',
-            photoURL: '',
-            nameColor: 'default',
-        };
-    }
-    return chat.participantDetails[otherUserId];
-  };
-
   if (loading) {
     return (
       <div className="p-4 space-y-4">
@@ -137,25 +154,40 @@ function ChatListPage() {
   return (
     <div className="divide-y">
       {chats.map((chat) => {
-        const otherParticipant = getOtherParticipant(chat);
+        const otherParticipant = chat.otherParticipant;
         const unreadCount = chat.unreadCount?.[user!.uid] ?? 0;
+        
+        if (!otherParticipant) return null; // Don't render chat if participant data is missing
 
         return (
           <Link
-            href={`/chat/${chat.members.find((id) => id !== user?.uid)}`}
+            href={`/chat/${otherParticipant.uid}`}
             key={chat.id}
             className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors"
           >
-            <Avatar className="h-12 w-12">
-              <AvatarImage src={otherParticipant?.photoURL} />
-              <AvatarFallback>
-                {getInitials(otherParticipant?.displayName ?? 'U')}
-              </AvatarFallback>
-            </Avatar>
+            <div className="relative">
+              <Avatar className="h-12 w-12">
+                <AvatarImage src={otherParticipant.photoURL} />
+                <AvatarFallback>
+                  {getInitials(otherParticipant.displayName)}
+                </AvatarFallback>
+              </Avatar>
+               {otherParticipant.officialBadge?.isOfficial && (
+                  <div className="absolute bottom-0 right-0">
+                      <OfficialBadge color={otherParticipant.officialBadge.badgeColor} size="icon" className="h-5 w-5" isOwner={otherParticipant.canManageOfficials} />
+                  </div>
+              )}
+            </div>
+
             <div className="flex-1 overflow-hidden">
-              <p className="font-semibold truncate">
-                {applyNameColor(otherParticipant?.displayName ?? 'Unknown User', (otherParticipant as UserProfile)?.nameColor)}
-              </p>
+                <div className="flex items-center gap-2">
+                     <p className="font-semibold truncate">
+                        {applyNameColor(otherParticipant.displayName, otherParticipant.nameColor)}
+                    </p>
+                    {otherParticipant.verifiedBadge?.showBadge && (
+                        <VerifiedBadge color={otherParticipant.verifiedBadge.badgeColor} />
+                    )}
+                </div>
               <p className={cn("text-sm truncate", unreadCount > 0 ? "text-foreground font-semibold" : "text-muted-foreground")}>
                 {chat.lastMessage?.content || 'No messages yet...'}
               </p>
