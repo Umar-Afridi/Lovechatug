@@ -2,22 +2,32 @@
 
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { useState, useEffect } from 'react';
+
+type AnimatedStyle = {
+  id: number;
+  style: React.CSSProperties;
+};
 
 export function AnimatedLoveFrame() {
-  const frameImageUrl = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/frames%2Flovechat_frame.png?alt=media&token=e9391338-3375-4752-953e-86d3b45155e8';
+  const [butterflies, setButterflies] = useState<AnimatedStyle[]>([]);
+  const [particles, setParticles] = useState<AnimatedStyle[]>([]);
+  const [isClient, setIsClient] = useState(false);
 
-  // Butterflies with different animation delays and durations for a natural effect
-  const butterflies = Array.from({ length: 15 }).map((_, i) => ({
-    id: i,
-    style: {
-      left: `${Math.random() * 60 + 20}%`, // Position horizontally
-      animation: `fly-up ${Math.random() * 5 + 5}s ${Math.random() * 5}s linear infinite`,
-      transform: `scale(${Math.random() * 0.3 + 0.6})`,
-    },
-  }));
-  
-  // Gold and pink particles
-  const particles = Array.from({ length: 20 }).map((_, i) => ({
+  useEffect(() => {
+    // This effect runs only on the client, after the initial render
+    setIsClient(true);
+    
+    setButterflies(Array.from({ length: 15 }).map((_, i) => ({
+      id: i,
+      style: {
+        left: `${Math.random() * 60 + 20}%`,
+        animation: `fly-up ${Math.random() * 5 + 5}s ${Math.random() * 5}s linear infinite`,
+        transform: `scale(${Math.random() * 0.3 + 0.6})`,
+      },
+    })));
+
+    setParticles(Array.from({ length: 20 }).map((_, i) => ({
       id: i,
       style: {
           left: `${Math.random() * 100}%`,
@@ -27,14 +37,18 @@ export function AnimatedLoveFrame() {
           width: `${Math.random() * 2 + 1}px`,
           height: `${Math.random() * 2 + 1}px`,
       }
-  }));
+    })));
+
+  }, []);
+
+  const frameImageUrl = 'https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/frames%2Flovechat_frame.png?alt=media&token=e9391338-3375-4752-953e-86d3b45155e8';
 
   return (
     <div className="relative w-full h-full flex items-center justify-center">
 
         {/* Floating Particles */}
         <div className="absolute inset-0 w-full h-full overflow-visible">
-            {particles.map(p => (
+            {isClient && particles.map(p => (
                 <div key={p.id} className="absolute rounded-full opacity-0" style={p.style} />
             ))}
         </div>
@@ -80,7 +94,7 @@ export function AnimatedLoveFrame() {
 
       {/* Flying Butterflies */}
       <div className="absolute w-[55%] h-[55%] overflow-hidden">
-        {butterflies.map((butterfly) => (
+        {isClient && butterflies.map((butterfly) => (
           <div
             key={butterfly.id}
             className="absolute bottom-0 text-pink-300 drop-shadow-[0_0_5px_#EC4899] opacity-0"
