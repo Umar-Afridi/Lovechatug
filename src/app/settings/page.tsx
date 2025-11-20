@@ -150,7 +150,7 @@ export default function SettingsPage() {
         });
     };
     
-    const handleHelpCenterClick = async () => {
+    const handleCustomerSupportClick = async () => {
         if (!firestore) return;
         setFindingHelp(true);
         try {
@@ -247,12 +247,12 @@ export default function SettingsPage() {
                         <AccordionItem value="item-3">
                             <AccordionTrigger 
                                 className="text-base font-medium px-2" 
-                                onClick={handleHelpCenterClick}
+                                onClick={handleCustomerSupportClick}
                                 disabled={findingHelp}
                             >
                                <div className="flex items-center gap-3">
                                     <HelpCircle className="h-5 w-5" />
-                                    <span>{findingHelp ? "Finding help..." : "Help Center"}</span>
+                                    <span>{findingHelp ? "Finding support..." : "Customer Support"}</span>
                                 </div>
                             </AccordionTrigger>
                         </AccordionItem>
