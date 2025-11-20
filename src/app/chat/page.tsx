@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -17,8 +17,164 @@ import {
   onSnapshot,
   query,
   where,
+  orderBy,
 } from 'firebase/firestore';
-import ChatListPage from './list/page';
+import type { Chat as ChatType, UserProfile } from '@/lib/types';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { format, isToday, isYesterday, parseISO } from 'date-fns';
+import { applyNameColor } from '@/lib/utils';
+
+// This component was previously in list/page.tsx, now integrated here.
+function ChatListPage() {
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const [chats, setChats] = useState<ChatType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!user || !firestore) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const chatsRef = collection(firestore, 'chats');
+    const q = query(
+      chatsRef,
+      where('members', 'array-contains', user.uid),
+      orderBy('lastMessage.timestamp', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const chatsData = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as ChatType[];
+        setChats(chatsData);
+        setLoading(false);
+      },
+      (error) => {
+        console.error(`Error fetching chats for user ${user.uid}:`, error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, firestore]);
+
+  const getInitials = (name: string) =>
+    name ? name.split(' ').map((n) => n[0]).join('') : 'U';
+
+  const formatTimestamp = (timestamp: any) => {
+    if (!timestamp) return '';
+    try {
+      const date = timestamp.toDate();
+      if (isToday(date)) {
+        return format(date, 'p'); // e.g., 5:30 PM
+      }
+      if (isYesterday(date)) {
+        return 'Yesterday';
+      }
+      return format(date, 'MM/dd/yy');
+    } catch (e) {
+      // Fallback for string or number timestamps
+      try {
+        const date = new Date(timestamp);
+        if (isToday(date)) return format(date, 'p');
+        if (isYesterday(date)) return 'Yesterday';
+        return format(date, 'MM/dd/yy');
+      } catch (e2) {
+        return '';
+      }
+    }
+  };
+
+  const getOtherParticipant = (chat: ChatType) => {
+    if (!user) return null;
+    const otherUserId = chat.members.find((id) => id !== user.uid);
+    if (!otherUserId || !chat.participantDetails?.[otherUserId]) {
+        return {
+            displayName: 'Unknown User',
+            photoURL: '',
+            nameColor: 'default',
+        };
+    }
+    return chat.participantDetails[otherUserId];
+  };
+
+  if (loading) {
+    return (
+      <div className="p-4 space-y-4">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex items-center gap-4 animate-pulse">
+            <div className="h-12 w-12 rounded-full bg-muted"></div>
+            <div className="flex-1 space-y-2">
+              <div className="h-4 w-1/2 rounded bg-muted"></div>
+              <div className="h-3 w-3/4 rounded bg-muted"></div>
+            </div>
+            <div className="h-4 w-1/4 rounded bg-muted"></div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (chats.length === 0) {
+    return (
+       <div className="flex flex-col items-center justify-center h-full text-center p-8">
+            <Search className="h-16 w-16 text-muted-foreground/50 mb-4" />
+            <h2 className="text-xl font-semibold">No Chats Yet</h2>
+            <p className="text-muted-foreground mt-2">
+                Go to the Friends tab to start a new conversation.
+            </p>
+        </div>
+    );
+  }
+
+  return (
+    <div className="divide-y">
+      {chats.map((chat) => {
+        const otherParticipant = getOtherParticipant(chat);
+        const unreadCount = chat.unreadCount?.[user!.uid] ?? 0;
+
+        return (
+          <Link
+            href={`/chat/${chat.members.find((id) => id !== user?.uid)}`}
+            key={chat.id}
+            className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors"
+          >
+            <Avatar className="h-12 w-12">
+              <AvatarImage src={otherParticipant?.photoURL} />
+              <AvatarFallback>
+                {getInitials(otherParticipant?.displayName ?? 'U')}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 overflow-hidden">
+              <p className="font-semibold truncate">
+                {applyNameColor(otherParticipant?.displayName ?? 'Unknown User', (otherParticipant as UserProfile)?.nameColor)}
+              </p>
+              <p className={cn("text-sm truncate", unreadCount > 0 ? "text-foreground font-semibold" : "text-muted-foreground")}>
+                {chat.lastMessage?.content || 'No messages yet...'}
+              </p>
+            </div>
+            <div className="flex flex-col items-end text-xs space-y-1">
+              <p className={cn("text-muted-foreground", unreadCount > 0 && "text-primary font-bold")}>
+                {formatTimestamp(chat.lastMessage?.timestamp)}
+              </p>
+              {unreadCount > 0 && (
+                <Badge variant="default" className="h-5 w-5 justify-center p-0">{unreadCount}</Badge>
+              )}
+            </div>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 
 export default function ChatMainPage() {
   const { user } = useUser();
