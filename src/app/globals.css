@@ -82,7 +82,7 @@
 @layer utilities {
   .background-animate {
     background-image: linear-gradient(
-      -45deg,
+      to right,
       hsl(var(--theme-pink)),
       hsl(var(--theme-purple)),
       hsl(var(--theme-blue)),
@@ -91,22 +91,16 @@
       hsl(var(--theme-red)),
       hsl(var(--theme-pink))
     );
-    background-size: 400% 400%;
-    animation: gradient-background 15s ease infinite;
-    -webkit-background-clip: text;
+    background-size: 200% auto;
     background-clip: text;
+    -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    animation: gradient-background 10s linear infinite;
   }
 
   @keyframes gradient-background {
-    0% {
-      background-position: 0% 50%;
-    }
-    50% {
-      background-position: 100% 50%;
-    }
-    100% {
-      background-position: 0% 50%;
+    to {
+      background-position: 200% center;
     }
   }
 
