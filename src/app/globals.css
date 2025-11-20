@@ -81,64 +81,32 @@
 
 @layer utilities {
   .background-animate {
-    @apply relative text-transparent bg-clip-text;
-  }
-  
-  .background-animate::before,
-  .background-animate::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: -1;
-  }
-  
-  /* Slow, multi-color gradient background */
-  .background-animate::before {
     background-image: linear-gradient(
-      90deg,
-      hsl(var(--theme-red)),
+      -45deg,
       hsl(var(--theme-pink)),
+      hsl(var(--theme-purple)),
+      hsl(var(--theme-blue)),
       hsl(var(--theme-green)),
       hsl(var(--theme-yellow)),
-      hsl(var(--theme-red))
+      hsl(var(--theme-red)),
+      hsl(var(--theme-pink))
     );
-    background-size: 400% 100%;
-    animation: gradient-background 10s linear infinite;
+    background-size: 300% 300%;
+    animation: gradient-background 15s ease infinite;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
-
-  /* Fast, sharp golden shine effect */
-  .background-animate::after {
-     background-image: linear-gradient(
-      90deg,
-      transparent 0%,
-      transparent 40%,
-      hsl(var(--theme-yellow) / 0.8) 50%,
-      transparent 60%,
-      transparent 100%
-    );
-    background-size: 300% 100%;
-    animation: gradient-shine 3s linear infinite;
-  }
-
 
   @keyframes gradient-background {
     0% {
       background-position: 0% 50%;
     }
-    100% {
+    50% {
       background-position: 100% 50%;
     }
-  }
-  
-  @keyframes gradient-shine {
-    0% {
-      background-position: 150% 50%;
-    }
     100% {
-      background-position: -50% 50%;
+      background-position: 0% 50%;
     }
   }
 
