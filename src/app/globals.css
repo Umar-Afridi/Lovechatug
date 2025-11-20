@@ -91,7 +91,7 @@
       hsl(var(--theme-red)),
       hsl(var(--theme-pink))
     );
-    background-size: 300% 300%;
+    background-size: 400% 400%;
     animation: gradient-background 15s ease infinite;
     -webkit-background-clip: text;
     background-clip: text;
