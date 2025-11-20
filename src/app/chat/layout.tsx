@@ -29,6 +29,89 @@ import { IncomingCall } from '@/components/chat/incoming-call';
 import type { Call, UserProfile } from '@/lib/types';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/firebase/provider';
+import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
+import { Home, MessageSquare, Phone, UserPlus, Tv } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+
+
+// --- Bottom Navigation ---
+function BottomNavBar() {
+    const pathname = usePathname();
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const [unreadMessages, setUnreadMessages] = useState(0);
+    const [unreadFriends, setUnreadFriends] = useState(0);
+    const [profile, setProfile] = useState<UserProfile | null>(null);
+
+    useEffect(() => {
+        if (!user || !firestore) return;
+        const profileUnsub = onSnapshot(doc(firestore, 'users', user.uid), (doc) => {
+            setProfile(doc.data() as UserProfile);
+        });
+        
+        const chatsQuery = query(collection(firestore, 'chats'), where('members', 'array-contains', user.uid));
+        const chatsUnsub = onSnapshot(chatsQuery, (snapshot) => {
+            let total = 0;
+            snapshot.forEach(doc => {
+                total += doc.data().unreadCount?.[user.uid] || 0;
+            });
+            setUnreadMessages(total);
+        });
+
+        const friendsQuery = query(collection(firestore, 'friendRequests'), where('receiverId', '==', user.uid), where('status', '==', 'pending'));
+        const friendsUnsub = onSnapshot(friendsQuery, (snapshot) => {
+            setUnreadFriends(snapshot.size);
+        });
+        
+        return () => {
+            profileUnsub();
+            chatsUnsub();
+            friendsUnsub();
+        };
+
+    }, [user, firestore]);
+    
+    const getInitials = (name: string | null | undefined) => {
+        if (!name) return 'U';
+        return name.split(' ').map((n) => n[0]).join('');
+    };
+
+    const navItems = [
+        { href: '/profile', icon: Avatar, label: 'Me', count: 0, isAvatar: true },
+        { href: '/chat', icon: MessageSquare, label: 'Inbox', count: unreadMessages },
+        { href: '/chat/calls', icon: Phone, label: 'Calls', count: 0 },
+        { href: '/chat/friends', icon: UserPlus, label: 'Friends', count: unreadFriends },
+        { href: '/chat/rooms', icon: Tv, label: 'Rooms', count: 0 },
+    ];
+
+    return (
+        <footer className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/80 backdrop-blur-sm">
+            <nav className="flex items-center justify-around h-16">
+                {navItems.map(item => {
+                    const isActive = pathname === item.href;
+                    return (
+                        <Link href={item.href} key={item.label} className={cn("flex flex-col items-center justify-center text-xs gap-1 transition-colors w-1/5", isActive ? "text-primary" : "text-muted-foreground hover:text-primary")}>
+                           <div className="relative">
+                                {item.isAvatar ? (
+                                    <Avatar className="h-7 w-7">
+                                        <AvatarImage src={profile?.photoURL} />
+                                        <AvatarFallback>{getInitials(profile?.displayName)}</AvatarFallback>
+                                    </Avatar>
+                                ) : (
+                                    <item.icon className="h-6 w-6" />
+                                )}
+                                {item.count > 0 && <Badge variant="destructive" className="absolute -top-1 -right-2 h-4 w-4 justify-center p-0">{item.count}</Badge>}
+                            </div>
+                            <span>{item.label}</span>
+                        </Link>
+                    )
+                })}
+            </nav>
+        </footer>
+    );
+}
 
 
 // --- Presence Management ---
@@ -262,7 +345,7 @@ function CallProvider({ children }: { children: ReactNode }) {
         <CallContext.Provider value={contextValue}>
             {incomingCall && <IncomingCall call={incomingCall} />}
             {children}
-        </CallContext.Provider>
+        </Call-Provider>
     );
 }
 
@@ -301,6 +384,9 @@ export default function ChatAppLayout({ children }: { children: ReactNode }) {
       return <>{children}</>;
   }
 
+  // Hide BottomNav on specific routes like active call or chat details
+  const showBottomNav = !pathname.includes('/chat/') && !pathname.startsWith('/chat/call');
+
   return (
     <CallProvider>
         <AlertDialog open={isAccountDisabled}>
@@ -316,7 +402,8 @@ export default function ChatAppLayout({ children }: { children: ReactNode }) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        {children}
+        <main className="pb-16">{children}</main>
+        {showBottomNav && <BottomNavBar />}
     </CallProvider>
   );
 }
