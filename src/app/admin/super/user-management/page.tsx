@@ -15,6 +15,7 @@ import {
   addDoc,
   serverTimestamp,
   where,
+  getDocs,
 } from 'firebase/firestore';
 import {
   MoreVertical,
@@ -62,7 +63,6 @@ export default function ManageUsersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
-  const searchUnsubscribeRef = React.useRef<() => void | null>(null);
   
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
@@ -97,46 +97,32 @@ export default function ManageUsersPage() {
     return () => unsubscribe();
   }, [authUser, firestore, router, toast]);
 
- const handleSearch = useCallback(() => {
-    if(searchUnsubscribeRef.current) {
-        searchUnsubscribeRef.current();
-    }
-
+ const handleSearch = useCallback(async () => {
     if (!firestore || !currentUserProfile || searchQuery.trim().length < 2) {
       setSearchedUsers([]);
       setSearching(false);
       return;
     }
     setSearching(true);
-    const usersRef = collection(firestore, "users");
-    const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
+    try {
+        const usersRef = collection(firestore, "users");
+        const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
+        
+        const querySnapshot = await getDocs(q);
+        let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
 
-      if (!currentUserProfile.canManageOfficials) {
-          usersList = usersList.filter(u => u.uid === authUser?.uid || !u.officialBadge?.isOfficial);
-      }
-      
-      setSearchedUsers(usersList);
-      setSearching(false);
-    }, (error) => {
-      console.error("Error searching users:", error);
-      toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
-      setSearching(false);
-    });
-
-    searchUnsubscribeRef.current = unsubscribe;
-
+        if (!currentUserProfile.canManageOfficials) {
+            usersList = usersList.filter(u => u.uid === authUser?.uid || !u.officialBadge?.isOfficial);
+        }
+        
+        setSearchedUsers(usersList);
+    } catch (error) {
+        console.error("Error searching users:", error);
+        toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
+    } finally {
+        setSearching(false);
+    }
   }, [firestore, searchQuery, currentUserProfile, authUser, toast]);
-
-  useEffect(() => {
-      return () => {
-          if (searchUnsubscribeRef.current) {
-              searchUnsubscribeRef.current();
-          }
-      }
-  }, []);
 
   const openConfirmationDialog = (action: 'disable' | 'delete' | 'enable' | 'warn', targetUser: UserProfile) => {
     setDialogState({ isOpen: true, action, targetUser });
@@ -176,6 +162,9 @@ export default function ManageUsersPage() {
     const newDisabledState = !targetUser.isDisabled;
     try {
       await updateDoc(userRef, { isDisabled: newDisabledState });
+      setSearchedUsers(prevUsers => 
+        prevUsers.map(u => u.uid === targetUser.uid ? {...u, isDisabled: newDisabledState} : u)
+      );
       toast({
         title: `User ${newDisabledState ? 'Disabled' : 'Enabled'}`,
         description: `${targetUser.displayName}'s account has been ${newDisabledState ? 'disabled' : 're-enabled'}.`,
@@ -192,6 +181,7 @@ export default function ManageUsersPage() {
     const userRef = doc(firestore, 'users', targetUser.uid);
      try {
       await deleteDoc(userRef);
+      setSearchedUsers(prevUsers => prevUsers.filter(u => u.uid !== targetUser.uid));
       toast({
         title: 'User Deleted',
         description: `${targetUser.displayName}'s data has been removed from Firestore. (Auth record not removed in prototype).`,

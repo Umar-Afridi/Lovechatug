@@ -14,6 +14,7 @@ import {
   where,
   addDoc,
   serverTimestamp,
+  getDocs,
 } from 'firebase/firestore';
 import {
   Shield,
@@ -127,7 +128,6 @@ export default function ManageOfficialsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
-  const searchUnsubscribeRef = React.useRef<() => void | null>(null);
 
   // Authorization check
   useEffect(() => {
@@ -172,43 +172,32 @@ export default function ManageOfficialsPage() {
     return () => unsubscribe();
   }, [currentUserProfile?.canManageOfficials, firestore, authUser]);
 
-  const handleSearch = useCallback(() => {
-    if (searchUnsubscribeRef.current) {
-        searchUnsubscribeRef.current();
-    }
-    
+  const handleSearch = useCallback(async () => {
     if (!firestore || searchQuery.trim().length < 2) {
       setSearchedUsers([]);
       setSearching(false);
       return;
     }
     setSearching(true);
-    const usersRef = collection(firestore, "users");
-    const q = query(usersRef, 
-        where("username", ">=", searchQuery.toLowerCase()), 
-        where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'),
-        where('officialBadge.isOfficial', '==', false) // Only search non-officials
-    );
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    try {
+        const usersRef = collection(firestore, "users");
+        const q = query(usersRef, 
+            where("username", ">=", searchQuery.toLowerCase()), 
+            where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'),
+            where('officialBadge.isOfficial', '==', false) // Only search non-officials
+        );
+        
+        const querySnapshot = await getDocs(q);
         const usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
         setSearchedUsers(usersList);
-        setSearching(false);
-    }, (error) => {
+    } catch(error) {
         console.error("Error searching users:", error);
         toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
+    } finally {
         setSearching(false);
-    });
-    searchUnsubscribeRef.current = unsubscribe;
+    }
   }, [firestore, searchQuery, toast]);
 
-  useEffect(() => {
-      return () => {
-          if(searchUnsubscribeRef.current) {
-              searchUnsubscribeRef.current();
-          }
-      }
-  }, []);
   
   const handleUpdateOfficialStatus = async (targetUser: UserProfile, isOfficial: boolean, color?: UserProfile['officialBadge']['badgeColor']) => {
     if (!firestore || !currentUserProfile) return;

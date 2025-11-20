@@ -13,6 +13,7 @@ import {
   addDoc,
   serverTimestamp,
   where,
+  getDocs,
 } from 'firebase/firestore';
 import {
   CheckCheck,
@@ -61,7 +62,6 @@ export default function ManageVerificationPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
-  const searchUnsubscribeRef = React.useRef<() => void | null>(null);
 
   // Authorization check
   useEffect(() => {
@@ -86,21 +86,18 @@ export default function ManageVerificationPage() {
     return () => unsubscribe();
   }, [authUser, firestore, router]);
 
-  const handleSearch = useCallback(() => {
-    if (searchUnsubscribeRef.current) {
-        searchUnsubscribeRef.current();
-    }
-
+  const handleSearch = useCallback(async () => {
     if (!firestore || !currentUserProfile || searchQuery.trim().length < 2) {
       setSearchedUsers([]);
       setSearching(false);
       return;
     }
     setSearching(true);
-    const usersRef = collection(firestore, "users");
-    const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    try {
+        const usersRef = collection(firestore, "users");
+        const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
+        
+        const querySnapshot = await getDocs(q);
         let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
 
         if (!currentUserProfile.canManageOfficials) {
@@ -108,23 +105,13 @@ export default function ManageVerificationPage() {
         }
         
         setSearchedUsers(usersList);
-        setSearching(false);
-    }, (error) => {
+    } catch (error) {
         console.error("Error searching users:", error);
         toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
+    } finally {
         setSearching(false);
-    });
-
-    searchUnsubscribeRef.current = unsubscribe;
-  }, [firestore, searchQuery, currentUserProfile, authUser, toast]);
-
-  useEffect(() => {
-    return () => {
-        if(searchUnsubscribeRef.current) {
-            searchUnsubscribeRef.current();
-        }
     }
-  }, []);
+  }, [firestore, searchQuery, currentUserProfile, authUser, toast]);
 
   const sendNotification = async (targetUser: UserProfile, status: 'approved' | 'rejected' | 'removed') => {
     if (!firestore || !currentUserProfile) return;
@@ -183,6 +170,18 @@ export default function ManageVerificationPage() {
     
     try {
       await updateDoc(userRef, updatePayload);
+
+      // Optimistically update local state
+      setSearchedUsers(prevUsers => 
+        prevUsers.map(u => u.uid === targetUser.uid ? {
+            ...u, 
+            verificationApplicationStatus: status,
+            verifiedBadge: {
+                showBadge: status === 'approved',
+                badgeColor: status === 'approved' ? (color || 'blue') : (u.verifiedBadge?.badgeColor || 'blue'),
+            }
+        } : u)
+      );
 
       if (status === 'approved') {
         await sendNotification(targetUser, 'approved');

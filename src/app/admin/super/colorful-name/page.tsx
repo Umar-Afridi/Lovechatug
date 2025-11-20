@@ -13,6 +13,7 @@ import {
   addDoc,
   serverTimestamp,
   where,
+  getDocs,
 } from 'firebase/firestore';
 import {
   Sparkles,
@@ -55,7 +56,6 @@ export default function ManageColorfulNamePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
-  const searchUnsubscribeRef = React.useRef<() => void | null>(null);
 
   // Authorization check
   useEffect(() => {
@@ -80,47 +80,33 @@ export default function ManageColorfulNamePage() {
     return () => unsubscribe();
   }, [authUser, firestore, router]);
 
-  const handleSearch = useCallback(() => {
-    if (searchUnsubscribeRef.current) {
-        searchUnsubscribeRef.current();
-    }
-
+  const handleSearch = useCallback(async () => {
     if (!firestore || !currentUserProfile || searchQuery.trim().length < 2) {
       setSearchedUsers([]);
       setSearching(false);
       return;
     }
     setSearching(true);
-    const usersRef = collection(firestore, "users");
-    const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
+    try {
+        const usersRef = collection(firestore, "users");
+        const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
+        
+        const querySnapshot = await getDocs(q);
+        let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
 
-      if (!currentUserProfile.canManageOfficials) {
-          usersList = usersList.filter(u => u.uid === authUser?.uid || !u.officialBadge?.isOfficial);
-      }
-      
-      setSearchedUsers(usersList);
-      setSearching(false);
-    }, (error) => {
-      console.error("Error searching users:", error);
-      toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
-      setSearching(false);
-    });
-    
-    searchUnsubscribeRef.current = unsubscribe;
-
+        if (!currentUserProfile.canManageOfficials) {
+            usersList = usersList.filter(u => u.uid === authUser?.uid || !u.officialBadge?.isOfficial);
+        }
+        
+        setSearchedUsers(usersList);
+    } catch (error) {
+        console.error("Error searching users:", error);
+        toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
+    } finally {
+        setSearching(false);
+    }
   }, [firestore, searchQuery, currentUserProfile, authUser, toast]);
 
-  useEffect(() => {
-      // Cleanup the listener when the component unmounts
-      return () => {
-          if(searchUnsubscribeRef.current) {
-              searchUnsubscribeRef.current();
-          }
-      }
-  }, []);
 
   const sendNotification = async (targetUser: UserProfile, type: 'granted', color: NameColor | 'default') => {
     if (!firestore || !currentUserProfile) return;
@@ -175,6 +161,10 @@ export default function ManageColorfulNamePage() {
       } else if (color === 'default' && wasPreviouslyColored) {
           await sendResetNotification(targetUser);
       }
+      
+      setSearchedUsers(prevUsers => 
+        prevUsers.map(u => u.uid === targetUser.uid ? {...u, nameColor: color} : u)
+      );
 
       toast({
         title: `Name Color Updated`,
