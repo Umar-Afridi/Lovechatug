@@ -29,13 +29,14 @@ export function FrameCard({ item }: FrameCardProps) {
         <Image
             src={item.imageUrl}
             alt={item.name}
-            fill
+            width={150}
+            height={150}
             className="object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
-            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
         />
       </div>
 
       <div className="mt-2 flex-grow flex flex-col justify-center px-2">
+         <p className="font-semibold text-sm truncate group-hover:text-primary">{item.name}</p>
         <p className="text-xs text-muted-foreground">
           {item.durationDays} days
         </p>
