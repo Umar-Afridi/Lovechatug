@@ -81,13 +81,40 @@
 
 @layer utilities {
   .background-animate {
-    background-size: 200%;
+    background-size: 400%;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: gradient 5s ease infinite;
+    animation: gradient-background 8s ease infinite;
   }
 
-  @keyframes gradient {
+  .gradient-shine {
+    position: relative;
+  }
+
+  .gradient-shine::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: linear-gradient(
+      115deg,
+      transparent 0%,
+      transparent 35%,
+      hsl(var(--theme-yellow) / 0.8) 50%,
+      transparent 65%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradient-shine 4s linear infinite;
+    z-index: 1;
+  }
+
+  @keyframes gradient-background {
     0% {
       background-position: 0% 50%;
     }
@@ -98,6 +125,16 @@
       background-position: 0% 50%;
     }
   }
+
+  @keyframes gradient-shine {
+    0% {
+      background-position: 200% center;
+    }
+    100% {
+      background-position: -200% center;
+    }
+  }
+
 
   .talking-indicator {
     animation: talking 1.5s ease-out infinite;
