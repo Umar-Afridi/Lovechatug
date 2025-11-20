@@ -69,6 +69,13 @@
             "format": "date-time"
           }
         },
+        "archivedChats": {
+          "type": "array",
+          "description": "An array of chat IDs that the user has archived.",
+          "items": {
+            "type": "string"
+          }
+        },
         "verifiedBadge": {
             "type": "object",
             "description": "Settings for the user's verified badge.",

@@ -15,6 +15,7 @@ export type UserProfile = {
     [chatId: string]: any; // Store server timestamp for when a chat was cleared
   }
   deletedMessages?: string[]; // IDs of messages deleted only for this user
+  archivedChats?: string[]; // Chats the user has archived/hidden from the main list
   verifiedBadge?: {
     showBadge: boolean;
     badgeColor: 'blue' | 'gold' | 'green' | 'red' | 'pink';

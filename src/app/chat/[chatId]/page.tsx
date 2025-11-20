@@ -645,6 +645,11 @@ export default function ChatIdPage() {
           timestamp: serverTimestamp(),
           senderId: newMessageData.senderId
         };
+        
+        // Also unarchive the chat for both users if they send a message
+        batch.update(userRef, { archivedChats: arrayRemove(chatId) });
+        batch.update(doc(firestore, 'users', otherUser.uid), { archivedChats: arrayRemove(chatId) });
+
 
         const unreadCountKey = `unreadCount.${otherUser.uid}`;
         batch.update(chatRef, {
