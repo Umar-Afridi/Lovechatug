@@ -33,7 +33,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescript
 import { useAuth } from '@/firebase/provider';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { UserPlus, Tv, Home, Search, X, MessageSquare, Clock } from 'lucide-react';
+import { UserPlus, Tv, Home, Search, X, MessageSquare, Clock, Settings, Bell, MoreVertical, Trash2 } from 'lucide-react';
 import { cn, applyNameColor } from '@/lib/utils';
 import useEmblaCarousel from 'embla-carousel-react'
 import type { EmblaCarouselType } from 'embla-carousel'
@@ -265,6 +265,7 @@ const TABS = ['/chat/rooms', '/chat/inbox', '/chat/calls', '/chat/friends', '/ch
 const TAB_ICONS = [Home, null, null, UserPlus, null];
 const TAB_EMOJIS = [null, '📥', '📞', null, '👤'];
 const TAB_LABELS = ['Rooms', 'Inbox', 'Calls', 'Friends', 'Me'];
+const TAB_TITLES = ['Rooms', 'Love Chat', 'Call History', 'Friends', 'Me'];
 
 
 // --- Bottom Navigation ---
@@ -426,6 +427,8 @@ interface CallContextType {
   declineCall: (call: Call) => void;
   endCall: () => void;
   openSearch: () => void;
+  isClearAllCallsDialogOpen: boolean;
+  setClearAllCallsDialogOpen: (open: boolean) => void;
 }
 
 const CallContext = createContext<CallContextType | null>(null);
@@ -445,6 +448,7 @@ function CallProvider({ children }: { children: ReactNode }) {
     const pathname = usePathname();
 
     const [isSearchOpen, setSearchOpen] = useState(false);
+    const [isClearAllCallsDialogOpen, setClearAllCallsDialogOpen] = useState(false);
     const [incomingCall, setIncomingCall] = useState<Call | null>(null);
     const [activeCall, setActiveCall] = useState<Call | null>(null);
     const [outgoingCall, setOutgoingCall] = useState<OutgoingCall | null>(null);
@@ -582,6 +586,8 @@ function CallProvider({ children }: { children: ReactNode }) {
         declineCall,
         endCall,
         openSearch: () => setSearchOpen(true),
+        isClearAllCallsDialogOpen,
+        setClearAllCallsDialogOpen,
     };
     
     return (
@@ -603,9 +609,26 @@ export default function ChatAppLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, watchDrag: true, startIndex: 1, align: 'start' });
+  const [activeIndex, setActiveIndex] = useState(1);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const { openSearch, setClearAllCallsDialogOpen } = useCallContext();
+
+  const { firestore } = useFirestore();
   
   usePresence();
   const { isAccountDisabled, handleConfirmDisabled } = useAccountDisabledHandling();
+
+  const onSelect = useCallback((emblaApi: EmblaCarouselType) => {
+      setActiveIndex(emblaApi.selectedScrollSnap());
+  }, []);
+
+  useEffect(() => {
+      if (!emblaApi) return;
+      onSelect(emblaApi);
+      emblaApi.on('select', onSelect);
+      emblaApi.on('reInit', onSelect);
+      return () => { emblaApi.off('select', onSelect) };
+  }, [emblaApi, onSelect]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -629,6 +652,28 @@ export default function ChatAppLayout({
         emblaApi.scrollTo(tabIndex, true); // Use true for instant scroll to avoid animation
     }
   }, [pathname, emblaApi]);
+
+  useEffect(() => {
+    if (!user || !firestore) return;
+
+    const notificationsRef = collection(
+      firestore,
+      'users',
+      user.uid,
+      'notifications'
+    );
+    const qNotifications = query(
+      notificationsRef,
+      where('isRead', '==', false)
+    );
+    const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
+      setUnreadNotificationCount(snapshot.size);
+    });
+
+    return () => {
+      unsubscribeNotifications();
+    };
+  }, [user, firestore]);
   
    if (authLoading) {
     return <div className="h-screen w-full flex items-center justify-center">Loading...</div>;
@@ -668,6 +713,8 @@ export default function ChatAppLayout({
       )
   }
 
+  const currentTitle = TAB_TITLES[activeIndex] || 'Chat';
+
   return (
     <CallProvider>
         <AlertDialog open={isAccountDisabled}>
@@ -684,7 +731,69 @@ export default function ChatAppLayout({
           </AlertDialogContent>
         </AlertDialog>
         
-        <main className="h-[calc(100svh-4rem)] overflow-hidden">
+        <header className="fixed top-0 left-0 right-0 flex items-center justify-between p-4 border-b bg-background/95 z-20">
+            <h1 className={cn("text-2xl font-bold", currentTitle === 'Love Chat' && 'text-primary')}>{currentTitle}</h1>
+            <div className="flex items-center gap-1">
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 rounded-full"
+                onClick={openSearch}
+            >
+                <Search className="h-5 w-5" />
+            </Button>
+            <Button
+                variant="ghost"
+                size="icon"
+                className="relative h-10 w-10 rounded-full"
+                asChild
+            >
+                <Link href="/chat/notifications">
+                <Bell className="h-5 w-5" />
+                {unreadNotificationCount > 0 && (
+                    <Badge
+                    variant="destructive"
+                    className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0"
+                    >
+                    {unreadNotificationCount}
+                    </Badge>
+                )}
+                <span className="sr-only">Notifications</span>
+                </Link>
+            </Button>
+            {activeIndex === 2 ? (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
+                        <MoreVertical className="h-5 w-5" />
+                    </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                        onClick={() => setClearAllCallsDialogOpen(true)}
+                        className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                    >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        <span>Clear all call history</span>
+                    </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            ) : (
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-10 rounded-full"
+                    asChild
+                >
+                    <Link href="/settings">
+                    <Settings className="h-5 w-5" />
+                    </Link>
+                </Button>
+            )}
+            </div>
+        </header>
+        
+        <main className="h-[calc(100svh-4rem)] pt-[64px] overflow-hidden">
             <div className="embla h-full" ref={emblaRef}>
                 <div className="embla__container h-full">
                     <div className="embla__slide"><RoomsPage /></div>

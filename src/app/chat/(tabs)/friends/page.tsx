@@ -18,7 +18,6 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { useSound } from '@/hooks/use-sound';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallContext } from '../../layout';
 
 
 interface FriendRequestWithUser extends FriendRequestType {
@@ -230,56 +229,8 @@ const FriendRequestsList = () => {
 }
 
 export default function FriendsPage() {
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  const { user } = useUser();
-  const firestore = useFirestore();
-  const { openSearch } = useCallContext();
-
-  useEffect(() => {
-    if (!user || !firestore) return;
-    
-    const notificationsRef = collection(firestore, 'users', user.uid, 'notifications');
-    const qNotifications = query(notificationsRef, where('isRead', '==', false));
-    const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
-        setUnreadNotificationCount(snapshot.size);
-    });
-
-    return () => {
-        unsubscribeNotifications();
-    };
-
-  }, [user, firestore]);
-  
   return (
     <div className="flex h-full flex-col bg-background">
-         <div className="p-4 space-y-4 border-b">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-                <span>Friends</span>
-            </h1>
-            <div className="flex items-center gap-2">
-                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={openSearch}>
-                    <Search className="h-5 w-5" />
-                    <span className="sr-only">Search</span>
-                 </Button>
-                 <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full" asChild>
-                    <Link href="/chat/notifications">
-                      <Bell className="h-5 w-5" />
-                      {unreadNotificationCount > 0 && (
-                          <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{unreadNotificationCount}</Badge>
-                      )}
-                      <span className="sr-only">Notifications</span>
-                    </Link>
-                 </Button>
-                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
-                    <Link href="/settings">
-                        <Settings className="h-5 w-5" />
-                        <span className="sr-only">Settings</span>
-                    </Link>
-                 </Button>
-            </div>
-          </div>
-        </div>
         <ScrollArea className="flex-1 flex flex-col overflow-hidden">
             <FriendRequestsList />
         </ScrollArea>

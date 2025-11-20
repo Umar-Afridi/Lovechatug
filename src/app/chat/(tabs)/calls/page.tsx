@@ -48,7 +48,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { applyNameColor } from '@/lib/utils';
-import { useCallContext } from '@/app/chat/layout';
 
 interface CallWithUser extends Call {
   otherUser?: UserProfile;
@@ -147,7 +146,6 @@ const CallItem = ({
 export default function CallsPage() {
   const { user } = useUser();
   const firestore = useFirestore();
-  const { openSearch } = useCallContext();
   const [calls, setCalls] = useState<CallWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [isClearAllDialogOpen, setClearAllDialogOpen] = useState(false);
@@ -282,34 +280,6 @@ export default function CallsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <h1 className="text-xl font-bold">Call History</h1>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={openSearch}>
-                <Search className="h-5 w-5" />
-            </Button>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
-                    <MoreVertical className="h-5 w-5" />
-                </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                    onClick={() => setClearAllDialogOpen(true)}
-                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                    disabled={calls.length === 0}
-                >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    <span>Clear all call history</span>
-                </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
 
         {/* Content */}
         <ScrollArea className="flex-1">

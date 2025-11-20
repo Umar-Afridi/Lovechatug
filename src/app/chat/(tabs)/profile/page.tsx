@@ -128,10 +128,6 @@ export default function ProfilePage() {
             onConfirm={handleDeleteAccount}
         />
         <div className="flex h-full flex-col bg-background">
-            <header className="flex items-center gap-4 border-b p-4 sticky top-0 bg-background/95 z-10">
-                <h1 className="text-xl font-bold">Me</h1>
-            </header>
-
             <main className="flex-1 p-4 md:p-8 overflow-y-auto">
                 <div className="mx-auto max-w-xl space-y-8">
                     <Link href="/profile/edit" className="block">
