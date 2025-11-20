@@ -23,12 +23,14 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import type { UserProfile } from '@/lib/types';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { LoadingSpinner } from '../ui/loading-spinner';
 
 export function LoginForm() {
   const auth = useAuth();
   const firestore = useFirestore();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   const handleGoogleSignIn = async () => {
@@ -43,6 +45,8 @@ export function LoginForm() {
     const provider = new GoogleAuthProvider();
     // This is necessary to fix the auth/unauthorized-domain error in some environments.
     provider.setCustomParameters({ auth_type: 'reauthenticate' });
+    
+    setIsLoading(true);
     
     try {
         const result = await signInWithPopup(auth, provider);
@@ -91,6 +95,7 @@ export function LoginForm() {
                       title: "Account Disabled",
                       description: "Your account is currently disabled.",
                   });
+                  setIsLoading(false);
                   return;
               }
         }
@@ -98,6 +103,7 @@ export function LoginForm() {
         router.push('/chat');
 
     } catch (error: any) {
+        setIsLoading(false);
         if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
           return; // Do nothing if user closes the popup
         }
@@ -128,6 +134,8 @@ export function LoginForm() {
       });
       return;
     }
+    
+    setIsLoading(true);
 
     const formData = new FormData(event.currentTarget);
     const email = formData.get('email') as string;
@@ -149,6 +157,7 @@ export function LoginForm() {
                   title: "Account Disabled",
                   description: "Your account has been disabled. Please contact support.",
               });
+              setIsLoading(false);
               return;
           }
       }
@@ -162,10 +171,12 @@ export function LoginForm() {
         });
         await sendEmailVerification(userCredential.user);
         await auth.signOut(); // Sign out the user until they verify
+        setIsLoading(false);
         return;
       }
       router.push('/chat');
     } catch (err: any) {
+      setIsLoading(false);
       let friendlyMessage = "An unknown error occurred.";
       // Specific error handling for invalid credentials
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
@@ -180,6 +191,10 @@ export function LoginForm() {
     }
   };
 
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
+
   return (
     <>
       <div className="text-center mb-6">
@@ -189,21 +204,21 @@ export function LoginForm() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" name="email" type="email" placeholder="love@example.com" required />
+          <Input id="email" name="email" type="email" placeholder="love@example.com" required disabled={isLoading} />
         </div>
         <div className="space-y-2">
            <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
               <ForgotPasswordDialog />
            </div>
-          <Input id="password" name="password" type="password" required />
+          <Input id="password" name="password" type="password" required disabled={isLoading} />
         </div>
          {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-        <Button type="submit" className="w-full">
+        <Button type="submit" className="w-full" disabled={isLoading}>
           Login
         </Button>
         <Separator className="my-4" />
-         <Button className="w-full bg-red-600 text-white hover:bg-red-700" onClick={handleGoogleSignIn} type="button">
+         <Button className="w-full bg-red-600 text-white hover:bg-red-700" onClick={handleGoogleSignIn} type="button" disabled={isLoading}>
           <GoogleIcon className="mr-2 h-5 w-5" />
           Sign in with Google
         </Button>
