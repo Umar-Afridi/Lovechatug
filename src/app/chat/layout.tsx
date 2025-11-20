@@ -345,7 +345,7 @@ function CallProvider({ children }: { children: ReactNode }) {
         <CallContext.Provider value={contextValue}>
             {incomingCall && <IncomingCall call={incomingCall} />}
             {children}
-        </Call-Provider>
+        </CallContext.Provider>
     );
 }
 
