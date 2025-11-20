@@ -91,19 +91,22 @@
       hsl(var(--theme-red)),
       hsl(var(--theme-pink))
     );
-    background-size: 200% auto;
+    background-size: 400% auto;
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: gradient-background 5s linear infinite;
+    animation: gradient-background 15s linear infinite;
   }
 
   @keyframes gradient-background {
-    from {
-      background-position: 200% center;
+    0% {
+      background-position: 0% 50%;
     }
-    to {
-      background-position: 0% center;
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
     }
   }
 
