@@ -371,8 +371,13 @@ export default function ChatAppLayout({ children }: { children: ReactNode }) {
       return <>{children}</>;
   }
 
-  // Hide BottomNav on specific routes like active call or chat details
-  const showBottomNav = !pathname.includes('/chat/') && !pathname.startsWith('/chat/call');
+  // Define routes where the bottom nav should be hidden
+  const hideBottomNavRoutes = [
+    '/chat/call',
+  ];
+
+  const showBottomNav = !hideBottomNavRoutes.some(route => pathname.startsWith(route)) && !/^\/chat\/[^/]+$/.test(pathname);
+
 
   return (
     <CallProvider>
