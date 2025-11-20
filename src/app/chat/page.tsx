@@ -32,7 +32,6 @@ interface ChatWithParticipant extends ChatType {
     otherParticipant: UserProfile | null;
 }
 
-// This component was previously in list/page.tsx, now integrated here.
 function ChatListPage() {
   const { user } = useUser();
   const firestore = useFirestore();
@@ -234,8 +233,10 @@ export default function ChatMainPage() {
       <header className="flex items-center justify-between p-4 border-b sticky top-0 bg-background/95 z-10">
         <h1 className="text-2xl font-bold text-primary">Love Chat</h1>
         <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
-                <Search className="h-5 w-5" />
+            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
+                <Link href="/chat/friends?search=true">
+                    <Search className="h-5 w-5" />
+                </Link>
             </Button>
              <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full" asChild>
                 <Link href="/chat/notifications">

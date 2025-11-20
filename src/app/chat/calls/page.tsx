@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Phone,
   Video,
@@ -8,6 +9,7 @@ import {
   Trash2,
   PhoneIncoming,
   PhoneOutgoing,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -283,23 +285,30 @@ export default function CallsPage() {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <h1 className="text-xl font-bold">Call History</h1>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
-                <MoreVertical className="h-5 w-5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => setClearAllDialogOpen(true)}
-                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                disabled={calls.length === 0}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                <span>Clear all call history</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
+                <Link href="/chat/friends?search=true">
+                    <Search className="h-5 w-5" />
+                </Link>
+            </Button>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
+                    <MoreVertical className="h-5 w-5" />
+                </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                    onClick={() => setClearAllDialogOpen(true)}
+                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                    disabled={calls.length === 0}
+                >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    <span>Clear all call history</span>
+                </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Content */}

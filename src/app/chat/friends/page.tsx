@@ -17,7 +17,7 @@ import { Search, Settings, Bell, X, UserPlus, Check, MessageSquare, Clock } from
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { useSound } from '@/hooks/use-sound';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 
 interface FriendRequestWithUser extends FriendRequestType {
@@ -236,7 +236,8 @@ export default function FriendsPage() {
   const { play: playSendRequestSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/sound/short_click.mp3');
 
   // Search state
-  const [isSearching, setIsSearching] = useState(false);
+  const searchParams = useSearchParams();
+  const [isSearching, setIsSearching] = useState(searchParams.get('search') === 'true');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [sentRequests, setSentRequests] = useState<FriendRequestType[]>([]);
