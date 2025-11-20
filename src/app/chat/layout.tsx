@@ -55,7 +55,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
-import { useSound } from '@/hooks/use-sound';
 
 // --- Global Search Component ---
 const GlobalSearch = ({ on_close }: { on_close: () => void }) => {
@@ -779,35 +778,16 @@ function ChatAppLayoutContent({ children }: { children: ReactNode }) {
                             <span className="sr-only">Notifications</span>
                         </Link>
                     </Button>
-                    {activeIndex === 2 ? (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
-                                    <MoreVertical className="h-5 w-5" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                    onClick={() => setClearAllCallsDialogOpen(true)}
-                                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                                >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    <span>Clear all call history</span>
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    ) : (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-10 w-10 rounded-full"
-                            asChild
-                        >
-                            <Link href="/settings">
-                                <Settings className="h-5 w-5" />
-                            </Link>
-                        </Button>
-                    )}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-10 w-10 rounded-full"
+                        asChild
+                    >
+                        <Link href="/settings">
+                            <Settings className="h-5 w-5" />
+                        </Link>
+                    </Button>
                 </div>
             </header>
 

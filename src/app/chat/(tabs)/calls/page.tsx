@@ -48,6 +48,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { applyNameColor } from '@/lib/utils';
+import { useCallContext } from '../../layout';
 
 interface CallWithUser extends Call {
   otherUser?: UserProfile;
@@ -148,7 +149,7 @@ export default function CallsPage() {
   const firestore = useFirestore();
   const [calls, setCalls] = useState<CallWithUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isClearAllDialogOpen, setClearAllDialogOpen] = useState(false);
+  const { isClearAllCallsDialogOpen, setClearAllCallsDialogOpen } = useCallContext();
   const { toast } = useToast();
   const [userProfiles, setUserProfiles] = useState<Map<string, UserProfile>>(
     new Map()
@@ -179,7 +180,7 @@ export default function CallsPage() {
         variant: 'destructive',
       });
     } finally {
-      setClearAllDialogOpen(false);
+      setClearAllCallsDialogOpen(false);
     }
   };
 
@@ -258,8 +259,8 @@ export default function CallsPage() {
   return (
     <div className="flex h-full flex-[0_0_100%] flex-col bg-background">
       <AlertDialog
-        open={isClearAllDialogOpen}
-        onOpenChange={setClearAllDialogOpen}
+        open={isClearAllCallsDialogOpen}
+        onOpenChange={setClearAllCallsDialogOpen}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -288,15 +289,35 @@ export default function CallsPage() {
               <p>Loading call history...</p>
             </div>
           ) : calls.length > 0 ? (
-            <div className="divide-y">
-              {calls.map((call) => (
-                <CallItem
-                  key={call.id}
-                  call={call}
-                  otherUser={call.otherUser!}
-                />
-              ))}
-            </div>
+            <>
+              <div className="flex justify-end p-2">
+                 <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
+                            <MoreVertical className="h-5 w-5" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                            onClick={() => setClearAllCallsDialogOpen(true)}
+                            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                        >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            <span>Clear all call history</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <div className="divide-y">
+                {calls.map((call) => (
+                  <CallItem
+                    key={call.id}
+                    call={call}
+                    otherUser={call.otherUser!}
+                  />
+                ))}
+              </div>
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center p-8">
               <Phone
