@@ -184,13 +184,17 @@ const GlobalSearch = ({ on_close }: { on_close: () => void }) => {
         
         if (!querySnapshot.empty) {
             const docToDelete = querySnapshot.docs[0];
-            try {
-                await deleteDoc(docToDelete.ref);
-                toast({ title: 'Request Cancelled' });
-            } catch(error) {
-                console.error("Error cancelling friend request:", error);
-                toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
-            }
+            deleteDoc(docToDelete.ref)
+                .then(() => {
+                    toast({ title: 'Request Cancelled' });
+                })
+                .catch((serverError: any) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: docToDelete.ref.path,
+                        operation: 'delete',
+                    }, serverError);
+                    errorEmitter.emit('permission-error', permissionError);
+                });
         }
     }
 
@@ -784,7 +788,7 @@ function ChatAppLayoutContent({ children }: { children: ReactNode }) {
                             <span className="sr-only">Notifications</span>
                         </Link>
                     </Button>
-                     <Button
+                    <Button
                         variant="ghost"
                         size="icon"
                         className="h-10 w-10 rounded-full"
