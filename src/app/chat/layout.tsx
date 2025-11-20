@@ -79,11 +79,11 @@ function BottomNavBar() {
     };
 
     const navItems = [
-        { href: '/profile', icon: Avatar, label: 'Me', count: 0, isAvatar: true },
+        { href: '/chat/rooms', icon: Tv, label: 'Rooms', count: 0 },
         { href: '/chat', icon: MessageSquare, label: 'Inbox', count: unreadMessages },
         { href: '/chat/calls', icon: Phone, label: 'Calls', count: 0 },
         { href: '/chat/friends', icon: UserPlus, label: 'Friends', count: unreadFriends },
-        { href: '/chat/rooms', icon: Tv, label: 'Rooms', count: 0 },
+        { href: '/profile', icon: Avatar, label: 'Me', count: 0, isAvatar: true },
     ];
 
     return (
