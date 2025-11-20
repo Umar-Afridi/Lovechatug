@@ -29,6 +29,12 @@ export type UserProfile = {
   lastColorfulNameRequestAt?: any; // Firestore ServerTimestamp
   isDisabled?: boolean; // New field for disabled status
   activityScore?: number;
+  dailyActivityScore?: number;
+  weeklyActivityScore?: number;
+  monthlyActivityScore?: number;
+  lastDailyReset?: any;
+  lastWeeklyReset?: any;
+  lastMonthlyReset?: any;
   currentRoomId?: string | null; // To track which room the user is in
   activeFrame?: string; // URL of the active profile frame
 }
@@ -152,5 +158,3 @@ export type Notification = {
   senderOfficialBadge?: UserProfile['officialBadge'];
   senderNameColor?: UserProfile['nameColor'];
 };
-
-    

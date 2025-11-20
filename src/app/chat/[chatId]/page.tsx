@@ -62,7 +62,7 @@ import type { Message as MessageType, UserProfile, Chat as ChatType } from '@/li
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { format, formatDistanceToNowStrict } from 'date-fns';
+import { format, formatDistanceToNowStrict, differenceInHours, differenceInCalendarWeeks, differenceInCalendarMonths } from 'date-fns';
 import { ContactProfileSheet } from '@/components/chat/contact-profile-sheet';
 import Link from 'next/link';
 import { useSound } from '@/hooks/use-sound';
@@ -634,7 +634,7 @@ export default function ChatIdPage() {
 
       // Ensure chat doc exists, then add message and update last message
       // This is all done in the background, not blocking the UI thread
-      getDoc(chatRef).then(chatSnap => {
+      getDoc(chatRef).then(async (chatSnap) => {
         const batch = writeBatch(firestore);
 
         if (!chatSnap.exists()) {
@@ -667,9 +667,36 @@ export default function ChatIdPage() {
             ...typingUpdate
         });
         
-        batch.update(userRef, {
-            activityScore: increment(1),
-        });
+        // Smart score update logic
+        const now = new Date();
+        const dailyReset = currentUser.lastDailyReset ? currentUser.lastDailyReset.toDate() : new Date(0);
+        const weeklyReset = currentUser.lastWeeklyReset ? currentUser.lastWeeklyReset.toDate() : new Date(0);
+        const monthlyReset = currentUser.lastMonthlyReset ? currentUser.lastMonthlyReset.toDate() : new Date(0);
+        
+        const scoreUpdates: { [key: string]: any } = { activityScore: increment(1) };
+
+        if (differenceInHours(now, dailyReset) >= 24) {
+            scoreUpdates.dailyActivityScore = 1;
+            scoreUpdates.lastDailyReset = serverTimestamp();
+        } else {
+            scoreUpdates.dailyActivityScore = increment(1);
+        }
+
+        if (differenceInCalendarWeeks(now, weeklyReset, { weekStartsOn: 1 }) >= 1) {
+            scoreUpdates.weeklyActivityScore = 1;
+            scoreUpdates.lastWeeklyReset = serverTimestamp();
+        } else {
+            scoreUpdates.weeklyActivityScore = increment(1);
+        }
+
+        if (differenceInCalendarMonths(now, monthlyReset) >= 1) {
+            scoreUpdates.monthlyActivityScore = 1;
+            scoreUpdates.lastMonthlyReset = serverTimestamp();
+        } else {
+            scoreUpdates.monthlyActivityScore = increment(1);
+        }
+
+        batch.update(userRef, scoreUpdates);
 
         return batch.commit();
       })

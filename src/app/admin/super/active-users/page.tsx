@@ -16,6 +16,7 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 
 type TimeRange = 'daily' | 'weekly' | 'monthly';
+type ScoreField = 'dailyActivityScore' | 'weeklyActivityScore' | 'monthlyActivityScore';
 
 const getInitials = (name: string) => (name ? name.split(' ').map(n => n[0]).join('') : 'U');
 
@@ -39,7 +40,7 @@ const RankingBadge = ({ rank }: { rank: number }) => {
   );
 };
 
-const UserRankItem = ({ user, rank }: { user: UserProfile, rank: number }) => (
+const UserRankItem = ({ user, rank, scoreField }: { user: UserProfile, rank: number, scoreField: ScoreField }) => (
   <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
     <div className="flex items-center gap-4">
       <span className="font-bold text-lg w-6 text-center text-muted-foreground">{rank}</span>
@@ -58,7 +59,7 @@ const UserRankItem = ({ user, rank }: { user: UserProfile, rank: number }) => (
     </div>
     <div className="flex items-center gap-4">
       <div className="text-right">
-        <p className="font-bold text-lg">{user.activityScore || 0}</p>
+        <p className="font-bold text-lg">{user[scoreField] || 0}</p>
         <p className="text-xs text-muted-foreground">Score</p>
       </div>
       <RankingBadge rank={rank} />
@@ -71,12 +72,14 @@ const Leaderboard = ({ timeRange }: { timeRange: TimeRange }) => {
   const [loading, setLoading] = useState(true);
   const firestore = useFirestore();
 
+  const scoreField: ScoreField = `${timeRange}ActivityScore` as ScoreField;
+
   useEffect(() => {
     if (!firestore) return;
     setLoading(true);
 
     const usersRef = collection(firestore, 'users');
-    const q = query(usersRef, orderBy('activityScore', 'desc'), limit(100));
+    const q = query(usersRef, orderBy(scoreField, 'desc'), limit(100));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const usersList = querySnapshot.docs.map(doc => doc.data() as UserProfile);
@@ -88,7 +91,7 @@ const Leaderboard = ({ timeRange }: { timeRange: TimeRange }) => {
     });
 
     return () => unsubscribe();
-  }, [firestore, timeRange]);
+  }, [firestore, timeRange, scoreField]);
 
   if (loading) {
     return <div className="p-4 text-center">Loading leaderboard...</div>;
@@ -102,7 +105,7 @@ const Leaderboard = ({ timeRange }: { timeRange: TimeRange }) => {
     <ScrollArea className="h-[calc(100vh-220px)]">
       <div className="space-y-2 p-2">
         {users.map((user, index) => (
-          <UserRankItem key={user.uid} user={user} rank={index + 1} />
+          <UserRankItem key={user.uid} user={user} rank={index + 1} scoreField={scoreField} />
         ))}
       </div>
     </ScrollArea>
