@@ -77,8 +77,8 @@ export function OfficialBadge({ color, size, className, isOwner = false }: Offic
                 </linearGradient>
             </defs>
             </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-                <Crown className={cn("h-[50%] w-[50%]", colorClass)} />
+            <div className="official-badge-owner-icon absolute inset-0 flex items-center justify-center text-[60%]">
+                👑
             </div>
         </div>
      );
@@ -95,7 +95,7 @@ export function OfficialBadge({ color, size, className, isOwner = false }: Offic
         )}
       >
         {isOwner ? (
-            <Crown className={cn("h-3 w-3", colorClass)} />
+            <span className="text-base" role="img" aria-label="crown">👑</span>
         ) : (
             <span className={cn('text-sm font-bold', colorClass)}>V</span>
         )}
