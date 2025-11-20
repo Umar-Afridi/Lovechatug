@@ -599,213 +599,231 @@ function CallProvider({ children }: { children: ReactNode }) {
     );
 }
 
-// --- Main Layout ---
+// --- Main Layout Component ---
+function ChatAppLayoutContent({ children }: { children: ReactNode }) {
+    const { user, loading: authLoading } = useUser();
+    const router = useRouter();
+    const pathname = usePathname();
+    const [emblaRef, emblaApi] = useEmblaCarousel({
+        loop: false,
+        watchDrag: true,
+        startIndex: 1,
+        align: 'start',
+    });
+    const [activeIndex, setActiveIndex] = useState(1);
+    const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+    const { openSearch, setClearAllCallsDialogOpen } = useCallContext();
+
+    const { firestore } = useFirestore();
+
+    usePresence();
+    const { isAccountDisabled, handleConfirmDisabled } = useAccountDisabledHandling();
+
+    const onSelect = useCallback(
+        (emblaApi: EmblaCarouselType) => {
+            const newIndex = emblaApi.selectedScrollSnap();
+            setActiveIndex(newIndex);
+            const newPath = TABS[newIndex];
+            if (newPath && newPath !== pathname) {
+                router.replace(newPath);
+            }
+        },
+        [pathname, router]
+    );
+
+    useEffect(() => {
+        if (!emblaApi) return;
+        emblaApi.on('select', onSelect);
+        emblaApi.on('reInit', onSelect);
+
+        const tabIndex = TABS.indexOf(pathname);
+        if (tabIndex !== -1 && tabIndex !== emblaApi.selectedScrollSnap()) {
+            emblaApi.scrollTo(tabIndex, true);
+        }
+
+        return () => {
+            emblaApi.off('select', onSelect);
+        };
+    }, [emblaApi, onSelect, pathname]);
+
+    useEffect(() => {
+        if (!authLoading) {
+            if (user) {
+                if (pathname === '/' || pathname === '/signup') {
+                    router.replace('/chat/inbox');
+                }
+            } else {
+                if (!['/', '/signup'].includes(pathname) && !pathname.startsWith('/admin')) {
+                    router.replace('/');
+                }
+            }
+        }
+    }, [authLoading, user, pathname, router]);
+
+    useEffect(() => {
+        if (!user || !firestore) return;
+
+        const notificationsRef = collection(
+            firestore,
+            'users',
+            user.uid,
+            'notifications'
+        );
+        const qNotifications = query(
+            notificationsRef,
+            where('isRead', '==', false)
+        );
+        const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
+            setUnreadNotificationCount(snapshot.size);
+        });
+
+        return () => {
+            unsubscribeNotifications();
+        };
+    }, [user, firestore]);
+
+    if (authLoading) {
+        return <div className="h-screen w-full flex items-center justify-center">Loading...</div>;
+    }
+
+    const isNonTabLayout =
+        pathname.startsWith('/chat/') &&
+        !TABS.includes(pathname) ||
+        pathname.startsWith('/admin') ||
+        pathname.startsWith('/prop-house') ||
+        pathname.startsWith('/settings') ||
+        pathname.startsWith('/profile');
+
+    if (isNonTabLayout) {
+        return (
+            <>
+                <AlertDialog open={isAccountDisabled}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Account Disabled</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Your account has been disabled by an administrator. You will be logged out.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogAction onClick={handleConfirmDisabled}>OK</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+                <main>{children}</main>
+            </>
+        )
+    }
+
+    const currentTitle = TAB_TITLES[activeIndex] || 'Chat';
+
+    return (
+        <>
+            <AlertDialog open={isAccountDisabled}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Account Disabled</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Your account has been disabled by an administrator. You will be logged out.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={handleConfirmDisabled}>OK</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <header className="fixed top-0 left-0 right-0 flex items-center justify-between p-4 border-b bg-background/95 z-20">
+                <h1 className={cn("text-2xl font-bold", currentTitle === 'Love Chat' && 'text-primary')}>{currentTitle}</h1>
+                <div className="flex items-center gap-1">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-10 w-10 rounded-full"
+                        onClick={openSearch}
+                    >
+                        <Search className="h-5 w-5" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="relative h-10 w-10 rounded-full"
+                        asChild
+                    >
+                        <Link href="/chat/notifications">
+                            <Bell className="h-5 w-5" />
+                            {unreadNotificationCount > 0 && (
+                                <Badge
+                                    variant="destructive"
+                                    className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0"
+                                >
+                                    {unreadNotificationCount}
+                                </Badge>
+                            )}
+                            <span className="sr-only">Notifications</span>
+                        </Link>
+                    </Button>
+                    {activeIndex === 2 ? (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
+                                    <MoreVertical className="h-5 w-5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                    onClick={() => setClearAllCallsDialogOpen(true)}
+                                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    <span>Clear all call history</span>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    ) : (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-10 w-10 rounded-full"
+                            asChild
+                        >
+                            <Link href="/settings">
+                                <Settings className="h-5 w-5" />
+                            </Link>
+                        </Button>
+                    )}
+                </div>
+            </header>
+
+            <main className="h-[calc(100svh-4rem)] pt-[64px] overflow-hidden">
+                <div className="embla h-full" ref={emblaRef}>
+                    <div className="embla__container h-full">
+                        <div className="embla__slide"><RoomsPage /></div>
+                        <div className="embla__slide"><InboxPage /></div>
+                        <div className="embla__slide"><CallsPage /></div>
+                        <div className="embla__slide"><FriendsPage /></div>
+                        <div className="embla__slide"><ProfilePage /></div>
+                    </div>
+                </div>
+            </main>
+
+            <BottomNavBar emblaApi={emblaApi} />
+        </>
+    );
+}
+
+
+// --- Final Layout Export ---
 export default function ChatAppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading: authLoading } = useUser();
-  const router = useRouter();
-  const pathname = usePathname();
-  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, watchDrag: true, startIndex: 1, align: 'start' });
-  const [activeIndex, setActiveIndex] = useState(1);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  const { openSearch, setClearAllCallsDialogOpen } = useCallContext();
-
-  const { firestore } = useFirestore();
-  
-  usePresence();
-  const { isAccountDisabled, handleConfirmDisabled } = useAccountDisabledHandling();
-
-  const onSelect = useCallback((emblaApi: EmblaCarouselType) => {
-      setActiveIndex(emblaApi.selectedScrollSnap());
-  }, []);
-
-  useEffect(() => {
-      if (!emblaApi) return;
-      onSelect(emblaApi);
-      emblaApi.on('select', onSelect);
-      emblaApi.on('reInit', onSelect);
-      return () => { emblaApi.off('select', onSelect) };
-  }, [emblaApi, onSelect]);
-
-  useEffect(() => {
-    if (!authLoading) {
-      if (user) {
-        if (pathname === '/' || pathname === '/signup') {
-          router.replace('/chat/inbox');
-        }
-      } else {
-        if (!['/', '/signup'].includes(pathname) && !pathname.startsWith('/admin')) {
-          router.replace('/');
-        }
-      }
-    }
-  }, [authLoading, user, pathname, router]);
-
-  // Sync carousel to URL changes from outside (e.g. browser back/forward)
-  useEffect(() => {
-    if (!emblaApi) return;
-    const tabIndex = TABS.indexOf(pathname);
-    if (tabIndex !== -1 && tabIndex !== emblaApi.selectedScrollSnap()) {
-        emblaApi.scrollTo(tabIndex, true); // Use true for instant scroll to avoid animation
-    }
-  }, [pathname, emblaApi]);
-
-  useEffect(() => {
-    if (!user || !firestore) return;
-
-    const notificationsRef = collection(
-      firestore,
-      'users',
-      user.uid,
-      'notifications'
-    );
-    const qNotifications = query(
-      notificationsRef,
-      where('isRead', '==', false)
-    );
-    const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
-      setUnreadNotificationCount(snapshot.size);
-    });
-
-    return () => {
-      unsubscribeNotifications();
-    };
-  }, [user, firestore]);
-  
-   if (authLoading) {
-    return <div className="h-screen w-full flex items-center justify-center">Loading...</div>;
-  }
-
-  // If user is not logged in and not on an auth page, show nothing (or a loader)
-  if (!user && !['/', '/signup'].includes(pathname)) {
-    return null;
-  }
-  
-  const isNonTabLayout = (
-    pathname.startsWith('/chat/') && !TABS.includes(pathname) || 
-    pathname.startsWith('/admin') ||
-    pathname.startsWith('/prop-house') ||
-    pathname.startsWith('/settings') ||
-    pathname.startsWith('/profile')
-  );
-
-  if (isNonTabLayout) {
-      return (
-           <CallProvider>
-                <AlertDialog open={isAccountDisabled}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                    <AlertDialogTitle>Account Disabled</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Your account has been disabled by an administrator. You will be logged out.
-                    </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                    <AlertDialogAction onClick={handleConfirmDisabled}>OK</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-                </AlertDialog>
-                <main>{children}</main>
-            </CallProvider>
-      )
-  }
-
-  const currentTitle = TAB_TITLES[activeIndex] || 'Chat';
-
-  return (
-    <CallProvider>
-        <AlertDialog open={isAccountDisabled}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Account Disabled</AlertDialogTitle>
-              <AlertDialogDescription>
-                Your account has been disabled by an administrator. You will be logged out.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogAction onClick={handleConfirmDisabled}>OK</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-        
-        <header className="fixed top-0 left-0 right-0 flex items-center justify-between p-4 border-b bg-background/95 z-20">
-            <h1 className={cn("text-2xl font-bold", currentTitle === 'Love Chat' && 'text-primary')}>{currentTitle}</h1>
-            <div className="flex items-center gap-1">
-            <Button
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10 rounded-full"
-                onClick={openSearch}
-            >
-                <Search className="h-5 w-5" />
-            </Button>
-            <Button
-                variant="ghost"
-                size="icon"
-                className="relative h-10 w-10 rounded-full"
-                asChild
-            >
-                <Link href="/chat/notifications">
-                <Bell className="h-5 w-5" />
-                {unreadNotificationCount > 0 && (
-                    <Badge
-                    variant="destructive"
-                    className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0"
-                    >
-                    {unreadNotificationCount}
-                    </Badge>
-                )}
-                <span className="sr-only">Notifications</span>
-                </Link>
-            </Button>
-            {activeIndex === 2 ? (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
-                        <MoreVertical className="h-5 w-5" />
-                    </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                        onClick={() => setClearAllCallsDialogOpen(true)}
-                        className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                    >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        <span>Clear all call history</span>
-                    </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            ) : (
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-10 w-10 rounded-full"
-                    asChild
-                >
-                    <Link href="/settings">
-                    <Settings className="h-5 w-5" />
-                    </Link>
-                </Button>
-            )}
-            </div>
-        </header>
-        
-        <main className="h-[calc(100svh-4rem)] pt-[64px] overflow-hidden">
-            <div className="embla h-full" ref={emblaRef}>
-                <div className="embla__container h-full">
-                    <div className="embla__slide"><RoomsPage /></div>
-                    <div className="embla__slide"><InboxPage /></div>
-                    <div className="embla__slide"><CallsPage /></div>
-                    <div className="embla__slide"><FriendsPage /></div>
-                    <div className="embla__slide"><ProfilePage /></div>
-                </div>
-            </div>
-        </main>
-        
-        <BottomNavBar emblaApi={emblaApi} />
-    </CallProvider>
-  );
+    return (
+        <CallProvider>
+            <ChatAppLayoutContent>
+                {children}
+            </ChatAppLayoutContent>
+        </CallProvider>
+    )
 }
