@@ -228,7 +228,7 @@ const FriendRequestsList = () => {
     );
 }
 
-export default function FriendsPage() {
+export function FriendsPage() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const { user } = useUser();
   const firestore = useFirestore();

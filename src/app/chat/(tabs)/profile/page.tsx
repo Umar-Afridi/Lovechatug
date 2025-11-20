@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
 
-export default function ProfilePage() {
+export function ProfilePage() {
   const auth = useAuth();
   const firestore = useFirestore();
   const { user, loading } = useUser();
@@ -132,7 +132,7 @@ export default function ProfilePage() {
                 <h1 className="text-xl font-bold">Me</h1>
             </header>
 
-            <main className="flex-1 p-4 md:p-8">
+            <main className="flex-1 p-4 md:p-8 overflow-y-auto">
                 <div className="mx-auto max-w-xl space-y-8">
                     <Link href="/profile/edit" className="block">
                         <div className="flex items-center gap-4 rounded-lg p-4 bg-muted/50 hover:bg-muted transition-colors">

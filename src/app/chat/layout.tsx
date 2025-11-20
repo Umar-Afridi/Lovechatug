@@ -35,6 +35,11 @@ import { Phone, UserPlus, Tv } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import useEmblaCarousel from 'embla-carousel-react'
 import type { EmblaCarouselType } from 'embla-carousel'
+import { RoomsPage } from './(tabs)/rooms/page';
+import { InboxPage } from './(tabs)/inbox/page';
+import { CallsPage } from './(tabs)/calls/page';
+import { FriendsPage } from './(tabs)/friends/page';
+import { ProfilePage } from './(tabs)/profile/page';
 
 
 const TABS = ['/chat/rooms', '/chat/inbox', '/chat/calls', '/chat/friends', '/chat/profile'];
@@ -57,15 +62,19 @@ function BottomNavBar({ emblaApi }: { emblaApi: EmblaCarouselType | undefined })
         }
     }, [emblaApi]);
 
+    const onSelect = useCallback((emblaApi: EmblaCarouselType) => {
+        setActiveIndex(emblaApi.selectedScrollSnap());
+    }, []);
+
     useEffect(() => {
         if (!emblaApi) return;
-        const onSelect = () => {
-            setActiveIndex(emblaApi.selectedScrollSnap());
-        };
+        
+        onSelect(emblaApi);
         emblaApi.on('select', onSelect);
-        onSelect(); // Set initial active index
+        emblaApi.on('reInit', onSelect);
+
         return () => { emblaApi.off('select', onSelect) };
-    }, [emblaApi]);
+    }, [emblaApi, onSelect]);
 
 
     useEffect(() => {
@@ -389,12 +398,12 @@ export default function ChatAppLayout({
     }
   }, [authLoading, user, pathname, router]);
 
-  // Sync carousel to URL changes
+  // Sync carousel to URL changes from outside (e.g. browser back/forward)
   useEffect(() => {
     if (!emblaApi) return;
     const tabIndex = TABS.indexOf(pathname);
     if (tabIndex !== -1 && tabIndex !== emblaApi.selectedScrollSnap()) {
-        emblaApi.scrollTo(tabIndex, true); // Use true for instant scroll
+        emblaApi.scrollTo(tabIndex, true); // Use true for instant scroll to avoid animation
     }
   }, [pathname, emblaApi]);
   
@@ -454,7 +463,11 @@ export default function ChatAppLayout({
         </AlertDialog>
         <main className="h-[calc(100svh-4rem)] overflow-hidden" ref={emblaRef}>
             <div className="flex h-full">
-                 {children}
+                <TabsLayout><RoomsPage /></TabsLayout>
+                <TabsLayout><InboxPage /></TabsLayout>
+                <TabsLayout><CallsPage /></TabsLayout>
+                <TabsLayout><FriendsPage /></TabsLayout>
+                <TabsLayout><ProfilePage /></TabsLayout>
             </div>
         </main>
         <BottomNavBar emblaApi={emblaApi} />
