@@ -57,7 +57,7 @@ const UserListItem = ({ user }: { user: UserProfile }) => (
 
 
 const StatusUserList = ({ type }: { type: 'verified' | 'colorful' }) => {
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const firestore = useFirestore();
 
@@ -66,38 +66,41 @@ const StatusUserList = ({ type }: { type: 'verified' | 'colorful' }) => {
     setLoading(true);
 
     const usersRef = collection(firestore, 'users');
-    let q;
-
-    if (type === 'verified') {
-      q = query(usersRef, where('verifiedBadge.showBadge', '==', true));
-    } else {
-      q = query(usersRef, where('nameColor', 'not-in', ['default', null, '']));
-    }
+    const q = query(usersRef);
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const usersList = querySnapshot.docs.map(doc => doc.data() as UserProfile);
-      setUsers(usersList);
+      setAllUsers(usersList);
       setLoading(false);
     }, (error) => {
-      console.error(`Error fetching ${type} users:`, error);
+      console.error(`Error fetching all users:`, error);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [firestore, type]);
+  }, [firestore]);
+
+  const filteredUsers = React.useMemo(() => {
+    if (type === 'verified') {
+        return allUsers.filter(user => user.verifiedBadge?.showBadge === true);
+    } else { // colorful
+        return allUsers.filter(user => user.nameColor && user.nameColor !== 'default');
+    }
+  }, [allUsers, type]);
+
 
   if (loading) {
     return <div className="p-4 text-center">Loading users...</div>;
   }
 
-  if (users.length === 0) {
+  if (filteredUsers.length === 0) {
     return <div className="p-4 text-center text-muted-foreground">No users with this status found.</div>;
   }
 
   return (
     <ScrollArea className="h-[calc(100vh-220px)]">
       <div className="space-y-2 p-2">
-        {users.map((user) => (
+        {filteredUsers.map((user) => (
           <UserListItem key={user.uid} user={user} />
         ))}
       </div>
