@@ -71,7 +71,7 @@ function BottomNavBar() {
     const navItems = [
         { href: '/chat/rooms', emoji: '🏠', label: 'Rooms', count: 0 },
         { href: '/chat', emoji: '📥', label: 'Inbox', count: unreadMessages },
-        { href: '/chat/calls', icon: Phone, label: 'Calls', count: 0 },
+        { href: '/chat/calls', emoji: '📞', label: 'Calls', count: 0 },
         { href: '/chat/friends', icon: UserPlus, label: 'Friends', count: unreadFriends },
         { href: '/profile', emoji: '👤', label: 'Me', count: 0 },
     ];
