@@ -335,7 +335,7 @@ function ChatListPage() {
   );
 }
 
-export function InboxPage() {
+export default function InboxPage() {
   const { user } = useUser();
   const firestore = useFirestore();
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);

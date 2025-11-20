@@ -3,7 +3,7 @@
 import React from 'react';
 import { Tv } from 'lucide-react';
 
-export function RoomsPage() {
+export default function RoomsPage() {
   return (
     <div className="flex h-full flex-col items-center justify-center bg-background p-8 text-center">
         <Tv className="h-24 w-24 text-muted-foreground/50 mb-6" />

@@ -143,7 +143,7 @@ const CallItem = ({
   );
 };
 
-export function CallsPage() {
+export default function CallsPage() {
   const { user } = useUser();
   const firestore = useFirestore();
   const [calls, setCalls] = useState<CallWithUser[]>([]);

@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
 
-export function ProfilePage() {
+export default function ProfilePage() {
   const auth = useAuth();
   const firestore = useFirestore();
   const { user, loading } = useUser();
