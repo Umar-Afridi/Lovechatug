@@ -71,6 +71,7 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { useCallContext } from '../layout';
 import { ClearChatDialog } from '@/components/chat/clear-chat-dialog';
+import { DeleteMessageDialog } from '@/components/chat/delete-message-dialog';
 
 function applyNameColor(name: string, color?: UserProfile['nameColor']) {
     if (!color || color === 'default') {
@@ -109,6 +110,8 @@ export default function ChatIdPage() {
   const [loading, setLoading] = useState(true);
   const [isContactSheetOpen, setContactSheetOpen] = useState(false);
   const [isClearChatDialogOpen, setClearChatDialogOpen] = useState(false);
+  const [isDeleteMsgDialogOpen, setDeleteMsgDialogOpen] = useState(false);
+  const [messageToDelete, setMessageToDelete] = useState<MessageType | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<MessageType | null>(null);
 
@@ -282,6 +285,7 @@ export default function ChatIdPage() {
     // We don't set loading to true here, loading is for initial page setup
     const messagesRef = collection(firestore, 'chats', chatId, 'messages');
     const chatClearedTimestamp = currentUser?.chatsCleared?.[chatId] ?? null;
+    const deletedForMeIds = currentUser?.deletedMessages ?? [];
     
     let q = query(messagesRef, orderBy('timestamp', 'asc'));
 
@@ -295,7 +299,7 @@ export default function ChatIdPage() {
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const currentMessages = querySnapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as MessageType)
-      );
+      ).filter(msg => !deletedForMeIds.includes(msg.id)); // Filter out messages deleted for the current user
 
       // Play sound for new incoming messages only after initial load
       if (!isFirstMessageLoad.current && currentMessages.length > messages.length) {
@@ -849,6 +853,44 @@ export default function ChatIdPage() {
             setClearChatDialogOpen(false);
         }
     };
+
+    const handleDeleteMessageForEveryone = async (messageId: string) => {
+        if (!firestore || !chatId) return;
+        const msgRef = doc(firestore, 'chats', chatId, 'messages', messageId);
+        try {
+            await deleteDoc(msgRef);
+            toast({ title: 'Message Deleted' });
+        } catch (error) {
+            console.error('Error deleting message for everyone:', error);
+            toast({ title: 'Error', description: 'Could not delete message.', variant: 'destructive' });
+        }
+    };
+
+    const handleDeleteMessageForMe = async (messageId: string) => {
+        if (!firestore || !authUser) return;
+        const userRef = doc(firestore, 'users', authUser.uid);
+        try {
+            await updateDoc(userRef, {
+                deletedMessages: arrayUnion(messageId)
+            });
+            toast({ title: 'Message Removed', description: 'The message has been removed for you.' });
+        } catch (error) {
+            console.error('Error deleting message for me:', error);
+            toast({ title: 'Error', description: 'Could not remove message.', variant: 'destructive' });
+        }
+    };
+    
+    const handleConfirmDelete = (mode: 'forMe' | 'forEveryone') => {
+        if (!messageToDelete) return;
+
+        if (mode === 'forEveryone') {
+            handleDeleteMessageForEveryone(messageToDelete.id);
+        } else {
+            handleDeleteMessageForMe(messageToDelete.id);
+        }
+        setDeleteMsgDialogOpen(false);
+        setMessageToDelete(null);
+    };
   
   const MessageStatus = ({ status }: { status: MessageType['status'] }) => {
     if (status === 'read') {
@@ -957,6 +999,11 @@ export default function ChatIdPage() {
         onConfirm={handleClearChat}
         userName={otherUser.displayName}
       />
+      <DeleteMessageDialog
+        isOpen={isDeleteMsgDialogOpen}
+        onOpenChange={setDeleteMsgDialogOpen}
+        onConfirm={handleConfirmDelete}
+      />
       <div className="h-screen flex flex-col bg-background">
         {/* Chat Header */}
           <header className="flex shrink-0 items-center gap-4 border-b bg-muted/40 px-4 py-3">
@@ -1044,25 +1091,40 @@ export default function ChatIdPage() {
                 <div className="space-y-2 p-6">
                 {messages.map((msg) => {
                     const messageRef = React.createRef<HTMLDivElement>();
+                    const isMyMessage = msg.senderId === authUser?.uid;
                     return (
                         <div
                         key={msg.id}
-                        className={`flex w-full ${msg.senderId === authUser?.uid ? 'justify-end' : 'justify-start'}`}
+                        className={`group/message flex w-full ${isMyMessage ? 'justify-end' : 'justify-start'}`}
                         >
                         <div
                             className="relative transition-transform duration-200 ease-out"
                             ref={messageRef}
-                            onTouchStart={(e) => handleReplyTouchStart(e)}
-                            onTouchMove={(e) => messageRef.current && handleReplyTouchMove(e, messageRef.current)}
-                            onTouchEnd={() => messageRef.current && handleReplyTouchEnd(msg, messageRef.current)}
+                            onTouchStart={(e) => !isMyMessage && handleReplyTouchStart(e)}
+                            onTouchMove={(e) => !isMyMessage && messageRef.current && handleReplyTouchMove(e, messageRef.current)}
+                            onTouchEnd={() => !isMyMessage && messageRef.current && handleReplyTouchEnd(msg, messageRef.current)}
                         >
                             <div
                             className={`flex max-w-xs flex-col rounded-lg px-3 py-2 text-sm lg:max-w-md ${
-                                msg.senderId === authUser?.uid
+                                isMyMessage
                                 ? 'bg-primary text-primary-foreground'
                                 : 'bg-muted'
                             }`}
                             >
+                            {isMyMessage && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <button className="absolute top-1/2 -translate-y-1/2 -left-10 opacity-0 group-hover/message:opacity-100 transition-opacity">
+                                            <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        <DropdownMenuItem onClick={() => { setMessageToDelete(msg); setDeleteMsgDialogOpen(true); }}>
+                                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            )}
                             {msg.replyTo && (
                                 <div className="mb-1 rounded-md border-l-2 border-primary-foreground/50 bg-black/10 p-2">
                                 <p className="font-bold text-xs">
@@ -1073,9 +1135,9 @@ export default function ChatIdPage() {
                             )}
                             <div className="flex items-end gap-2">
                                 {renderMessageContent(msg)}
-                                <div className={`flex items-center gap-1 text-[10px] shrink-0 self-end ${ msg.senderId === authUser?.uid ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
+                                <div className={`flex items-center gap-1 text-[10px] shrink-0 self-end ${ isMyMessage ? 'text-primary-foreground/70' : 'text-muted-foreground' }`}>
                                     <span>{formatTimestamp(msg.timestamp)}</span>
-                                    {msg.senderId === authUser?.uid && !msg.isUploading && (
+                                    {isMyMessage && !msg.isUploading && (
                                         <MessageStatus status={msg.status} />
                                     )}
                                 </div>

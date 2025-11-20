@@ -14,6 +14,7 @@ export type UserProfile = {
   chatsCleared?: {
     [chatId: string]: any; // Store server timestamp for when a chat was cleared
   }
+  deletedMessages?: string[]; // IDs of messages deleted only for this user
   verifiedBadge?: {
     showBadge: boolean;
     badgeColor: 'blue' | 'gold' | 'green' | 'red' | 'pink';
