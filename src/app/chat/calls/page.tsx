@@ -42,29 +42,11 @@ import { cn } from '@/lib/utils';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
+import { applyNameColor } from '@/lib/utils';
 
 
 interface CallWithUser extends Call {
   otherUser?: UserProfile;
-}
-
-function applyNameColor(name: string, color?: UserProfile['nameColor']) {
-    if (!color || color === 'default') {
-        return name;
-    }
-    if (color === 'gradient') {
-        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
-    }
-    
-    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
-        green: 'text-green-500',
-        yellow: 'text-yellow-500',
-        pink: 'text-pink-500',
-        purple: 'text-purple-500',
-        red: 'text-red-500',
-    };
-
-    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
 }
 
 const CallItem = ({ call, otherUser }: { call: Call; otherUser: UserProfile }) => {
@@ -134,6 +116,7 @@ export default function CallsPage() {
   const [isClearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const { toast } = useToast();
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [userProfiles, setUserProfiles] = useState<Map<string, UserProfile>>(new Map());
 
   useEffect(() => {
     if (!user || !firestore) return;
@@ -195,38 +178,27 @@ export default function CallsPage() {
         orderBy('timestamp', 'desc')
     );
     
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const callDocs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Call));
         
-        if (callDocs.length === 0) {
-            setCalls([]);
-            setLoading(false);
-            return;
-        }
-        
-        const otherUserIds = [
-            ...new Set(callDocs.map(call => call.callerId === user.uid ? call.receiverId : call.callerId))
-        ];
+        const otherUserIds = [...new Set(callDocs.flatMap(call => call.participants.filter(pId => pId !== user.uid)))];
 
-        const usersData = new Map<string, UserProfile>();
-        
-        // Fetch users in chunks to avoid Firestore's 'in' query limit
-        if (otherUserIds.length > 0) {
-          for (let i = 0; i < otherUserIds.length; i += 10) {
-            const chunk = otherUserIds.slice(i, i + 10);
-            if (chunk.length > 0) {
-              const usersQuery = query(collection(firestore, 'users'), where('uid', 'in', chunk));
-              const usersSnapshot = await getDocs(usersQuery);
-              usersSnapshot.forEach(doc => usersData.set(doc.id, doc.data() as UserProfile));
-            }
-          }
+        // Fetch any user profiles that we don't have cached
+        const newIdsToFetch = otherUserIds.filter(id => !userProfiles.has(id));
+        if (newIdsToFetch.length > 0) {
+            const usersQuery = query(collection(firestore, 'users'), where('uid', 'in', newIdsToFetch));
+            getDocs(usersQuery).then(usersSnapshot => {
+                const newProfiles = new Map(userProfiles);
+                usersSnapshot.forEach(doc => newProfiles.set(doc.id, doc.data() as UserProfile));
+                setUserProfiles(newProfiles);
+            });
         }
         
         const populatedCalls = callDocs.map(call => {
-            const otherUserId = call.callerId === user.uid ? call.receiverId : call.callerId;
+            const otherUserId = call.participants.find(pId => pId !== user.uid) || '';
             return {
                 ...call,
-                otherUser: usersData.get(otherUserId),
+                otherUser: userProfiles.get(otherUserId),
                 direction: call.callerId === user.uid ? 'outgoing' : 'incoming',
             };
         }).filter(call => call.otherUser) as CallWithUser[];
@@ -240,7 +212,7 @@ export default function CallsPage() {
 
     return () => unsubscribe();
 
-  }, [user, firestore]);
+  }, [user, firestore, userProfiles]);
   
 
   return (

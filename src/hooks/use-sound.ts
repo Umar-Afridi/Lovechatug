@@ -9,6 +9,9 @@ export function useSound(
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
+    // This effect should only run on the client
+    if (typeof window === 'undefined') return;
+
     const audioEl = new Audio(url);
     audioRef.current = audioEl;
 

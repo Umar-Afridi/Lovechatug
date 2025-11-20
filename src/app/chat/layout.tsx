@@ -53,6 +53,7 @@ import OutgoingCallPage from './call/outgoing/[userId]/page';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { useProfileFrame } from '@/hooks/use-profile-frame';
+import { applyNameColor } from '@/lib/utils';
 
 // Context for Call State
 interface CallContextType {
@@ -171,6 +172,7 @@ function usePresence() {
 function CallProvider({ children }: { children: React.ReactNode }) {
     const { user, loading: authLoading } = useUser();
     const firestore = useFirestore();
+    const router = useRouter();
 
     const [incomingCall, setIncomingCall] = useState<Call | null>(null);
     const [activeCall, setActiveCall] = useState<Call | null>(null);
@@ -181,8 +183,16 @@ function CallProvider({ children }: { children: React.ReactNode }) {
         const callIdToDelete = incomingCall?.id || outgoingCall?.callId || activeCall?.id;
         
         setIncomingCall(null);
-setActiveCall(null);
+        setActiveCall(null);
         setOutgoingCall(null);
+        
+        // Navigate back to chat after ending call
+        if (router) {
+            const currentPath = window.location.pathname;
+            if (currentPath.startsWith('/chat/call/')) {
+                 router.push('/chat');
+            }
+        }
 
         if (firestore && callIdToDelete) {
             try {
@@ -191,7 +201,7 @@ setActiveCall(null);
                 console.warn("Could not delete call doc, it might already be gone:", error);
             }
         }
-    }, [incomingCall, outgoingCall, activeCall, firestore]);
+    }, [incomingCall, outgoingCall, activeCall, firestore, router]);
 
     // Central listener for all call documents related to the current user
     useEffect(() => {
@@ -220,6 +230,7 @@ setActiveCall(null);
                 setIncomingCall(null);
                 setOutgoingCall(null);
                 setActiveCall(callData);
+                router.push(`/chat/call/active/${callData.id}`);
                 return;
             }
 
@@ -235,6 +246,7 @@ setActiveCall(null);
                         type: callData.type,
                         callId: callData.id,
                     });
+                    router.push(`/chat/call/outgoing/${callData.receiverId}`);
                 } else {
                     // I am the receiver
                     setOutgoingCall(null);
@@ -255,7 +267,7 @@ setActiveCall(null);
                 callListenerUnsubscribe.current();
             }
         };
-    }, [user, firestore, authLoading, endCall]);
+    }, [user, firestore, authLoading, endCall, router]);
 
     const startCall = useCallback(async (receiverId: string, type: 'audio' | 'video') => {
         if (!firestore || !user || activeCall || outgoingCall || incomingCall) {
@@ -311,48 +323,16 @@ setActiveCall(null);
         endCall
     };
     
-    const renderCallScreen = () => {
-        // The active call screen takes highest priority
-        if (activeCall) {
-            return <div className="fixed inset-0 z-[1001]"><ActiveCallPage /></div>;
-        }
-        // Then outgoing
-        if (outgoingCall) {
-            return <div className="fixed inset-0 z-[1001]"><OutgoingCallPage /></div>;
-        }
-        // Then incoming
-        if (incomingCall) {
-            return <IncomingCall call={incomingCall} />;
-        }
-        return null;
-    }
-
+    // The call screens are now rendered by their respective pages via the router.
+    // We only render the IncomingCall component here as it's an overlay.
     return (
         <CallContext.Provider value={contextValue}>
-            {renderCallScreen()}
+            {incomingCall && <IncomingCall call={incomingCall} />}
             {children}
         </CallContext.Provider>
     );
 }
 
-function applyNameColor(name: string, color?: UserProfile['nameColor']) {
-    if (!color || color === 'default') {
-        return name;
-    }
-    if (color === 'gradient') {
-        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
-    }
-    
-    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
-        green: 'text-green-500',
-        yellow: 'text-yellow-500',
-        pink: 'text-pink-500',
-        purple: 'text-purple-500',
-        red: 'text-red-500',
-    };
-
-    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
-}
 
 function ChatAppLayout({
   children,

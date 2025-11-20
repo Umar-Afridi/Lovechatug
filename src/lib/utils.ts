@@ -9,11 +9,12 @@ export function cn(...inputs: ClassValue[]) {
 
 
 export function applyNameColor(name: string, color?: UserProfile['nameColor']) {
+    if (!name) return '';
     if (!color || color === 'default') {
         return name;
     }
     if (color === 'gradient') {
-        return React.createElement('span', { className: "font-bold background-animate" }, name);
+        return React.createElement('span', { className: "font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate" }, name);
     }
     
     const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {

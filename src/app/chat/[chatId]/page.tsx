@@ -72,25 +72,7 @@ import { OfficialBadge } from '@/components/ui/official-badge';
 import { useCallContext } from '../layout';
 import { ClearChatDialog } from '@/components/chat/clear-chat-dialog';
 import { DeleteMessageDialog } from '@/components/chat/delete-message-dialog';
-
-function applyNameColor(name: string, color?: UserProfile['nameColor']) {
-    if (!color || color === 'default') {
-        return name;
-    }
-    if (color === 'gradient') {
-        return <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-purple-500 background-animate">{name}</span>;
-    }
-    
-    const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {
-        green: 'text-green-500',
-        yellow: 'text-yellow-500',
-        pink: 'text-pink-500',
-        purple: 'text-purple-500',
-        red: 'text-red-500',
-    };
-
-    return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
-}
+import { applyNameColor } from '@/lib/utils';
 
 
 export default function ChatIdPage() {
@@ -677,26 +659,29 @@ export default function ChatIdPage() {
         const weeklyReset = currentUser.lastWeeklyReset ? currentUser.lastWeeklyReset.toDate() : new Date(0);
         const monthlyReset = currentUser.lastMonthlyReset ? currentUser.lastMonthlyReset.toDate() : new Date(0);
         
-        const scoreUpdates: { [key: string]: any } = { activityScore: increment(1) };
-
-        if (differenceInHours(now, dailyReset) >= 24) {
-            scoreUpdates.dailyActivityScore = 1;
-            scoreUpdates.lastDailyReset = serverTimestamp();
-        } else {
-            scoreUpdates.dailyActivityScore = increment(1);
-        }
-
-        if (differenceInCalendarWeeks(now, weeklyReset, { weekStartsOn: 1 }) >= 1) {
-            scoreUpdates.weeklyActivityScore = 1;
-            scoreUpdates.lastWeeklyReset = serverTimestamp();
-        } else {
-            scoreUpdates.weeklyActivityScore = increment(1);
-        }
+        const scoreUpdates: { [key: string]: any } = {};
 
         if (differenceInCalendarMonths(now, monthlyReset) >= 1) {
             scoreUpdates.monthlyActivityScore = 1;
+            scoreUpdates.weeklyActivityScore = 1;
+            scoreUpdates.dailyActivityScore = 1;
             scoreUpdates.lastMonthlyReset = serverTimestamp();
+            scoreUpdates.lastWeeklyReset = serverTimestamp();
+            scoreUpdates.lastDailyReset = serverTimestamp();
+        } else if (differenceInCalendarWeeks(now, weeklyReset, { weekStartsOn: 1 }) >= 1) {
+            scoreUpdates.weeklyActivityScore = 1;
+            scoreUpdates.dailyActivityScore = 1;
+            scoreUpdates.lastWeeklyReset = serverTimestamp();
+            scoreUpdates.lastDailyReset = serverTimestamp();
+            scoreUpdates.monthlyActivityScore = increment(1);
+        } else if (differenceInHours(now, dailyReset) >= 24) {
+            scoreUpdates.dailyActivityScore = 1;
+            scoreUpdates.lastDailyReset = serverTimestamp();
+            scoreUpdates.weeklyActivityScore = increment(1);
+            scoreUpdates.monthlyActivityScore = increment(1);
         } else {
+            scoreUpdates.dailyActivityScore = increment(1);
+            scoreUpdates.weeklyActivityScore = increment(1);
             scoreUpdates.monthlyActivityScore = increment(1);
         }
 

@@ -30,10 +30,11 @@ export default function OutgoingCallPage() {
   const firestore = useFirestore();
   const { user } = useUser();
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
-  const [callStatusText, setCallStatusText] = useState('Ringing...');
+  const [callStatusText, setCallStatusText] = useState('Calling...');
   const [loading, setLoading] = useState(true);
 
   const { play, stop } = useSound('https://firebasestorage.googleapis.com/v0/b/lovechat-c483c.appspot.com/o/Ringing.mp3?alt=media&token=24075f11-715d-4a57-9bf4-1594adaa995e', { loop: true });
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch receiver's profile
   useEffect(() => {
@@ -47,7 +48,12 @@ export default function OutgoingCallPage() {
         if (docSnap.exists()) {
             const userData = docSnap.data() as UserProfile;
             setOtherUser(userData);
-            play(); // Start ringing only after confirming user exists
+            if (userData.isOnline) {
+                setCallStatusText('Ringing...');
+                play(); // Start ringing only if user is online
+            } else {
+                setCallStatusText('User is offline');
+            }
         } else {
             setCallStatusText('User not found');
             setTimeout(() => endCall(), 1500);
@@ -72,32 +78,39 @@ export default function OutgoingCallPage() {
    useEffect(() => {
     if (!firestore || !callId) return;
 
+    // Set a 30-second timeout to end the call
+    timeoutRef.current = setTimeout(() => {
+      setCallStatusText("No answer");
+      endCall();
+    }, 30000); // 30 seconds
+
     const callDocRef = doc(firestore, 'calls', callId);
     const unsubscribe = onSnapshot(callDocRef, (docSnap) => {
       if (!docSnap.exists()) {
-        // The document was deleted. This means the call was declined, cancelled by the caller, or timed out.
-        // The active call state will be cleared by the main layout listener.
-        // We just need to stop the sound here.
+        // The document was deleted. This means the call was declined, cancelled, or timed out.
         stop();
         // The redirection will be handled by the main layout effect that checks for outgoingCall
         return;
       }
 
       const callData = docSnap.data() as Call;
-      // If the call status changes to "declined", show a message and hang up.
+      // If the call status changes to "declined", show a message.
       if (callData.status === 'declined') {
         setCallStatusText('Call Declined');
         stop();
         // The document will be deleted by the receiver, and the !docSnap.exists() case will trigger.
       }
-      // If the call is answered, the main layout listener will handle transitioning to the active call screen.
+      // If the call is answered, the main layout listener will handle the transition.
     });
 
     return () => {
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+        }
         unsubscribe();
         stop();
     };
-  }, [firestore, callId, stop]);
+  }, [firestore, callId, stop, endCall]);
 
 
   const handleHangUp = useCallback(() => {
