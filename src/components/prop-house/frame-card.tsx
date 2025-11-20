@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { useProfileFrame } from '@/hooks/use-profile-frame';
+import { AnimatedLoveFrame } from './animated-love-frame';
 
 interface FrameCardProps {
   item: {
@@ -26,12 +27,16 @@ export function FrameCard({ item }: FrameCardProps) {
       </Badge>
       
       <div className="relative w-full aspect-square flex-shrink-0">
-        <Image
-            src={item.imageUrl}
-            alt={item.name}
-            fill
-            className="object-contain p-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
-        />
+        {item.id === 'lovechat-butterfly-frame' ? (
+          <AnimatedLoveFrame />
+        ) : (
+          <Image
+              src={item.imageUrl}
+              alt={item.name}
+              fill
+              className="object-contain p-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
+          />
+        )}
       </div>
 
       <div className="mt-2 flex-grow flex flex-col justify-center px-2">
