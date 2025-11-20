@@ -31,7 +31,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescript
 import { useAuth } from '@/firebase/provider';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { Phone, UserPlus } from 'lucide-react';
+import { Phone, UserPlus, Tv } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
@@ -371,12 +371,16 @@ export default function ChatAppLayout({ children }: { children: ReactNode }) {
       return <>{children}</>;
   }
 
-  // Define routes where the bottom nav should be hidden
+  // Define routes where the bottom nav should ALWAYS be hidden
   const hideBottomNavRoutes = [
-    '/chat/call',
+    '/chat/call/', // Hide for any active call screen (outgoing, active, etc.)
   ];
+  
+  // This Regex will match `/chat/[any-string-that-is-not-a-main-tab]`
+  // It specifically excludes the main tab pages.
+  const isChatDetailPage = /^\/chat\/(?!calls|friends|rooms|notifications)[^/]+$/.test(pathname);
 
-  const showBottomNav = !hideBottomNavRoutes.some(route => pathname.startsWith(route)) && !/^\/chat\/[^/]+$/.test(pathname);
+  const showBottomNav = !hideBottomNavRoutes.some(route => pathname.startsWith(route)) && !isChatDetailPage;
 
 
   return (
