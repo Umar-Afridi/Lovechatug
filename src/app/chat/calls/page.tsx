@@ -67,30 +67,7 @@ function applyNameColor(name: string, color?: UserProfile['nameColor']) {
     return <span className={cn('font-bold', colorClasses[color])}>{name}</span>;
 }
 
-const CallItem = ({ call }: { call: CallWithUser }) => {
-  const [otherUser, setOtherUser] = useState<UserProfile | null>(call.otherUser ?? null);
-  const firestore = useFirestore();
-
-  useEffect(() => {
-    if (!firestore || !call) return;
-    
-    const otherUserId = call.callerId === call.participants.find(p => p !== call.callerId)
-      ? call.receiverId
-      : call.callerId;
-
-    if (!otherUserId) return;
-
-    const userDocRef = doc(firestore, 'users', otherUserId);
-    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setOtherUser(docSnap.data() as UserProfile);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [firestore, call]);
-
-
+const CallItem = ({ call, otherUser }: { call: Call; otherUser: UserProfile }) => {
   if (!otherUser) return null;
 
   const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
@@ -221,6 +198,12 @@ export default function CallsPage() {
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
         const callDocs = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Call));
         
+        if (callDocs.length === 0) {
+            setCalls([]);
+            setLoading(false);
+            return;
+        }
+        
         const otherUserIds = [
             ...new Set(callDocs.map(call => call.callerId === user.uid ? call.receiverId : call.callerId))
         ];
@@ -324,7 +307,7 @@ export default function CallsPage() {
           ) : calls.length > 0 ? (
             <div className="divide-y">
                 {calls.map((call) => (
-                    <CallItem key={call.id} call={call} />
+                    <CallItem key={call.id} call={call} otherUser={call.otherUser!} />
                 ))}
             </div>
           ) : (

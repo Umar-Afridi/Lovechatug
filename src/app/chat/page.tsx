@@ -21,10 +21,8 @@ import { OfficialBadge } from '@/components/ui/official-badge';
 import { useSound } from '@/hooks/use-sound';
 
 // This component is self-contained and fetches its own data efficiently.
-const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: string }) => {
+const ChatListItem = ({ chat, participant, currentUserId }: { chat: Chat, participant: UserProfile, currentUserId: string }) => {
     const getInitials = (name: string) => name ? name.split(' ').map(n => n[0]).join('') : 'U';
-    const firestore = useFirestore();
-    const [participant, setParticipant] = useState<UserProfile | null>(null);
     
     const unreadCount = chat.unreadCount?.[currentUserId] ?? 0;
 
@@ -45,33 +43,8 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
         return format(date, 'P'); // e.g., 07/16/2024
     };
 
-    const participantId = useMemo(() => chat.members.find(id => id !== currentUserId), [chat.members, currentUserId]);
+    const participantId = participant.uid;
     const isTyping = useMemo(() => chat.typing?.[participantId || ''] === true, [chat.typing, participantId]);
-    
-    useEffect(() => {
-        if (!firestore || !participantId) return;
-
-        const userDocRef = doc(firestore, 'users', participantId);
-        const unsubscribe = onSnapshot(userDocRef, 
-            (docSnap) => {
-                if (docSnap.exists()) {
-                    setParticipant(docSnap.data() as UserProfile);
-                } else {
-                     setParticipant(null); // User might have been deleted
-                }
-            }, 
-            (error) => {
-                console.error(`Error fetching participant ${participantId}:`, error);
-            }
-        );
-
-        return () => unsubscribe();
-    }, [firestore, participantId]);
-
-    if (!participant) {
-        // Don't render anything if the other participant doesn't exist, chat will be cleaned up eventually
-        return null;
-    }
     
     return (
       <Link href={`/chat/${participantId}`} key={chat.id}>
@@ -117,12 +90,16 @@ const ChatListItem = ({ chat, currentUserId }: { chat: Chat, currentUserId: stri
     );
 };
 
+interface PopulatedChat extends Chat {
+    participant: UserProfile;
+}
+
 export default function ChatPage() {
   const firestore = useFirestore();
   const { user } = useUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [chats, setChats] = useState<Chat[]>([]);
+  const [populatedChats, setPopulatedChats] = useState<PopulatedChat[]>([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   // Search state
@@ -153,11 +130,11 @@ export default function ChatPage() {
     return () => unsub();
   }, [user, firestore]);
 
-  // Effect to fetch chats based on the user's membership. This is the most reliable method.
+  // Effect to fetch chats and participant data efficiently
   useEffect(() => {
     if (!user || !firestore) {
         setLoading(false);
-        setChats([]);
+        setPopulatedChats([]);
         return;
     }
     
@@ -169,9 +146,40 @@ export default function ChatPage() {
         orderBy('lastMessage.timestamp', 'desc')
     );
 
-    const unsubChats = onSnapshot(chatsQuery, (snapshot) => {
+    const unsubChats = onSnapshot(chatsQuery, async (snapshot) => {
         const chatsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
-        setChats(chatsData);
+        
+        if (chatsData.length === 0) {
+            setPopulatedChats([]);
+            setLoading(false);
+            return;
+        }
+
+        const participantIds = [...new Set(
+            chatsData.flatMap(chat => chat.members.filter(id => id !== user.uid))
+        )];
+
+        const usersData = new Map<string, UserProfile>();
+        
+        // Batch fetch user profiles
+        if (participantIds.length > 0) {
+            for (let i = 0; i < participantIds.length; i += 10) {
+                const chunk = participantIds.slice(i, i + 10);
+                if (chunk.length > 0) {
+                    const usersQuery = query(collection(firestore, 'users'), where('uid', 'in', chunk));
+                    const usersSnapshot = await getDocs(usersQuery);
+                    usersSnapshot.forEach(doc => usersData.set(doc.id, doc.data() as UserProfile));
+                }
+            }
+        }
+        
+        const populated = chatsData.map(chat => {
+            const participantId = chat.members.find(id => id !== user.uid);
+            const participant = participantId ? usersData.get(participantId) : undefined;
+            return { ...chat, participant };
+        }).filter(c => c.participant) as PopulatedChat[];
+
+        setPopulatedChats(populated);
         setLoading(false);
     }, (error) => {
         console.error("Error fetching chats:", error);
@@ -392,7 +400,7 @@ export default function ChatPage() {
         return <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading chats...</div>;
     }
     
-    if (chats.length === 0) {
+    if (populatedChats.length === 0) {
       return (
         <div className="flex flex-1 items-center justify-center text-center p-8 text-muted-foreground">
            <div>
@@ -406,8 +414,8 @@ export default function ChatPage() {
     return (
         <ScrollArea className="flex-1">
           <div className="flex flex-col">
-            {chats.map(chat => (
-              <ChatListItem key={chat.id} chat={chat} currentUserId={user.uid} />
+            {populatedChats.map(chat => (
+              <ChatListItem key={chat.id} chat={chat} participant={chat.participant} currentUserId={user.uid} />
             ))}
           </div>
         </ScrollArea>
