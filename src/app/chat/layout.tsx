@@ -55,6 +55,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
+import { useSound } from '@/hooks/use-sound';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 // --- Global Search Component ---
 const GlobalSearch = ({ on_close }: { on_close: () => void }) => {
@@ -146,7 +149,7 @@ const GlobalSearch = ({ on_close }: { on_close: () => void }) => {
             }
         }, [firestore, user, profile, toast]);
 
-    const handleSendRequest = async (receiverId: string) => {
+    const handleSendRequest = (receiverId: string) => {
         if (!firestore || !user) return;
         const requestsRef = collection(firestore, 'friendRequests');
         const newRequest = {
@@ -156,14 +159,17 @@ const GlobalSearch = ({ on_close }: { on_close: () => void }) => {
             createdAt: serverTimestamp(),
         };
         
-        try {
-            await addDoc(requestsRef, newRequest);
-            playSendRequestSound();
-            toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
-        } catch (error) {
-            console.error("Error sending friend request:", error);
-            toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive'});
-        }
+        addDoc(requestsRef, newRequest).then(() => {
+             playSendRequestSound();
+             toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
+        }).catch((serverError: any) => {
+            const permissionError = new FirestorePermissionError({
+                path: 'friendRequests',
+                operation: 'create',
+                requestResourceData: newRequest,
+            }, serverError);
+            errorEmitter.emit('permission-error', permissionError);
+        })
     };
     
     const handleCancelRequest = async (receiverId: string) => {
@@ -778,7 +784,7 @@ function ChatAppLayoutContent({ children }: { children: ReactNode }) {
                             <span className="sr-only">Notifications</span>
                         </Link>
                     </Button>
-                    <Button
+                     <Button
                         variant="ghost"
                         size="icon"
                         className="h-10 w-10 rounded-full"
