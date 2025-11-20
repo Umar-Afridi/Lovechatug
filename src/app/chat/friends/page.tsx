@@ -114,25 +114,33 @@ const FriendRequestsList = () => {
 
         try {
             const batch = writeBatch(firestore);
+            
+            // Get current user's profile data to create chat
+            const currentUserSnap = await getDocNonRealTime(currentUserRef);
+            if (!currentUserSnap.exists()) {
+                throw new Error("Current user profile not found.");
+            }
+            const currentUserProfile = currentUserSnap.data() as UserProfile;
 
+            // 1. Update friends arrays for both users
             batch.update(currentUserRef, { friends: arrayUnion(request.senderId) });
             batch.update(friendUserRef, { friends: arrayUnion(user.uid) });
             
+            // 2. Create the chat document if it doesn't exist
             const chatSnap = await getDocNonRealTime(chatRef);
             if (!chatSnap.exists()) {
-                const currentUserProfile = (await getDocNonRealTime(currentUserRef)).data() as UserProfile;
                 batch.set(chatRef, {
                     members: [user.uid, request.senderId],
                     createdAt: serverTimestamp(),
                     lastMessage: null,
                     participantDetails: {
                         [user.uid]: {
-                        displayName: currentUserProfile?.displayName || user.displayName,
-                        photoURL: currentUserProfile?.photoURL || user.photoURL,
+                            displayName: currentUserProfile?.displayName || 'User',
+                            photoURL: currentUserProfile?.photoURL || '',
                         },
                         [request.senderId]: {
-                        displayName: request.fromUser.displayName,
-                        photoURL: request.fromUser.photoURL,
+                            displayName: request.fromUser.displayName,
+                            photoURL: request.fromUser.photoURL,
                         },
                     },
                     unreadCount: { [user.uid]: 0, [request.senderId]: 0 },
@@ -140,8 +148,10 @@ const FriendRequestsList = () => {
                 });
             }
 
+            // 3. Delete the friend request
             batch.delete(requestRef);
 
+            // 4. Commit all operations at once
             await batch.commit();
 
             toast({ title: 'Friend Added!', description: `You are now friends with ${request.fromUser.displayName}.` });
