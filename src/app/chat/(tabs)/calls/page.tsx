@@ -256,7 +256,7 @@ export default function CallsPage() {
   }, [user, firestore, userProfiles]);
 
   return (
-    <>
+    <div className="flex h-full flex-[0_0_100%] flex-col bg-background">
       <AlertDialog
         open={isClearAllDialogOpen}
         onOpenChange={setClearAllDialogOpen}
@@ -281,7 +281,7 @@ export default function CallsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex h-full flex-col bg-background">
+      
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <h1 className="text-xl font-bold">Call History</h1>
@@ -340,6 +340,5 @@ export default function CallsPage() {
           )}
         </ScrollArea>
       </div>
-    </>
   );
 }

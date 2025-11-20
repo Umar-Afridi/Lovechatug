@@ -37,7 +37,7 @@ import useEmblaCarousel from 'embla-carousel-react'
 import type { EmblaCarouselType } from 'embla-carousel'
 
 
-const TABS = ['/chat/rooms', '/chat', '/chat/calls', '/chat/friends', '/profile'];
+const TABS = ['/chat/rooms', '/chat/inbox', '/chat/calls', '/chat/friends', '/chat/profile'];
 const TAB_EMOJIS = ['🏠', '📥', '📞', null, '👤'];
 const TAB_ICONS = [null, null, null, UserPlus, null];
 const TAB_LABELS = ['Rooms', 'Inbox', 'Calls', 'Friends', 'Me'];
@@ -50,7 +50,7 @@ function BottomNavBar({ emblaApi }: { emblaApi: EmblaCarouselType | undefined })
     const firestore = useFirestore();
     const [unreadMessages, setUnreadMessages] = useState(0);
     const [unreadFriends, setUnreadFriends] = useState(0);
-    const [activeIndex, setActiveIndex] = useState(0);
+    const [activeIndex, setActiveIndex] = useState(1); // Default to inbox
 
     useEffect(() => {
         if (!emblaApi) return;
@@ -58,15 +58,17 @@ function BottomNavBar({ emblaApi }: { emblaApi: EmblaCarouselType | undefined })
             setActiveIndex(emblaApi.selectedScrollSnap());
         };
         emblaApi.on('select', onSelect);
-        return () => { emblaApi.off('select', onSelect) };
-    }, [emblaApi]);
-
-     useEffect(() => {
-        const index = TABS.indexOf(pathname);
-        if (emblaApi && index !== -1 && index !== activeIndex) {
-            emblaApi.scrollTo(index);
+        // Set initial index
+        const initialIndex = TABS.indexOf(pathname);
+        if (initialIndex !== -1) {
+            emblaApi.scrollTo(initialIndex, true);
+            setActiveIndex(initialIndex);
+        } else {
+            emblaApi.scrollTo(1, true); // Default to inbox if path is not a tab
         }
-    }, [pathname, emblaApi, activeIndex]);
+
+        return () => { emblaApi.off('select', onSelect) };
+    }, [emblaApi, pathname]);
 
 
     useEffect(() => {
@@ -192,9 +194,11 @@ function useAccountDisabledHandling() {
 }
 
 // --- Call Management ---
+type OutgoingCall = Omit<Call, 'id' | 'timestamp' | 'participants' | 'status' | 'direction'> & { callId?: string };
+
 interface CallContextType {
   activeCall: Call | null;
-  outgoingCall: (Omit<Call, 'id' | 'timestamp' | 'participants' | 'status' | 'direction'> & { callId?: string }) | null;
+  outgoingCall: OutgoingCall | null;
   incomingCall: Call | null;
   startCall: (userId: string, type: 'audio' | 'video') => void;
   acceptCall: (call: Call) => void;
@@ -220,7 +224,7 @@ function CallProvider({ children }: { children: ReactNode }) {
 
     const [incomingCall, setIncomingCall] = useState<Call | null>(null);
     const [activeCall, setActiveCall] = useState<Call | null>(null);
-    const [outgoingCall, setOutgoingCall] = useState<(Omit<Call, 'id' | 'timestamp' | 'participants'| 'status' | 'direction' > & { callId?: string }) | null>(null);
+    const [outgoingCall, setOutgoingCall] = useState<OutgoingCall | null>(null);
     const callListenerUnsubscribe = useRef<() => void | null>(null);
     
     const endCall = useCallback(async () => {
@@ -365,11 +369,15 @@ function CallProvider({ children }: { children: ReactNode }) {
 }
 
 // --- Main Layout ---
-export default function ChatAppLayout({ children }: { children: ReactNode }) {
+export default function ChatAppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { user, loading: authLoading } = useUser();
   const router = useRouter();
   const pathname = usePathname();
-  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, watchDrag: true });
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, watchDrag: true, startIndex: 1 });
   
   usePresence();
   const { isAccountDisabled, handleConfirmDisabled } = useAccountDisabledHandling();
@@ -378,7 +386,7 @@ export default function ChatAppLayout({ children }: { children: ReactNode }) {
     if (!authLoading) {
       if (user) {
         if (pathname === '/' || pathname === '/signup') {
-          router.replace('/chat');
+          router.replace('/chat/inbox');
         }
       } else {
         if (!['/', '/signup'].includes(pathname) && !pathname.startsWith('/admin')) {
@@ -391,12 +399,28 @@ export default function ChatAppLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!emblaApi) return;
     const onSelect = () => {
-      const newPath = TABS[emblaApi.selectedScrollSnap()];
-      if (newPath && newPath !== pathname) {
-        router.replace(newPath);
-      }
+        const newPath = TABS[emblaApi.selectedScrollSnap()];
+        // Check if the current path is already correct to avoid unnecessary pushes
+        if (newPath && newPath !== pathname) {
+             router.push(newPath);
+        }
     };
     emblaApi.on('select', onSelect);
+    
+    const initialIndex = TABS.indexOf(pathname);
+    if(initialIndex !== -1) {
+        emblaApi.scrollTo(initialIndex, true);
+    } else if (TABS.some(tab => pathname.startsWith(tab) && tab !== '/chat')){
+        // Handles cases like /chat/friends
+        const tabIndex = TABS.findIndex(tab => pathname.startsWith(tab));
+        if (tabIndex !== -1) {
+             emblaApi.scrollTo(tabIndex, true);
+        }
+    } else {
+        emblaApi.scrollTo(1, true); // Default to inbox
+    }
+
+
     return () => { emblaApi.off('select', onSelect) };
   }, [emblaApi, pathname, router]);
   
@@ -404,15 +428,18 @@ export default function ChatAppLayout({ children }: { children: ReactNode }) {
     return <div className="flex h-screen w-full items-center justify-center">Loading...</div>;
   }
 
-  if (!user && !pathname.startsWith('/admin')) {
-    if (pathname === '/' || pathname === '/signup') {
-      return <>{children}</>;
-    }
-    return <div className="flex h-screen w-full items-center justify-center">Redirecting...</div>;
+  // If user is not logged in and not on an auth page, show nothing (or a loader)
+  if (!user && !['/', '/signup'].includes(pathname)) {
+    return null;
   }
   
-  // Routes where the swipe layout and bottom nav should be hidden
-  const isNonTabLayout = pathname.startsWith('/chat/[') || pathname.startsWith('/chat/call/') || pathname.startsWith('/admin') || pathname.startsWith('/prop-house') || pathname.startsWith('/settings');
+  const isTabLayout = TABS.includes(pathname);
+  const isNonTabLayout = !isTabLayout && (
+    pathname.startsWith('/chat/') || 
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/prop-house') ||
+    pathname.startsWith('/settings')
+  );
 
   if (isNonTabLayout) {
       return (
@@ -450,11 +477,11 @@ export default function ChatAppLayout({ children }: { children: ReactNode }) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        <div className="overflow-hidden" ref={emblaRef}>
-            <div className="flex h-[calc(100vh-4rem)]">
+        <main className="h-[calc(100vh-4rem)] overflow-hidden" ref={emblaRef}>
+            <div className="flex h-full">
                  {children}
             </div>
-        </div>
+        </main>
         <BottomNavBar emblaApi={emblaApi} />
     </CallProvider>
   );
