@@ -31,7 +31,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescript
 import { useAuth } from '@/firebase/provider';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { Home, MessageSquare, Phone, UserPlus, Tv } from 'lucide-react';
+import { Phone, UserPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
@@ -43,13 +43,9 @@ function BottomNavBar() {
     const firestore = useFirestore();
     const [unreadMessages, setUnreadMessages] = useState(0);
     const [unreadFriends, setUnreadFriends] = useState(0);
-    const [profile, setProfile] = useState<UserProfile | null>(null);
 
     useEffect(() => {
         if (!user || !firestore) return;
-        const profileUnsub = onSnapshot(doc(firestore, 'users', user.uid), (doc) => {
-            setProfile(doc.data() as UserProfile);
-        });
         
         const chatsQuery = query(collection(firestore, 'chats'), where('members', 'array-contains', user.uid));
         const chatsUnsub = onSnapshot(chatsQuery, (snapshot) => {
@@ -66,24 +62,18 @@ function BottomNavBar() {
         });
         
         return () => {
-            profileUnsub();
             chatsUnsub();
             friendsUnsub();
         };
 
     }, [user, firestore]);
     
-    const getInitials = (name: string | null | undefined) => {
-        if (!name) return 'U';
-        return name.split(' ').map((n) => n[0]).join('');
-    };
-
     const navItems = [
-        { href: '/chat/rooms', icon: Tv, label: 'Rooms', count: 0 },
-        { href: '/chat', icon: MessageSquare, label: 'Inbox', count: unreadMessages },
+        { href: '/chat/rooms', emoji: '🏠', label: 'Rooms', count: 0 },
+        { href: '/chat', emoji: '📥', label: 'Inbox', count: unreadMessages },
         { href: '/chat/calls', icon: Phone, label: 'Calls', count: 0 },
         { href: '/chat/friends', icon: UserPlus, label: 'Friends', count: unreadFriends },
-        { href: '/profile', icon: Avatar, label: 'Me', count: 0, isAvatar: true },
+        { href: '/profile', emoji: '👤', label: 'Me', count: 0 },
     ];
 
     return (
@@ -93,18 +83,15 @@ function BottomNavBar() {
                     const isActive = pathname === item.href;
                     return (
                         <Link href={item.href} key={item.label} className={cn("flex flex-col items-center justify-center text-xs gap-1 transition-colors w-1/5", isActive ? "text-primary" : "text-muted-foreground hover:text-primary")}>
-                           <div className="relative">
-                                {item.isAvatar ? (
-                                    <Avatar className="h-7 w-7">
-                                        <AvatarImage src={profile?.photoURL} />
-                                        <AvatarFallback>{getInitials(profile?.displayName)}</AvatarFallback>
-                                    </Avatar>
+                           <div className="relative text-2xl">
+                                {item.emoji ? (
+                                    <span>{item.emoji}</span>
                                 ) : (
-                                    <item.icon className="h-6 w-6" />
+                                    item.icon && <item.icon className="h-6 w-6" />
                                 )}
-                                {item.count > 0 && <Badge variant="destructive" className="absolute -top-1 -right-2 h-4 w-4 justify-center p-0">{item.count}</Badge>}
+                                {item.count > 0 && <Badge variant="destructive" className="absolute -top-1 -right-2 h-4 w-4 justify-center p-0 text-xs">{item.count}</Badge>}
                             </div>
-                            <span>{item.label}</span>
+                            <span className="text-xs">{item.label}</span>
                         </Link>
                     )
                 })}
