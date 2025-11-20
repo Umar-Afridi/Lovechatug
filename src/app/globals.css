@@ -99,8 +99,11 @@
   }
 
   @keyframes gradient-background {
-    to {
+    from {
       background-position: 200% center;
+    }
+    to {
+      background-position: 0% center;
     }
   }
 
