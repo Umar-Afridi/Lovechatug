@@ -45,12 +45,17 @@ const TAB_LABELS = ['Rooms', 'Inbox', 'Calls', 'Friends', 'Me'];
 
 // --- Bottom Navigation ---
 function BottomNavBar({ emblaApi }: { emblaApi: EmblaCarouselType | undefined }) {
-    const pathname = usePathname();
     const { user } = useUser();
     const firestore = useFirestore();
     const [unreadMessages, setUnreadMessages] = useState(0);
     const [unreadFriends, setUnreadFriends] = useState(0);
     const [activeIndex, setActiveIndex] = useState(1); // Default to inbox
+
+    const onNavClick = useCallback((index: number) => {
+        if (emblaApi) {
+            emblaApi.scrollTo(index);
+        }
+    }, [emblaApi]);
 
     useEffect(() => {
         if (!emblaApi) return;
@@ -58,17 +63,9 @@ function BottomNavBar({ emblaApi }: { emblaApi: EmblaCarouselType | undefined })
             setActiveIndex(emblaApi.selectedScrollSnap());
         };
         emblaApi.on('select', onSelect);
-        // Set initial index
-        const initialIndex = TABS.indexOf(pathname);
-        if (initialIndex !== -1) {
-            emblaApi.scrollTo(initialIndex, true);
-            setActiveIndex(initialIndex);
-        } else {
-            emblaApi.scrollTo(1, true); // Default to inbox if path is not a tab
-        }
-
+        onSelect(); // Set initial active index
         return () => { emblaApi.off('select', onSelect) };
-    }, [emblaApi, pathname]);
+    }, [emblaApi]);
 
 
     useEffect(() => {
@@ -104,14 +101,10 @@ function BottomNavBar({ emblaApi }: { emblaApi: EmblaCarouselType | undefined })
                     const isActive = activeIndex === index;
                     const Icon = TAB_ICONS[index];
                     return (
-                        <Link 
-                            href={href} 
+                        <button
                             key={href} 
                             className={cn("flex flex-col items-center justify-center text-xs gap-1 transition-colors w-1/5", isActive ? "text-primary" : "text-muted-foreground hover:text-primary")}
-                            onClick={(e) => {
-                                e.preventDefault();
-                                if (emblaApi) emblaApi.scrollTo(index);
-                            }}
+                            onClick={() => onNavClick(index)}
                         >
                            <div className="relative text-2xl">
                                 {TAB_EMOJIS[index] ? (
@@ -122,7 +115,7 @@ function BottomNavBar({ emblaApi }: { emblaApi: EmblaCarouselType | undefined })
                                 {unreadCounts[index] > 0 && <Badge variant="destructive" className="absolute -top-1 -right-2 h-4 w-4 justify-center p-0 text-xs">{unreadCounts[index]}</Badge>}
                             </div>
                             <span className="text-xs">{TAB_LABELS[index]}</span>
-                        </Link>
+                        </button>
                     )
                 })}
             </nav>
@@ -194,7 +187,7 @@ function useAccountDisabledHandling() {
 }
 
 // --- Call Management ---
-type OutgoingCall = Omit<Call, 'id' | 'timestamp' | 'participants' | 'status' | 'direction'> & { callId?: string };
+type OutgoingCall = { callId?: string; callerId: string; receiverId: string; type: "audio" | "video" };
 
 interface CallContextType {
   activeCall: Call | null;
@@ -377,7 +370,7 @@ export default function ChatAppLayout({
   const { user, loading: authLoading } = useUser();
   const router = useRouter();
   const pathname = usePathname();
-  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, watchDrag: true, startIndex: 1 });
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, watchDrag: true, startIndex: 1, align: 'start' });
   
   usePresence();
   const { isAccountDisabled, handleConfirmDisabled } = useAccountDisabledHandling();
@@ -396,23 +389,7 @@ export default function ChatAppLayout({
     }
   }, [authLoading, user, pathname, router]);
 
-  useEffect(() => {
-    if (!emblaApi) return;
-
-    const onSelect = () => {
-      const newPath = TABS[emblaApi.selectedScrollSnap()];
-      if (newPath && newPath !== pathname) {
-        // Use replace to avoid adding to history stack during swipe
-        router.replace(newPath);
-      }
-    };
-
-    emblaApi.on('select', onSelect);
-
-    return () => { emblaApi.off('select', onSelect) };
-  }, [emblaApi, pathname, router]);
-
-  // Effect to sync URL changes back to the carousel
+  // Sync carousel to URL changes
   useEffect(() => {
     if (!emblaApi) return;
     const tabIndex = TABS.indexOf(pathname);
@@ -435,7 +412,8 @@ export default function ChatAppLayout({
     pathname.startsWith('/chat/') || 
     pathname.startsWith('/admin') ||
     pathname.startsWith('/prop-house') ||
-    pathname.startsWith('/settings')
+    pathname.startsWith('/settings') ||
+    pathname.startsWith('/profile')
   );
 
   if (isNonTabLayout) {
@@ -474,7 +452,7 @@ export default function ChatAppLayout({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        <main className="h-[calc(100vh-4rem)] overflow-hidden" ref={emblaRef}>
+        <main className="h-[calc(100svh-4rem)] overflow-hidden" ref={emblaRef}>
             <div className="flex h-full">
                  {children}
             </div>
