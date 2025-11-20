@@ -1,61 +1,99 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
-  MessageSquare,
-  Users,
-  Phone,
-  Settings,
-  UserPlus,
-  LogOut,
-  GalleryHorizontal,
-  PlusSquare,
-  Home,
-  Inbox,
-} from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarFooter,
-  SidebarProvider,
-  SidebarInset,
-  SidebarMenuBadge,
-} from '@/components/ui/sidebar';
-import { useAuth, useFirestore } from '@/firebase/provider';
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  ReactNode,
+} from 'react';
 import { useUser } from '@/firebase/auth/use-user';
-import { Button } from '@/components/ui/button';
+import { useFirestore } from '@/firebase/provider';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogFooter,
-} from '@/components/ui/alert-dialog';
-import { useEffect, useState, useRef, useCallback, createContext, useContext } from 'react';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp, getDoc, writeBatch, limit, addDoc, deleteDoc, increment } from 'firebase/firestore';
-import type { UserProfile, Chat, Call, Notification } from '@/lib/types';
-import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
-import { getDatabase, ref, onValue, off, onDisconnect, serverTimestamp as rtdbServerTimestamp, set } from 'firebase/database';
-import { useSound } from '@/hooks/use-sound';
+  collection,
+  query,
+  where,
+  limit,
+  onSnapshot,
+  doc,
+  updateDoc,
+  serverTimestamp,
+  addDoc,
+  deleteDoc,
+} from 'firebase/firestore';
+import { getDatabase, ref, onValue, off, set, onDisconnect, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 import { IncomingCall } from '@/components/chat/incoming-call';
-import ActiveCallPage from './call/active/[callId]/page';
-import OutgoingCallPage from './call/outgoing/[userId]/page';
-import { Badge } from '@/components/ui/badge';
-import Image from 'next/image';
-import { useProfileFrame } from '@/hooks/use-profile-frame';
-import { applyNameColor } from '@/lib/utils';
+import type { Call, UserProfile } from '@/lib/types';
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { useAuth } from '@/firebase/provider';
 
-// Context for Call State
+
+// --- Presence Management ---
+function usePresence() {
+  const { user, loading: authLoading } = useUser();
+  const firestore = useFirestore();
+
+  useEffect(() => {
+    if (!user || !firestore || authLoading) return;
+
+    const db = getDatabase();
+    const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
+    const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
+    const connectedRef = ref(db, '.info/connected');
+
+    const onValueChange = onValue(connectedRef, async (snap) => {
+      if (snap.val() === true) {
+        await set(userStatusDatabaseRef, { isOnline: true, lastSeen: rtdbServerTimestamp() });
+        
+        await updateDoc(userStatusFirestoreRef, { isOnline: true, lastSeen: serverTimestamp() });
+
+        onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
+      }
+    });
+
+    return () => {
+      off(connectedRef, 'value', onValueChange);
+    };
+  }, [user, firestore, authLoading]);
+}
+
+// --- Disabled Account Handling ---
+function useAccountDisabledHandling() {
+    const auth = useAuth();
+    const router = useRouter();
+    const { user, loading: authLoading } = useUser();
+    const firestore = useFirestore();
+    const [isAccountDisabled, setAccountDisabled] = useState(false);
+
+    useEffect(() => {
+        if (authLoading || !user || !firestore) return;
+
+        const userDocRef = doc(firestore, 'users', user.uid);
+        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data() as UserProfile;
+                if (data.isDisabled) {
+                    setAccountDisabled(true);
+                }
+            }
+        });
+        return () => unsubscribe();
+    }, [authLoading, user, firestore]);
+
+    const handleConfirmDisabled = async () => {
+        if (auth) {
+            await auth.signOut();
+            router.push('/');
+        }
+    };
+    
+    return { isAccountDisabled, handleConfirmDisabled };
+}
+
+// --- Call Management ---
 interface CallContextType {
   activeCall: Call | null;
   outgoingCall: (Omit<Call, 'id' | 'timestamp' | 'participants' | 'status' | 'direction'> & { callId?: string }) | null;
@@ -76,103 +114,11 @@ export const useCallContext = () => {
   return context;
 };
 
-// Custom hook to get user profile data in real-time
-function useUserProfile(onAccountDisabled: () => void) {
-  const { user, loading: authLoading } = useUser();
-  const firestore = useFirestore();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-    if (!user || !firestore) {
-      setLoading(false);
-      return;
-    }
-
-    const userDocRef = doc(firestore, 'users', user.uid);
-
-    const unsubscribe = onSnapshot(userDocRef, 
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data() as UserProfile;
-          
-          if (data.isDisabled) {
-            onAccountDisabled();
-            setProfile(data); // Set profile even if disabled to trigger UI change
-            return;
-          }
-          
-          setProfile(data);
-
-        } else {
-          // This case might happen for a brand new user before the doc is created
-          setProfile({
-            uid: user.uid,
-            displayName: user.displayName || 'User',
-            email: user.email || '',
-            photoURL: user.photoURL || '',
-            username: user.email?.split('@')[0] || `user-${Date.now()}`
-          } as UserProfile);
-        }
-        setLoading(false);
-      }, 
-      (error) => {
-        console.error("Error fetching user profile:", error);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user, firestore, authLoading, onAccountDisabled]);
-
-  return { profile, loading };
-}
-
-
-// Custom hook for presence management
-function usePresence() {
-  const { user, loading: authLoading } = useUser();
-  const firestore = useFirestore();
-
-  useEffect(() => {
-    if (!user || !firestore || authLoading) return;
-
-    const db = getDatabase();
-    const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
-    const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
-    const connectedRef = ref(db, '.info/connected');
-
-    let unsubscribe: (() => void) | null = null;
-
-    const onValueChange = onValue(connectedRef, async (snap) => {
-      if (snap.val() === true) {
-        await set(userStatusDatabaseRef, { isOnline: true, lastSeen: rtdbServerTimestamp() });
-        
-        // Update Firestore when user comes online.
-        await updateDoc(userStatusFirestoreRef, { isOnline: true, lastSeen: serverTimestamp() });
-
-        onDisconnect(userStatusDatabaseRef).set({ isOnline: false, lastSeen: rtdbServerTimestamp() });
-      }
-    });
-
-    unsubscribe = () => off(connectedRef, 'value', onValueChange);
-
-    return () => {
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
-    };
-  }, [user, firestore, authLoading]);
-}
-
-
-function CallProvider({ children }: { children: React.ReactNode }) {
+function CallProvider({ children }: { children: ReactNode }) {
     const { user, loading: authLoading } = useUser();
     const firestore = useFirestore();
     const router = useRouter();
+    const pathname = usePathname();
 
     const [incomingCall, setIncomingCall] = useState<Call | null>(null);
     const [activeCall, setActiveCall] = useState<Call | null>(null);
@@ -186,12 +132,8 @@ function CallProvider({ children }: { children: React.ReactNode }) {
         setActiveCall(null);
         setOutgoingCall(null);
         
-        // Navigate back to chat after ending call
-        if (router) {
-            const currentPath = window.location.pathname;
-            if (currentPath.startsWith('/chat/call/')) {
-                 router.push('/chat');
-            }
+        if (pathname && pathname.startsWith('/chat/call/')) {
+            router.push('/chat');
         }
 
         if (firestore && callIdToDelete) {
@@ -201,13 +143,11 @@ function CallProvider({ children }: { children: React.ReactNode }) {
                 console.warn("Could not delete call doc, it might already be gone:", error);
             }
         }
-    }, [incomingCall, outgoingCall, activeCall, firestore, router]);
+    }, [incomingCall, outgoingCall, activeCall, firestore, router, pathname]);
 
-    // Central listener for all call documents related to the current user
     useEffect(() => {
         if (!user || !firestore || authLoading) return;
         
-        // Cleanup previous listener if user changes
         if (callListenerUnsubscribe.current) {
             callListenerUnsubscribe.current();
             callListenerUnsubscribe.current = null;
@@ -218,26 +158,24 @@ function CallProvider({ children }: { children: React.ReactNode }) {
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             if (snapshot.empty) {
-                // No call documents found, ensure all local states are cleared.
                 endCall();
                 return;
             }
 
             const callData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Call;
             
-            // If the call is answered, set it as active and clear others.
             if (callData.status === 'answered' && callData.answeredAt) {
                 setIncomingCall(null);
                 setOutgoingCall(null);
                 setActiveCall(callData);
-                router.push(`/chat/call/active/${callData.id}`);
+                if (!pathname.startsWith('/chat/call/active/')) {
+                    router.push(`/chat/call/active/${callData.id}`);
+                }
                 return;
             }
 
-            // If the call is outgoing
             if (callData.status === 'outgoing') {
                 if (callData.callerId === user.uid) {
-                    // I am the caller
                     setIncomingCall(null);
                     setActiveCall(null);
                     setOutgoingCall({
@@ -246,9 +184,10 @@ function CallProvider({ children }: { children: React.ReactNode }) {
                         type: callData.type,
                         callId: callData.id,
                     });
-                    router.push(`/chat/call/outgoing/${callData.receiverId}`);
+                     if (!pathname.startsWith('/chat/call/outgoing/')) {
+                        router.push(`/chat/call/outgoing/${callData.receiverId}`);
+                    }
                 } else {
-                    // I am the receiver
                     setOutgoingCall(null);
                     setActiveCall(null);
                     setIncomingCall(callData);
@@ -267,7 +206,7 @@ function CallProvider({ children }: { children: React.ReactNode }) {
                 callListenerUnsubscribe.current();
             }
         };
-    }, [user, firestore, authLoading, endCall, router]);
+    }, [user, firestore, authLoading, endCall, router, pathname]);
 
     const startCall = useCallback(async (receiverId: string, type: 'audio' | 'video') => {
         if (!firestore || !user || activeCall || outgoingCall || incomingCall) {
@@ -285,7 +224,6 @@ function CallProvider({ children }: { children: React.ReactNode }) {
         };
     
         try {
-            // Add the document. The listener will automatically pick it up and set the outgoingCall state.
             await addDoc(collection(firestore, 'calls'), newCallData);
         } catch (error) {
             console.error('Error initiating call:', error);
@@ -300,18 +238,15 @@ function CallProvider({ children }: { children: React.ReactNode }) {
                 status: 'answered',
                 answeredAt: serverTimestamp() 
             });
-            // The listener will handle the state transition to activeCall
         } catch (e) {
             console.error("Error accepting call: ", e);
-            endCall(); // Clean up state if accept fails
+            endCall();
         }
     }, [firestore, endCall]);
 
     const declineCall = useCallback(async (call: Call) => {
-        // Just end the call, which deletes the document. This is the signal for decline.
         endCall();
     }, [endCall]);
-
 
     const contextValue = {
         activeCall,
@@ -323,8 +258,6 @@ function CallProvider({ children }: { children: React.ReactNode }) {
         endCall
     };
     
-    // The call screens are now rendered by their respective pages via the router.
-    // We only render the IncomingCall component here as it's an overlay.
     return (
         <CallContext.Provider value={contextValue}>
             {incomingCall && <IncomingCall call={incomingCall} />}
@@ -333,87 +266,16 @@ function CallProvider({ children }: { children: React.ReactNode }) {
     );
 }
 
-
-function ChatAppLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const pathname = usePathname();
-  const auth = useAuth();
-  const firestore = useFirestore();
+// --- Main Layout ---
+export default function ChatAppLayout({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useUser();
   const router = useRouter();
-  const isMobile = useIsMobile();
-  const isChatDetailPage = pathname.startsWith('/chat/') && pathname.split('/').length > 2 && !pathname.startsWith('/chat/friends') && !pathname.startsWith('/chat/calls') && !pathname.startsWith('/chat/rooms');
-  const [requestCount, setRequestCount] = useState(0);
-  const [inboxCount, setInboxCount] = useState(0);
-  const [isAccountDisabled, setAccountDisabled] = useState(false);
-  const { toast } = useToast();
+  const pathname = usePathname();
   
-  const handleAccountDisabled = useCallback(() => {
-    setAccountDisabled(true);
-  }, []);
-  
-  const { profile, loading: profileLoading } = useUserProfile(handleAccountDisabled);
-  const { setActiveFrame } = useProfileFrame();
+  usePresence();
+  const { isAccountDisabled, handleConfirmDisabled } = useAccountDisabledHandling();
 
   useEffect(() => {
-    if (profile?.activeFrame) {
-      setActiveFrame(profile.activeFrame);
-    }
-  }, [profile?.activeFrame, setActiveFrame]);
-
-
-  usePresence(); // Initialize presence management
-
-  const { play: playRequestSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a');
-  const isFirstRequestLoad = useRef(true);
-
-  // Listener for friend requests count
-  useEffect(() => {
-    if (!firestore || !user?.uid) return;
-
-    const requestsRef = collection(firestore, 'friendRequests');
-    const q = query(requestsRef, where('receiverId', '==', user.uid), where('status', '==', 'pending'));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        const newSize = snapshot.size;
-        if (!isFirstRequestLoad.current && newSize > requestCount) {
-          playRequestSound();
-        }
-        setRequestCount(newSize);
-        isFirstRequestLoad.current = false;
-      },
-      (serverError) => {
-        console.error("Error fetching friend request count:", serverError);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [firestore, user?.uid, playRequestSound, requestCount]);
-  
-  // Listener for total unread messages
-  useEffect(() => {
-    if (!firestore || !user?.uid) return;
-
-    const chatsRef = collection(firestore, 'chats');
-    const chatsQuery = query(chatsRef, where('members', 'array-contains', user.uid));
-    
-    const unsubscribeChats = onSnapshot(chatsQuery, (snapshot) => {
-        let totalUnread = 0;
-        snapshot.forEach(doc => {
-            const chat = doc.data() as Chat;
-            totalUnread += chat.unreadCount?.[user.uid] ?? 0;
-        });
-        setInboxCount(totalUnread);
-    });
-
-    return () => unsubscribeChats();
-  }, [firestore, user?.uid]);
-
-
- useEffect(() => {
     if (!authLoading) {
       if (user) {
         if (pathname === '/' || pathname === '/signup') {
@@ -426,91 +288,22 @@ function ChatAppLayout({
       }
     }
   }, [authLoading, user, pathname, router]);
-
-  const handleSignOut = async () => {
-    if (auth && user && firestore) {
-      const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
-      const db = getDatabase();
-      const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
-
-      await updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() });
-      await set(userStatusDatabaseRef, { isOnline: false, lastSeen: rtdbServerTimestamp() });
-
-      await auth.signOut();
-      router.push('/');
-    }
-  };
-
-  const loading = authLoading || profileLoading;
-
-  if (loading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <p>Loading...</p>
-      </div>
-    );
-  }
   
-  if (!user && !isAccountDisabled && (pathname.startsWith('/chat') || pathname.startsWith('/profile') || pathname.startsWith('/settings'))) {
-    return (
-       <div className="flex h-screen w-full items-center justify-center">
-        <p>Redirecting...</p>
-      </div>
-    );
+   if (authLoading) {
+    return <div className="flex h-screen w-full items-center justify-center">Loading...</div>;
   }
 
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return 'U';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('');
-  };
-
-  const showSidebar = !isMobile || !isChatDetailPage;
+  if (!user && (pathname.startsWith('/chat') || pathname.startsWith('/profile') || pathname.startsWith('/settings'))) {
+      return <div className="flex h-screen w-full items-center justify-center">Redirecting...</div>;
+  }
   
-  const menuItems = [
-    {
-      href: '/chat/rooms',
-      icon: () => <span className="h-6 w-6 flex items-center justify-center text-xl">🏠</span>,
-      label: 'Home',
-      id: 'home',
-    },
-    {
-      href: '/chat',
-      icon: () => <span className="h-6 w-6 flex items-center justify-center text-xl">📥</span>,
-      label: 'Inbox',
-      id: 'inbox',
-      badgeCount: inboxCount,
-    },
-    {
-      href: '/chat/calls',
-      icon: () => <Phone />,
-      label: 'Calls',
-      id: 'calls'
-    },
-     {
-      href: '/chat/friends',
-      icon: () => <UserPlus />,
-      label: 'Friends',
-      id: 'friends',
-      badgeCount: requestCount,
-    },
-    {
-       href: '/profile',
-       icon: () => <span className="h-6 w-6 flex items-center justify-center text-xl">🧸</span>,
-       label: 'Me',
-       id: 'me',
-    },
-  ];
-
   if (!user) {
       return <>{children}</>;
   }
 
   return (
-    <>
-      <AlertDialog open={isAccountDisabled}>
+    <CallProvider>
+        <AlertDialog open={isAccountDisabled}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Account Disabled</AlertDialogTitle>
@@ -519,135 +312,11 @@ function ChatAppLayout({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogAction onClick={handleSignOut}>OK</AlertDialogAction>
+              <AlertDialogAction onClick={handleConfirmDisabled}>OK</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      
-      <div className="flex h-screen bg-background">
-        <SidebarProvider>
-          {showSidebar && (
-            <Sidebar side="left" collapsible="icon" className="group hidden md:flex">
-                <SidebarHeader>
-                    <Link href="/profile" className="h-12 w-full justify-start gap-2 px-2 flex items-center">
-                        <div className="relative h-8 w-8">
-                            {profile?.activeFrame && (
-                                <Image
-                                    src={profile.activeFrame}
-                                    alt="Profile Frame"
-                                    width={32}
-                                    height={32}
-                                    className="absolute inset-0 z-10 pointer-events-none"
-                                />
-                            )}
-                            <Avatar className="h-full w-full">
-                                <AvatarImage
-                                    src={profile?.photoURL ?? undefined}
-                                    alt={profile?.displayName ?? 'user-avatar'}
-                                />
-                                <AvatarFallback>
-                                    {getInitials(profile?.displayName)}
-                                </AvatarFallback>
-                            </Avatar>
-                        </div>
-                        <div className="flex flex-col items-start overflow-hidden group-data-[collapsible=icon]:hidden">
-                        <span className={"truncate text-sm font-medium"}>
-                            {applyNameColor(profile?.displayName ?? 'User', profile?.nameColor)}
-                        </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                            {profile?.email ?? 'No email'}
-                        </span>
-                        </div>
-                    </Link>
-                </SidebarHeader>
-                <SidebarContent>
-                <SidebarMenu>
-                    {menuItems.map((item) => {
-                       const Icon = item.icon;
-                       let isActive = pathname === item.href || (item.href !== '/chat' && pathname.startsWith(item.href));
-                       if (item.id === 'inbox') isActive = pathname === '/chat';
-                       if (item.id === 'home') isActive = pathname === '/chat/rooms';
-                       if (item.id === 'calls') isActive = pathname === '/chat/calls';
-
-                      return (
-                        <SidebarMenuItem key={item.id}>
-                            <Link href={item.href}>
-                            <SidebarMenuButton
-                                isActive={isActive}
-                                tooltip={item.label}
-                            >
-                                <Icon />
-                                <span>{item.label}</span>
-                            </SidebarMenuButton>
-                            </Link>
-                            {item.badgeCount && item.badgeCount > 0 ? (
-                              <SidebarMenuBadge>{item.badgeCount}</SidebarMenuBadge>
-                            ): null}
-                        </SidebarMenuItem>
-                      )
-                    })}
-                </SidebarMenu>
-                </SidebarContent>
-                <SidebarFooter>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                      <Link href="/settings" className="w-full">
-                        <SidebarMenuButton tooltip="Settings">
-                            <Settings />
-                            <span>Settings</span>
-                        </SidebarMenuButton>
-                      </Link>
-                    </SidebarMenuItem>
-                      <SidebarMenuItem>
-                          <SidebarMenuButton tooltip="Logout" onClick={handleSignOut}>
-                              <LogOut />
-                              <span>Logout</span>
-                          </SidebarMenuButton>
-                      </SidebarMenuItem>
-                </SidebarMenu>
-                </SidebarFooter>
-            </Sidebar>
-          )}
-          <SidebarInset className='flex flex-col'>
-            <div className="flex-1 overflow-auto">
-              {children}
-            </div>
-             {isMobile && !isChatDetailPage && (
-                <div className="sticky bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur-sm">
-                    <nav className="flex items-center justify-around p-2">
-                        {menuItems.map((item) => {
-                           let isActive = pathname === item.href || (item.href !== '/chat' && pathname.startsWith(item.href));
-                           if (item.id === 'inbox') isActive = pathname === '/chat';
-                           if (item.id === 'home') isActive = pathname === '/chat/rooms';
-                           if (item.id === 'calls') isActive = pathname === '/chat/calls';
-                           const Icon = item.icon;
-                            return (
-                                <Link href={item.href} key={item.id} className={cn(
-                                    "relative flex flex-col items-center gap-1 rounded-md p-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                                    isActive && "text-primary"
-                                )}>
-                                    <Icon />
-                                    <span>{item.label}</span>
-                                     {item.badgeCount && item.badgeCount > 0 ? (
-                                        <Badge variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 justify-center p-0 text-[10px]">{item.badgeCount}</Badge>
-                                    ): null}
-                                </Link>
-                            )
-                        })}
-                    </nav>
-                </div>
-            )}
-          </SidebarInset>
-        </SidebarProvider>
-      </div>
-    </>
+        {children}
+    </CallProvider>
   );
-}
-
-export default function ChatAppLayoutWithProvider({ children }: { children: React.ReactNode }) {
-    return (
-      <CallProvider>
-        <ChatAppLayout>{children}</ChatAppLayout>
-      </CallProvider>
-    );
 }
