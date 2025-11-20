@@ -180,21 +180,28 @@ export default function ManageOfficialsPage() {
     }
     setSearching(true);
     try {
-        const usersRef = collection(firestore, "users");
-        const q = query(usersRef, 
-            where("username", ">=", searchQuery.toLowerCase()), 
-            where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'),
-            where('officialBadge.isOfficial', '==', false) // Only search non-officials
-        );
-        
-        const querySnapshot = await getDocs(q);
-        const usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
-        setSearchedUsers(usersList);
-    } catch(error) {
-        console.error("Error searching users:", error);
-        toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
+      const usersRef = collection(firestore, 'users');
+      const q = query(
+        usersRef,
+        where('username', '>=', searchQuery.toLowerCase()),
+        where('username', '<=', searchQuery.toLowerCase() + '\uf8ff')
+      );
+
+      const querySnapshot = await getDocs(q);
+      const usersList = querySnapshot.docs
+        .map((d) => d.data() as UserProfile)
+        .filter((u) => !u.officialBadge?.isOfficial); // Filter for non-officials on the client-side
+
+      setSearchedUsers(usersList);
+    } catch (error) {
+      console.error('Error searching users:', error);
+      toast({
+        title: 'Search Error',
+        description: 'Could not perform search.',
+        variant: 'destructive',
+      });
     } finally {
-        setSearching(false);
+      setSearching(false);
     }
   }, [firestore, searchQuery, toast]);
 
