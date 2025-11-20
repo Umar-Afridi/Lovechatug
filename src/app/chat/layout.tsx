@@ -31,15 +31,15 @@ import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescript
 import { useAuth } from '@/firebase/provider';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { Phone, UserPlus, Tv } from 'lucide-react';
+import { UserPlus, Tv } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import useEmblaCarousel from 'embla-carousel-react'
 import type { EmblaCarouselType } from 'embla-carousel'
-import { RoomsPage } from './(tabs)/rooms/page';
-import { InboxPage } from './(tabs)/inbox/page';
-import { CallsPage } from './(tabs)/calls/page';
-import { FriendsPage } from './(tabs)/friends/page';
-import { ProfilePage } from './(tabs)/profile/page';
+import RoomsPage from './(tabs)/rooms/page';
+import InboxPage from './(tabs)/inbox/page';
+import CallsPage from './(tabs)/calls/page';
+import FriendsPage from './(tabs)/friends/page';
+import ProfilePage from './(tabs)/profile/page';
 
 
 const TABS = ['/chat/rooms', '/chat/inbox', '/chat/calls', '/chat/friends', '/chat/profile'];
@@ -416,9 +416,8 @@ export default function ChatAppLayout({
     return null;
   }
   
-  const isTabLayout = TABS.includes(pathname);
-  const isNonTabLayout = !isTabLayout && (
-    pathname.startsWith('/chat/') || 
+  const isNonTabLayout = (
+    pathname.startsWith('/chat/') && !TABS.includes(pathname) || 
     pathname.startsWith('/admin') ||
     pathname.startsWith('/prop-house') ||
     pathname.startsWith('/settings') ||
@@ -463,11 +462,11 @@ export default function ChatAppLayout({
         </AlertDialog>
         <main className="h-[calc(100svh-4rem)] overflow-hidden" ref={emblaRef}>
             <div className="flex h-full">
-                <TabsLayout><RoomsPage /></TabsLayout>
-                <TabsLayout><InboxPage /></TabsLayout>
-                <TabsLayout><CallsPage /></TabsLayout>
-                <TabsLayout><FriendsPage /></TabsLayout>
-                <TabsLayout><ProfilePage /></TabsLayout>
+                <RoomsPage />
+                <InboxPage />
+                <CallsPage />
+                <FriendsPage />
+                <ProfilePage />
             </div>
         </main>
         <BottomNavBar emblaApi={emblaApi} />
