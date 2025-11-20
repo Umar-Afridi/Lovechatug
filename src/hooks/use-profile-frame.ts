@@ -10,6 +10,7 @@ export interface ProfileFrameContextType {
   activeFrame: string | null;
   setActiveFrame: (frameUrl: string | null) => void;
   applyFrame: (frameId: string, frameUrl: string) => void;
+  removeFrame: () => void;
 }
 
 export const ProfileFrameContext = createContext<ProfileFrameContextType | null>(null);

@@ -5,6 +5,8 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { useProfileFrame } from '@/hooks/use-profile-frame';
 import { AnimatedLoveFrame } from './animated-love-frame';
+import { cn } from '@/lib/utils';
+import { Check } from 'lucide-react';
 
 interface FrameCardProps {
   item: {
@@ -17,7 +19,9 @@ interface FrameCardProps {
 }
 
 export function FrameCard({ item }: FrameCardProps) {
-  const { applyFrame } = useProfileFrame();
+  const { applyFrame, removeFrame, activeFrame } = useProfileFrame();
+
+  const isFrameActive = activeFrame === item.imageUrl;
 
   return (
     <div className="group relative flex flex-col justify-between overflow-hidden rounded-xl border bg-card p-2 text-center shadow-sm transition-all duration-300 hover:shadow-lg hover:border-primary/50">
@@ -46,13 +50,16 @@ export function FrameCard({ item }: FrameCardProps) {
         </p>
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-px rounded-lg bg-muted overflow-hidden">
-         <Button variant="ghost" size="sm" className="rounded-none text-muted-foreground hover:bg-muted/80">
-            Send
-         </Button>
-         <Button size="sm" className="rounded-none" onClick={() => applyFrame(item.id, item.imageUrl)}>
+      <div className="mt-2">
+        {isFrameActive ? (
+          <Button variant="destructive" className="w-full" onClick={removeFrame}>
+            Remove
+          </Button>
+        ) : (
+          <Button className="w-full" onClick={() => applyFrame(item.id, item.imageUrl)}>
             Use
-         </Button>
+          </Button>
+        )}
       </div>
     </div>
   );
