@@ -142,36 +142,75 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 2px;
-    height: 2px;
+    width: 3px;
+    height: 3px;
     background: transparent;
     border-radius: 50%;
-    animation: flame 2s infinite;
+    animation: flame 1.5s infinite;
     transform: translate(-50%, -50%);
-    filter: blur(1px);
-    box-shadow: 
-      0 -4px 4px #FFD700, 
-      2px -8px 8px #FF8C00, 
-      -2px -12px 12px #FF4500,
-      0 -16px 16px #FF6347,
-      2px -20px 20px #FFD700, 
-      -2px -24px 24px #FF8C00, 
-      0 -28px 28px #FF4500,
-      1px -32px 32px #FF6347;
+    filter: blur(1.5px);
   }
 
   @keyframes flame {
     0% {
-      transform: translateY(0) scale(1);
+      transform: translateY(0) scale(1.2);
       opacity: 1;
+      box-shadow: 
+        0 -6px 8px #FFD700, 
+        2px -12px 12px #FF8C00, 
+        -2px -18px 18px #FF4500,
+        0 -24px 24px #FF6347,
+        3px -30px 30px #FFD700, 
+        -3px -36px 36px #FF8C00, 
+        0 -42px 42px #FF4500;
+    }
+    25% {
+      transform: translateY(-15px) scale(1);
+      opacity: 0.9;
+       box-shadow: 
+        0 -8px 10px #FFD700, 
+        -2px -16px 14px #FF8C00, 
+        2px -22px 20px #FF4500,
+        0 -30px 28px #FF6347,
+        -3px -38px 35px #FFD700, 
+        3px -46px 42px #FF8C00, 
+        0 -55px 50px #FF4500;
     }
     50% {
-      transform: translateY(-40px) scale(0.8);
+      transform: translateY(-30px) scale(1.1);
+      opacity: 1;
+      box-shadow: 
+        0 -5px 7px #FFD700, 
+        3px -10px 11px #FF8C00, 
+        -3px -15px 16px #FF4500,
+        0 -22px 22px #FF6347,
+        2px -30px 28px #FFD700, 
+        -2px -38px 36px #FF8C00, 
+        0 -48px 44px #FF4500;
+    }
+    75% {
+      transform: translateY(-45px) scale(0.9);
       opacity: 0.8;
+       box-shadow: 
+        0 -7px 9px #FFD700, 
+        -1px -14px 13px #FF8C00, 
+        1px -20px 18px #FF4500,
+        0 -28px 26px #FF6347,
+        -2px -35px 33px #FFD700, 
+        2px -42px 40px #FF8C00, 
+        0 -50px 48px #FF4500;
     }
     100% {
-      transform: translateY(-80px) scale(0.2);
+      transform: translateY(-90px) scale(0.2);
       opacity: 0;
+       box-shadow: 
+        0 0 0 #FFD700, 
+        0 0 0 #FF8C00, 
+        0 0 0 #FF4500,
+        0 0 0 #FF6347,
+        0 0 0 #FFD700, 
+        0 0 0 #FF8C00, 
+        0 0 0 #FF4500;
     }
   }
 
