@@ -23,16 +23,18 @@ import {
   serverTimestamp,
   addDoc,
   deleteDoc,
+  getDocs,
+  or,
 } from 'firebase/firestore';
 import { getDatabase, ref, onValue, off, set, onDisconnect, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 import { IncomingCall } from '@/components/chat/incoming-call';
-import type { Call, UserProfile } from '@/lib/types';
+import type { Call, UserProfile, FriendRequest as FriendRequestType } from '@/lib/types';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/firebase/provider';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { UserPlus, Tv } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { UserPlus, Tv, Home, Search, X, MessageSquare, Clock } from 'lucide-react';
+import { cn, applyNameColor } from '@/lib/utils';
 import useEmblaCarousel from 'embla-carousel-react'
 import type { EmblaCarouselType } from 'embla-carousel'
 import RoomsPage from './(tabs)/rooms/page';
@@ -40,11 +42,228 @@ import InboxPage from './(tabs)/inbox/page';
 import CallsPage from './(tabs)/calls/page';
 import FriendsPage from './(tabs)/friends/page';
 import ProfilePage from './(tabs)/profile/page';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/hooks/use-toast';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { VerifiedBadge } from '@/components/ui/verified-badge';
+import { OfficialBadge } from '@/components/ui/official-badge';
+import { useSound } from '@/hooks/use-sound';
 
+// --- Global Search Component ---
+const GlobalSearch = ({ on_close }: { on_close: () => void }) => {
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const router = useRouter();
+
+    const [profile, setProfile] = useState<UserProfile | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+    const [sentRequests, setSentRequests] = useState<FriendRequestType[]>([]);
+    const { play: playSendRequestSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/sound/short_click.mp3');
+
+    const getInitials = (name: string | null | undefined) => {
+        if (!name) return 'U';
+        return name.split(' ').map((n) => n[0]).join('');
+    };
+
+    useEffect(() => {
+        if (!user || !firestore) return;
+        
+        const unsubProfile = onSnapshot(doc(firestore, 'users', user.uid), (doc) => {
+            setProfile(doc.data() as UserProfile);
+        });
+
+        const sentRequestsRef = collection(firestore, 'friendRequests');
+        const qSent = query(sentRequestsRef, where('senderId', '==', user.uid), where('status', '==', 'pending'));
+        const unsubSent = onSnapshot(qSent, (snapshot) => {
+            const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequestType));
+            setSentRequests(requests);
+        });
+
+        return () => {
+            unsubProfile();
+            unsubSent();
+        };
+
+    }, [user, firestore]);
+
+    const handleSearch = useCallback(async (queryText: string) => {
+        setSearchQuery(queryText);
+        const queryLower = queryText.toLowerCase().trim();
+
+        if (queryLower.length < 2) { 
+            setSearchResults([]);
+            return;
+        }
+
+        if (firestore && user && profile) {
+            const usersRef = collection(firestore, 'users');
+            
+            const usernameQuery = query(
+                usersRef, 
+                where('username', '>=', queryLower),
+                where('username', '<=', queryLower + '\uf8ff')
+            );
+            
+            try {
+                const usernameSnapshot = await getDocs(usernameQuery);
+                const resultsMap = new Map<string, UserProfile>();
+
+                usernameSnapshot.forEach((doc) => {
+                    const userData = doc.data() as UserProfile;
+                     if (userData.username.toLowerCase().startsWith(queryLower)) {
+                        resultsMap.set(doc.id, userData);
+                     }
+                });
+                    
+                const myBlockedList = profile.blockedUsers || [];
+                const whoBlockedMe = profile.blockedBy || [];
+
+                const finalResults = Array.from(resultsMap.values()).filter(u => 
+                        u.uid !== user.uid && 
+                        !u.isDisabled && 
+                        !myBlockedList.includes(u.uid) && 
+                        !whoBlockedMe.includes(u.uid)
+                );
+
+                setSearchResults(finalResults);
+                } catch (serverError) {
+                    console.error("Error searching users:", serverError);
+                    toast({
+                        variant: 'destructive',
+                        title: 'Search Failed',
+                        description: 'Could not perform search due to a server error.'
+                    })
+                }
+            }
+        }, [firestore, user, profile, toast]);
+
+    const handleSendRequest = async (receiverId: string) => {
+        if (!firestore || !user) return;
+        const requestsRef = collection(firestore, 'friendRequests');
+        const newRequest = {
+            senderId: user.uid,
+            receiverId: receiverId,
+            status: 'pending' as const,
+            createdAt: serverTimestamp(),
+        };
+        
+        try {
+            await addDoc(requestsRef, newRequest);
+            playSendRequestSound();
+            toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
+        } catch (error) {
+            console.error("Error sending friend request:", error);
+            toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive'});
+        }
+    };
+    
+    const handleCancelRequest = async (receiverId: string) => {
+        if (!firestore || !user) return;
+        
+        const q = query(
+            collection(firestore, 'friendRequests'),
+            where('senderId', '==', user.uid),
+            where('receiverId', '==', receiverId)
+        );
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+            const docToDelete = querySnapshot.docs[0];
+            try {
+                await deleteDoc(docToDelete.ref);
+                toast({ title: 'Request Cancelled' });
+            } catch(error) {
+                console.error("Error cancelling friend request:", error);
+                toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
+            }
+        }
+    }
+
+    return (
+        <div className="fixed inset-0 z-[100] bg-background flex flex-col animate-in fade-in-0">
+             <header className="p-4 flex items-center gap-2 border-b">
+                 <Input 
+                    placeholder="Search by username..." 
+                    className="pl-10 h-10"
+                    value={searchQuery}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    autoFocus
+                />
+                <Search className="absolute left-7 h-5 w-5 text-muted-foreground" />
+                <Button variant="ghost" onClick={on_close}>Cancel</Button>
+            </header>
+            <ScrollArea className="flex-1">
+                {searchResults.length === 0 && searchQuery.length > 1 ? (
+                    <div className="p-8 text-center text-muted-foreground">
+                        <p>No users found for "{searchQuery}".</p>
+                    </div>
+                ) : searchResults.length > 0 ? (
+                    searchResults.map(foundUser => {
+                        const isFriend = profile?.friends?.includes(foundUser.uid);
+                        const hasSentRequest = sentRequests.some(req => req.receiverId === foundUser.uid);
+                        
+                        return (
+                            <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
+                                <div className="flex items-center gap-4 overflow-hidden">
+                                    <div className="relative">
+                                        <Avatar className="h-12 w-12">
+                                            <AvatarImage src={foundUser.photoURL || undefined} />
+                                            <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
+                                        </Avatar>
+                                        {foundUser.officialBadge?.isOfficial && (
+                                            <div className="absolute bottom-0 right-0">
+                                                <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="overflow-hidden">
+                                        <div className="flex items-center gap-2">
+                                            <p className="font-semibold truncate">
+                                                {applyNameColor(foundUser.displayName, foundUser.nameColor)}
+                                            </p>
+                                            {foundUser.verifiedBadge?.showBadge && (
+                                                <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
+                                            )}
+                                        </div>
+                                        <p className="text-sm text-muted-foreground truncate">@{foundUser.username}</p>
+                                    </div>
+                                </div>
+                                 {isFriend ? (
+                                    <Button size="sm" variant="secondary" onClick={() => { on_close(); router.push(`/chat/${foundUser.uid}`); }}>
+                                        <MessageSquare className="mr-2 h-4 w-4"/>
+                                        Message
+                                    </Button>
+                                ) : hasSentRequest ? (
+                                    <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>
+                                        <Clock className="mr-2 h-4 w-4"/>
+                                        Sent
+                                    </Button>
+                                ) : (
+                                    <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>
+                                        <UserPlus className="mr-2 h-4 w-4"/>
+                                        Add
+                                    </Button>
+                                )}
+                            </div>
+                        );
+                    })
+                ) : (
+                    <div className="p-8 text-center text-muted-foreground">
+                        <p>Find people by their username.</p>
+                    </div>
+                )}
+            </ScrollArea>
+        </div>
+    );
+}
 
 const TABS = ['/chat/rooms', '/chat/inbox', '/chat/calls', '/chat/friends', '/chat/profile'];
-const TAB_EMOJIS = ['🏠', '📥', '📞', null, '👤'];
-const TAB_ICONS = [null, null, null, UserPlus, null];
+const TAB_ICONS = [Home, null, null, UserPlus, null];
+const TAB_EMOJIS = [null, '📥', '📞', null, '👤'];
 const TAB_LABELS = ['Rooms', 'Inbox', 'Calls', 'Friends', 'Me'];
 
 
@@ -206,6 +425,7 @@ interface CallContextType {
   acceptCall: (call: Call) => void;
   declineCall: (call: Call) => void;
   endCall: () => void;
+  openSearch: () => void;
 }
 
 const CallContext = createContext<CallContextType | null>(null);
@@ -224,6 +444,7 @@ function CallProvider({ children }: { children: ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
 
+    const [isSearchOpen, setSearchOpen] = useState(false);
     const [incomingCall, setIncomingCall] = useState<Call | null>(null);
     const [activeCall, setActiveCall] = useState<Call | null>(null);
     const [outgoingCall, setOutgoingCall] = useState<OutgoingCall | null>(null);
@@ -359,11 +580,13 @@ function CallProvider({ children }: { children: ReactNode }) {
         startCall,
         acceptCall,
         declineCall,
-        endCall
+        endCall,
+        openSearch: () => setSearchOpen(true),
     };
     
     return (
         <CallContext.Provider value={contextValue}>
+            {isSearchOpen && <GlobalSearch on_close={() => setSearchOpen(false)} />}
             {incomingCall && <IncomingCall call={incomingCall} />}
             {children}
         </CallContext.Provider>
@@ -460,15 +683,19 @@ export default function ChatAppLayout({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        <div className="h-[calc(100svh-4rem)] embla" ref={emblaRef}>
-            <div className="embla__container h-full">
-                <div className="embla__slide"><RoomsPage /></div>
-                <div className="embla__slide"><InboxPage /></div>
-                <div className="embla__slide"><CallsPage /></div>
-                <div className="embla__slide"><FriendsPage /></div>
-                <div className="embla__slide"><ProfilePage /></div>
+        
+        <main className="h-[calc(100svh-4rem)] overflow-hidden">
+            <div className="embla h-full" ref={emblaRef}>
+                <div className="embla__container h-full">
+                    <div className="embla__slide"><RoomsPage /></div>
+                    <div className="embla__slide"><InboxPage /></div>
+                    <div className="embla__slide"><CallsPage /></div>
+                    <div className="embla__slide"><FriendsPage /></div>
+                    <div className="embla__slide"><ProfilePage /></div>
+                </div>
             </div>
-        </div>
+        </main>
+        
         <BottomNavBar emblaApi={emblaApi} />
     </CallProvider>
   );

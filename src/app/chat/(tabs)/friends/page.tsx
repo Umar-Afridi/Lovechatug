@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { useSound } from '@/hooks/use-sound';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallContext } from '../../layout';
 
 
 interface FriendRequestWithUser extends FriendRequestType {
@@ -232,210 +233,22 @@ export default function FriendsPage() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const { user } = useUser();
   const firestore = useFirestore();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const { play: playSendRequestSound } = useSound('https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/sound/short_click.mp3');
-
-  // Search state
-  const searchParams = useSearchParams();
-  const [isSearching, setIsSearching] = useState(searchParams.get('search') === 'true');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
-  const [sentRequests, setSentRequests] = useState<FriendRequestType[]>([]);
-  const { toast } = useToast();
-  const router = useRouter();
-
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return 'U';
-    return name.split(' ').map((n) => n[0]).join('');
-  };
+  const { openSearch } = useCallContext();
 
   useEffect(() => {
     if (!user || !firestore) return;
     
-    const unsubProfile = onSnapshot(doc(firestore, 'users', user.uid), (doc) => {
-        setProfile(doc.data() as UserProfile);
-    });
-
     const notificationsRef = collection(firestore, 'users', user.uid, 'notifications');
     const qNotifications = query(notificationsRef, where('isRead', '==', false));
     const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
         setUnreadNotificationCount(snapshot.size);
     });
 
-    const sentRequestsRef = collection(firestore, 'friendRequests');
-    const qSent = query(sentRequestsRef, where('senderId', '==', user.uid), where('status', '==', 'pending'));
-    const unsubSent = onSnapshot(qSent, (snapshot) => {
-        const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequestType));
-        setSentRequests(requests);
-    });
-
     return () => {
-        unsubProfile();
         unsubscribeNotifications();
-        unsubSent();
     };
 
   }, [user, firestore]);
-
- const handleSearch = useCallback(async (queryText: string) => {
-    setSearchQuery(queryText);
-    const queryLower = queryText.toLowerCase().trim();
-
-    if (queryLower.length < 2) { 
-      setSearchResults([]);
-      return;
-    }
-
-    if (firestore && user && profile) {
-      const usersRef = collection(firestore, 'users');
-      
-      const usernameQuery = query(
-        usersRef, 
-        where('username', '>=', queryLower),
-        where('username', '<=', queryLower + '\uf8ff')
-      );
-      
-      try {
-        const usernameSnapshot = await getDocs(usernameQuery);
-        const resultsMap = new Map<string, UserProfile>();
-
-        usernameSnapshot.forEach((doc) => {
-            const userData = doc.data() as UserProfile;
-             if (userData.username.toLowerCase().startsWith(queryLower)) {
-                resultsMap.set(doc.id, userData);
-             }
-        });
-            
-          const myBlockedList = profile.blockedUsers || [];
-          const whoBlockedMe = profile.blockedBy || [];
-
-          const finalResults = Array.from(resultsMap.values()).filter(u => 
-                u.uid !== user.uid && // Not myself
-                !u.isDisabled && // Not disabled
-                !myBlockedList.includes(u.uid) && // Not blocked by me
-                !whoBlockedMe.includes(u.uid)
-          );
-
-          setSearchResults(finalResults);
-        } catch (serverError) {
-            console.error("Error searching users:", serverError);
-            toast({
-                variant: 'destructive',
-                title: 'Search Failed',
-                description: 'Could not perform search due to a server error.'
-            })
-        }
-      }
-    }, [firestore, user, profile, toast]);
-
-  const handleSendRequest = async (receiverId: string) => {
-      if (!firestore || !user) return;
-      const requestsRef = collection(firestore, 'friendRequests');
-      const newRequest = {
-          senderId: user.uid,
-          receiverId: receiverId,
-          status: 'pending' as const,
-          createdAt: serverTimestamp(),
-      };
-      
-      try {
-          await addDoc(requestsRef, newRequest);
-          playSendRequestSound();
-          toast({ title: 'Request Sent', description: 'Your friend request has been sent.'});
-      } catch (error) {
-          console.error("Error sending friend request:", error);
-          toast({ title: 'Error', description: 'Could not send friend request.', variant: 'destructive'});
-      }
-  };
-  
-  const handleCancelRequest = async (receiverId: string) => {
-      if (!firestore || !user) return;
-      
-      const q = query(
-          collection(firestore, 'friendRequests'),
-          where('senderId', '==', user.uid),
-          where('receiverId', '==', receiverId)
-      );
-      const querySnapshot = await getDocs(q);
-      
-      if (!querySnapshot.empty) {
-        const docToDelete = querySnapshot.docs[0];
-        try {
-            await deleteDoc(docToDelete.ref);
-            toast({ title: 'Request Cancelled' });
-        } catch(error) {
-            console.error("Error cancelling friend request:", error);
-            toast({ title: 'Error', description: 'Could not cancel friend request.', variant: 'destructive'});
-        }
-      }
-  }
-
-  const renderContent = () => {
-    if (isSearching) {
-        return (
-            <ScrollArea className="flex-1">
-                {searchResults.length === 0 && searchQuery ? (
-                    <div className="p-4 text-center text-muted-foreground">
-                        <p>No users found for "{searchQuery}".</p>
-                    </div>
-                ) : (
-                    searchResults.map(foundUser => {
-                    const isFriend = profile?.friends?.includes(foundUser.uid);
-                    const hasSentRequest = sentRequests.some(req => req.receiverId === foundUser.uid);
-                    
-                    return (
-                        <div key={foundUser.uid} className="flex items-center justify-between p-4 hover:bg-muted/50">
-                            <div className="flex items-center gap-4 overflow-hidden">
-                                <div className="relative">
-                                    <Avatar className="h-12 w-12">
-                                        <AvatarImage src={foundUser.photoURL || undefined} />
-                                        <AvatarFallback>{getInitials(foundUser.displayName)}</AvatarFallback>
-                                    </Avatar>
-                                    {foundUser.officialBadge?.isOfficial && (
-                                        <div className="absolute bottom-0 right-0">
-                                            <OfficialBadge color={foundUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={foundUser.canManageOfficials} />
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="overflow-hidden">
-                                    <div className="flex items-center gap-2">
-                                        <p className="font-semibold truncate">
-                                            {applyNameColor(foundUser.displayName, foundUser.nameColor)}
-                                        </p>
-                                        {foundUser.verifiedBadge?.showBadge && (
-                                            <VerifiedBadge color={foundUser.verifiedBadge.badgeColor} />
-                                        )}
-                                    </div>
-                                    <p className="text-sm text-muted-foreground truncate">@{foundUser.username}</p>
-                                </div>
-                            </div>
-                             {isFriend ? (
-                                <Button size="sm" variant="secondary" asChild>
-                                    <Link href={`/chat/${foundUser.uid}`}>
-                                        <MessageSquare className="mr-2 h-4 w-4"/>
-                                        Message
-                                    </Link>
-                                </Button>
-                            ) : hasSentRequest ? (
-                                <Button size="sm" variant="outline" onClick={() => handleCancelRequest(foundUser.uid)}>
-                                    <Clock className="mr-2 h-4 w-4"/>
-                                    Sent
-                                </Button>
-                            ) : (
-                                <Button size="sm" onClick={() => handleSendRequest(foundUser.uid)}>
-                                    <UserPlus className="mr-2 h-4 w-4"/>
-                                    Add
-                                </Button>
-                            )}
-                        </div>
-                    );
-                    })
-                )}
-            </ScrollArea>
-        );
-    }
-    return <FriendRequestsList />;
-  };
   
   return (
     <div className="flex h-full flex-col bg-background">
@@ -445,7 +258,7 @@ export default function FriendsPage() {
                 <span>Friends</span>
             </h1>
             <div className="flex items-center gap-2">
-                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={() => setIsSearching(prev => !prev)}>
+                 <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={openSearch}>
                     <Search className="h-5 w-5" />
                     <span className="sr-only">Search</span>
                  </Button>
@@ -466,25 +279,10 @@ export default function FriendsPage() {
                  </Button>
             </div>
           </div>
-          {isSearching && (
-             <div className="relative">
-                <Input 
-                    placeholder="Search by username..." 
-                    className="pl-10"
-                    value={searchQuery}
-                    onChange={(e) => handleSearch(e.target.value)}
-                    autoFocus
-                />
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" onClick={() => { setIsSearching(false); setSearchQuery(''); setSearchResults([]); }}>
-                    <X className="h-5 w-5" />
-                </Button>
-            </div>
-          )}
         </div>
-        <div className="flex-1 flex flex-col overflow-hidden">
-            {renderContent()}
-        </div>
+        <ScrollArea className="flex-1 flex flex-col overflow-hidden">
+            <FriendRequestsList />
+        </ScrollArea>
     </div>
   );
 }

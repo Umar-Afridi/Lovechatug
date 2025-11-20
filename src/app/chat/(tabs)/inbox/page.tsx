@@ -27,6 +27,7 @@ import { applyNameColor } from '@/lib/utils';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { useToast } from '@/hooks/use-toast';
+import { useCallContext } from '../../layout';
 
 interface ChatWithParticipant extends ChatType {
   otherParticipant: UserProfile | null;
@@ -339,6 +340,7 @@ export default function InboxPage() {
   const { user } = useUser();
   const firestore = useFirestore();
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const { openSearch } = useCallContext();
 
   useEffect(() => {
     if (!user || !firestore) return;
@@ -371,11 +373,9 @@ export default function InboxPage() {
             variant="ghost"
             size="icon"
             className="h-10 w-10 rounded-full"
-            asChild
+            onClick={openSearch}
           >
-            <Link href="/chat/friends?search=true">
-              <Search className="h-5 w-5" />
-            </Link>
+            <Search className="h-5 w-5" />
           </Button>
           <Button
             variant="ghost"

@@ -48,6 +48,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { OfficialBadge } from '@/components/ui/official-badge';
 import { applyNameColor } from '@/lib/utils';
+import { useCallContext } from '@/app/chat/layout';
 
 interface CallWithUser extends Call {
   otherUser?: UserProfile;
@@ -146,6 +147,7 @@ const CallItem = ({
 export default function CallsPage() {
   const { user } = useUser();
   const firestore = useFirestore();
+  const { openSearch } = useCallContext();
   const [calls, setCalls] = useState<CallWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [isClearAllDialogOpen, setClearAllDialogOpen] = useState(false);
@@ -286,10 +288,8 @@ export default function CallsPage() {
         <div className="flex items-center justify-between p-4 border-b">
           <h1 className="text-xl font-bold">Call History</h1>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" asChild>
-                <Link href="/chat/friends?search=true">
-                    <Search className="h-5 w-5" />
-                </Link>
+            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full" onClick={openSearch}>
+                <Search className="h-5 w-5" />
             </Button>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
