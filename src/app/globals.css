@@ -138,20 +138,41 @@
   }
 
   .official-badge-owner-icon::before {
-    content: '✨';
+    content: '';
     position: absolute;
     top: 50%;
     left: 50%;
+    width: 2px;
+    height: 2px;
+    background: transparent;
+    border-radius: 50%;
+    animation: flame 2s infinite;
     transform: translate(-50%, -50%);
-    animation: sparkle 1.5s infinite;
-    opacity: 0;
-    font-size: 1.5em; /* Make sparkles larger than the icon */
+    filter: blur(1px);
+    box-shadow: 
+      0 -4px 4px #FFD700, 
+      2px -8px 8px #FF8C00, 
+      -2px -12px 12px #FF4500,
+      0 -16px 16px #FF6347,
+      2px -20px 20px #FFD700, 
+      -2px -24px 24px #FF8C00, 
+      0 -28px 28px #FF4500,
+      1px -32px 32px #FF6347;
   }
 
-  @keyframes sparkle {
-    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
-    50% { opacity: 1; }
-    100% { transform: translate(-50%, -150%) scale(1.2); opacity: 0; }
+  @keyframes flame {
+    0% {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: translateY(-40px) scale(0.8);
+      opacity: 0.8;
+    }
+    100% {
+      transform: translateY(-80px) scale(0.2);
+      opacity: 0;
+    }
   }
 
 
