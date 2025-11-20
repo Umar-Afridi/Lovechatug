@@ -95,7 +95,13 @@ export default function ManageVerificationPage() {
     setSearching(true);
     try {
         const usersRef = collection(firestore, "users");
-        const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
+        // This query will require a composite index.
+        const q = query(
+            usersRef, 
+            where("username", ">=", searchQuery.toLowerCase()), 
+            where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'),
+            where("verificationApplicationStatus", "==", "pending") 
+        );
         
         const querySnapshot = await getDocs(q);
         let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
@@ -107,7 +113,7 @@ export default function ManageVerificationPage() {
         setSearchedUsers(usersList);
     } catch (error) {
         console.error("Error searching users:", error);
-        toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
+        toast({ title: 'Search Error', description: 'Could not perform search. You might need to create a Firestore index.', variant: 'destructive'});
     } finally {
         setSearching(false);
     }
