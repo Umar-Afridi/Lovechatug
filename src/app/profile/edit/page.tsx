@@ -24,6 +24,7 @@ import { Separator } from '@/components/ui/separator';
 import type { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { differenceInHours } from 'date-fns';
+import Image from 'next/image';
 
 
 export default function EditProfilePage() {
@@ -115,7 +116,7 @@ export default function EditProfilePage() {
     }
   }, [loading, user, router]);
 
-  if (loading || !user) {
+  if (loading || !user || !userProfile) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
   
@@ -358,19 +359,27 @@ export default function EditProfilePage() {
             <main className="flex-1 p-4 md:p-8">
                 <div className="mx-auto max-w-xl space-y-8">
                     <div className="flex flex-col items-center">
-                         <div className="relative mb-4">
-                            <Avatar className="h-32 w-32 cursor-pointer" onClick={handleAvatarClick}>
+                         <div className="relative mb-4 h-32 w-32">
+                             {userProfile.activeFrame && (
+                                <Image
+                                    src={userProfile.activeFrame}
+                                    alt="Profile Frame"
+                                    layout="fill"
+                                    className="absolute inset-0 z-10 pointer-events-none"
+                                />
+                            )}
+                            <Avatar className="h-full w-full cursor-pointer" onClick={handleAvatarClick}>
                                 <AvatarImage src={displayPhoto ?? undefined} alt={displayName} />
                                 <AvatarFallback className="text-4xl">
                                     {getInitials(displayName)}
                                 </AvatarFallback>
                             </Avatar>
                              {userProfile?.verifiedBadge?.showBadge && (
-                                <div className="absolute bottom-1 right-1">
+                                <div className="absolute bottom-1 right-1 z-20">
                                     <VerifiedBadge color={userProfile.verifiedBadge.badgeColor} className="h-8 w-8"/>
                                 </div>
                             )}
-                            <button className="absolute -bottom-1 right-8 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground" onClick={handleChangePicture}>
+                            <button className="absolute -bottom-1 right-8 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground" onClick={handleChangePicture}>
                                 <Camera className="h-5 w-5" />
                             </button>
                             <input 

@@ -73,6 +73,7 @@ import { useCallContext } from '../layout';
 import { ClearChatDialog } from '@/components/chat/clear-chat-dialog';
 import { DeleteMessageDialog } from '@/components/chat/delete-message-dialog';
 import { applyNameColor } from '@/lib/utils';
+import Image from 'next/image';
 
 
 export default function ChatIdPage() {
@@ -912,7 +913,7 @@ export default function ChatIdPage() {
       }
   };
   
-  if (loading || !otherUser || !authUser) {
+  if (loading || !otherUser || !authUser || !currentUser) {
     return (
       <div className="flex h-screen flex-col items-center justify-center">
         <p className="text-lg">Loading chat...</p>
@@ -1005,13 +1006,21 @@ export default function ChatIdPage() {
                   className="flex items-center gap-4 cursor-pointer"
                   onClick={() => setContactSheetOpen(true)}
               >
-                  <div className="relative">
-                      <Avatar>
+                  <div className="relative h-10 w-10">
+                       {otherUser.activeFrame && (
+                            <Image
+                                src={otherUser.activeFrame}
+                                alt="Profile Frame"
+                                layout="fill"
+                                className="absolute inset-0 z-10 pointer-events-none"
+                            />
+                        )}
+                      <Avatar className="h-full w-full">
                           <AvatarImage src={otherUser.photoURL} />
                           <AvatarFallback>{getInitials(otherUser.displayName)}</AvatarFallback>
                       </Avatar>
                       {otherUser?.officialBadge?.isOfficial && (
-                          <div className="absolute bottom-0 right-0">
+                          <div className="absolute bottom-0 right-0 z-20">
                             <OfficialBadge color={otherUser.officialBadge.badgeColor} size="icon" className="h-4 w-4" isOwner={otherUser.canManageOfficials} />
                           </div>
                         )}
