@@ -100,18 +100,25 @@ export default function ProfilePage() {
 
 
   const handleSignOut = async () => {
-    if (auth && user && firestore) {
-      const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
-      const db = getDatabase();
-      const userStatusDatabaseRef = ref(db, '/status/' + user.uid);
+    if (!auth || !user || !firestore) return;
+    
+    const userStatusFirestoreRef = doc(firestore, 'users', user.uid);
+    const db = getDatabase();
+    const userStatusDatabaseRef = ref(db, `/status/${user.uid}`);
 
-      await updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() });
-      await set(userStatusDatabaseRef, { isOnline: false, lastSeen: rtdbServerTimestamp() });
-
-      await auth.signOut();
-      router.push('/');
+    try {
+        await updateDoc(userStatusFirestoreRef, { isOnline: false, lastSeen: serverTimestamp() });
+        await set(userStatusDatabaseRef, { isOnline: false, lastSeen: rtdbServerTimestamp() });
+        await auth.signOut();
+        router.push('/');
+    } catch (error) {
+        console.error("Sign out error:", error);
+        // Even if status updates fail, sign out the user
+        await auth.signOut();
+        router.push('/');
     }
   };
+
 
   return (
     <>
