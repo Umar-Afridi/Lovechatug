@@ -79,6 +79,17 @@
   .theme-purple { @apply bg-purple-500/20; .dark & { @apply bg-purple-900/40; } }
   .theme-pink { @apply bg-pink-500/20; .dark & { @apply bg-pink-900/40; } }
   .theme-yellow { @apply bg-yellow-500/20; .dark & { @apply bg-yellow-900/40; } }
+
+  .embla {
+    overflow: hidden;
+  }
+  .embla__container {
+    display: flex;
+  }
+  .embla__slide {
+    flex: 0 0 100%;
+    min-width: 0;
+  }
 }
 
 @layer utilities {

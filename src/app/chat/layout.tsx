@@ -408,7 +408,7 @@ export default function ChatAppLayout({
   }, [pathname, emblaApi]);
   
    if (authLoading) {
-    return <div className="flex h-screen w-full items-center justify-center">Loading...</div>;
+    return <div className="h-screen w-full flex items-center justify-center">Loading...</div>;
   }
 
   // If user is not logged in and not on an auth page, show nothing (or a loader)
@@ -460,15 +460,15 @@ export default function ChatAppLayout({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        <main className="h-[calc(100svh-4rem)] overflow-hidden" ref={emblaRef}>
-            <div className="flex h-full">
-                <RoomsPage />
-                <InboxPage />
-                <CallsPage />
-                <FriendsPage />
-                <ProfilePage />
+        <div className="h-[calc(100svh-4rem)] embla" ref={emblaRef}>
+            <div className="embla__container h-full">
+                <div className="embla__slide"><RoomsPage /></div>
+                <div className="embla__slide"><InboxPage /></div>
+                <div className="embla__slide"><CallsPage /></div>
+                <div className="embla__slide"><FriendsPage /></div>
+                <div className="embla__slide"><ProfilePage /></div>
             </div>
-        </main>
+        </div>
         <BottomNavBar emblaApi={emblaApi} />
     </CallProvider>
   );
