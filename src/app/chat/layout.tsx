@@ -277,8 +277,8 @@ const GlobalSearch = ({ on_close }: { on_close: () => void }) => {
 }
 
 const TABS = ['/chat/rooms', '/chat/inbox', '/chat/calls', '/chat/friends', '/chat/profile'];
-const TAB_ICONS = [Home, null, null, UserPlus, null];
-const TAB_EMOJIS = [null, '📥', '📞', null, '👤'];
+const TAB_ICONS = [Home, null, null, null, null];
+const TAB_EMOJIS = [null, '📥', '📞', '👥', '👤'];
 const TAB_LABELS = ['𝐑𝐨𝐨𝐦𝐬', '𝐈𝐧𝐛𝐨𝐱', '𝐂𝐚𝐥𝐥𝐬', '𝐅𝐫𝐢𝐞𝐧𝐝𝐬', '𝐌𝐞'];
 const TAB_TITLES = ['Rooms', 'Love Chat', 'Call History', 'Friends', 'Me'];
 
