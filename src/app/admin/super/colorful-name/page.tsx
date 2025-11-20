@@ -14,6 +14,7 @@ import {
   serverTimestamp,
   where,
   getDocs,
+  orderBy,
 } from 'firebase/firestore';
 import {
   Sparkles,
@@ -89,7 +90,12 @@ export default function ManageColorfulNamePage() {
     setSearching(true);
     try {
         const usersRef = collection(firestore, "users");
-        const q = query(usersRef, where("username", ">=", searchQuery.toLowerCase()), where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'));
+        const q = query(
+          usersRef, 
+          where("username", ">=", searchQuery.toLowerCase()), 
+          where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'),
+          orderBy("activityScore", "desc") // This will require a new composite index
+        );
         
         const querySnapshot = await getDocs(q);
         let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
@@ -101,7 +107,7 @@ export default function ManageColorfulNamePage() {
         setSearchedUsers(usersList);
     } catch (error) {
         console.error("Error searching users:", error);
-        toast({ title: 'Search Error', description: 'Could not perform search.', variant: 'destructive'});
+        toast({ title: 'Search Error', description: 'Could not perform search. You might need to create a Firestore index.', variant: 'destructive'});
     } finally {
         setSearching(false);
     }
