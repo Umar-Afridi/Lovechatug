@@ -93,8 +93,7 @@ export default function ManageColorfulNamePage() {
         const q = query(
           usersRef, 
           where("username", ">=", searchQuery.toLowerCase()), 
-          where("username", "<=", searchQuery.toLowerCase() + '\uf8ff'),
-          orderBy("activityScore", "desc") // This will require a new composite index
+          where("username", "<=", searchQuery.toLowerCase() + '\uf8ff')
         );
         
         const querySnapshot = await getDocs(q);
