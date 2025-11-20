@@ -33,16 +33,41 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Phone, UserPlus, Tv } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import useEmblaCarousel from 'embla-carousel-react'
+import type { EmblaCarouselType } from 'embla-carousel'
+
+
+const TABS = ['/chat/rooms', '/chat', '/chat/calls', '/chat/friends', '/profile'];
+const TAB_EMOJIS = ['🏠', '📥', '📞', null, '👤'];
+const TAB_ICONS = [null, null, null, UserPlus, null];
+const TAB_LABELS = ['Rooms', 'Inbox', 'Calls', 'Friends', 'Me'];
 
 
 // --- Bottom Navigation ---
-function BottomNavBar() {
+function BottomNavBar({ emblaApi }: { emblaApi: EmblaCarouselType | undefined }) {
     const pathname = usePathname();
     const { user } = useUser();
     const firestore = useFirestore();
     const [unreadMessages, setUnreadMessages] = useState(0);
     const [unreadFriends, setUnreadFriends] = useState(0);
+    const [activeIndex, setActiveIndex] = useState(0);
+
+    useEffect(() => {
+        if (!emblaApi) return;
+        const onSelect = () => {
+            setActiveIndex(emblaApi.selectedScrollSnap());
+        };
+        emblaApi.on('select', onSelect);
+        return () => { emblaApi.off('select', onSelect) };
+    }, [emblaApi]);
+
+     useEffect(() => {
+        const index = TABS.indexOf(pathname);
+        if (emblaApi && index !== -1 && index !== activeIndex) {
+            emblaApi.scrollTo(index);
+        }
+    }, [pathname, emblaApi, activeIndex]);
+
 
     useEffect(() => {
         if (!user || !firestore) return;
@@ -68,30 +93,33 @@ function BottomNavBar() {
 
     }, [user, firestore]);
     
-    const navItems = [
-        { href: '/chat/rooms', emoji: '🏠', label: 'Rooms', count: 0 },
-        { href: '/chat', emoji: '📥', label: 'Inbox', count: unreadMessages },
-        { href: '/chat/calls', emoji: '📞', label: 'Calls', count: 0 },
-        { href: '/chat/friends', icon: UserPlus, label: 'Friends', count: unreadFriends },
-        { href: '/profile', emoji: '👤', label: 'Me', count: 0 },
-    ];
+     const unreadCounts = [0, unreadMessages, 0, unreadFriends, 0];
 
     return (
         <footer className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/80 backdrop-blur-sm">
             <nav className="flex items-center justify-around h-16">
-                {navItems.map(item => {
-                    const isActive = pathname === item.href;
+                {TABS.map((href, index) => {
+                    const isActive = activeIndex === index;
+                    const Icon = TAB_ICONS[index];
                     return (
-                        <Link href={item.href} key={item.label} className={cn("flex flex-col items-center justify-center text-xs gap-1 transition-colors w-1/5", isActive ? "text-primary" : "text-muted-foreground hover:text-primary")}>
+                        <Link 
+                            href={href} 
+                            key={href} 
+                            className={cn("flex flex-col items-center justify-center text-xs gap-1 transition-colors w-1/5", isActive ? "text-primary" : "text-muted-foreground hover:text-primary")}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                if (emblaApi) emblaApi.scrollTo(index);
+                            }}
+                        >
                            <div className="relative text-2xl">
-                                {item.emoji ? (
-                                    <span>{item.emoji}</span>
+                                {TAB_EMOJIS[index] ? (
+                                    <span>{TAB_EMOJIS[index]}</span>
                                 ) : (
-                                    item.icon && <item.icon className="h-6 w-6" />
+                                    Icon && <Icon className="h-6 w-6" />
                                 )}
-                                {item.count > 0 && <Badge variant="destructive" className="absolute -top-1 -right-2 h-4 w-4 justify-center p-0 text-xs">{item.count}</Badge>}
+                                {unreadCounts[index] > 0 && <Badge variant="destructive" className="absolute -top-1 -right-2 h-4 w-4 justify-center p-0 text-xs">{unreadCounts[index]}</Badge>}
                             </div>
-                            <span className="text-xs">{item.label}</span>
+                            <span className="text-xs">{TAB_LABELS[index]}</span>
                         </Link>
                     )
                 })}
@@ -341,6 +369,7 @@ export default function ChatAppLayout({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useUser();
   const router = useRouter();
   const pathname = usePathname();
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false, watchDrag: true });
   
   usePresence();
   const { isAccountDisabled, handleConfirmDisabled } = useAccountDisabledHandling();
@@ -349,39 +378,62 @@ export default function ChatAppLayout({ children }: { children: ReactNode }) {
     if (!authLoading) {
       if (user) {
         if (pathname === '/' || pathname === '/signup') {
-          router.push('/chat');
+          router.replace('/chat');
         }
       } else {
-        if (pathname.startsWith('/chat') || pathname.startsWith('/profile') || pathname.startsWith('/settings')) {
-          router.push('/');
+        if (!['/', '/signup'].includes(pathname) && !pathname.startsWith('/admin')) {
+          router.replace('/');
         }
       }
     }
   }, [authLoading, user, pathname, router]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    const onSelect = () => {
+      const newPath = TABS[emblaApi.selectedScrollSnap()];
+      if (newPath && newPath !== pathname) {
+        router.replace(newPath);
+      }
+    };
+    emblaApi.on('select', onSelect);
+    return () => { emblaApi.off('select', onSelect) };
+  }, [emblaApi, pathname, router]);
   
    if (authLoading) {
     return <div className="flex h-screen w-full items-center justify-center">Loading...</div>;
   }
 
-  if (!user && (pathname.startsWith('/chat') || pathname.startsWith('/profile') || pathname.startsWith('/settings'))) {
-      return <div className="flex h-screen w-full items-center justify-center">Redirecting...</div>;
-  }
-  
-  if (!user) {
+  if (!user && !pathname.startsWith('/admin')) {
+    if (pathname === '/' || pathname === '/signup') {
       return <>{children}</>;
+    }
+    return <div className="flex h-screen w-full items-center justify-center">Redirecting...</div>;
   }
-
-  // Define routes where the bottom nav should ALWAYS be hidden
-  const hideBottomNavRoutes = [
-    '/chat/call/', // Hide for any active call screen (outgoing, active, etc.)
-  ];
   
-  // This Regex will match `/chat/[any-string-that-is-not-a-main-tab]`
-  // It specifically excludes the main tab pages.
-  const isChatDetailPage = /^\/chat\/(?!calls|friends|rooms|notifications)[^/]+$/.test(pathname);
+  // Routes where the swipe layout and bottom nav should be hidden
+  const isNonTabLayout = pathname.startsWith('/chat/[') || pathname.startsWith('/chat/call/') || pathname.startsWith('/admin') || pathname.startsWith('/prop-house') || pathname.startsWith('/settings');
 
-  const showBottomNav = !hideBottomNavRoutes.some(route => pathname.startsWith(route)) && !isChatDetailPage;
-
+  if (isNonTabLayout) {
+      return (
+           <CallProvider>
+                <AlertDialog open={isAccountDisabled}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                    <AlertDialogTitle>Account Disabled</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Your account has been disabled by an administrator. You will be logged out.
+                    </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                    <AlertDialogAction onClick={handleConfirmDisabled}>OK</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+                </AlertDialog>
+                <main>{children}</main>
+            </CallProvider>
+      )
+  }
 
   return (
     <CallProvider>
@@ -398,8 +450,12 @@ export default function ChatAppLayout({ children }: { children: ReactNode }) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        <main className="pb-16">{children}</main>
-        {showBottomNav && <BottomNavBar />}
+        <div className="overflow-hidden" ref={emblaRef}>
+            <div className="flex h-[calc(100vh-4rem)]">
+                 {children}
+            </div>
+        </div>
+        <BottomNavBar emblaApi={emblaApi} />
     </CallProvider>
   );
 }
