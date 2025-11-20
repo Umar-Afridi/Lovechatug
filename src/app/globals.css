@@ -30,6 +30,7 @@
     --theme-purple: 262 84% 59%;
     --theme-pink: 339 80% 59%;
     --theme-yellow: 48 96% 50%;
+    --theme-orange: 25 95% 53%;
   }
 
   .dark {
@@ -59,6 +60,7 @@
     --theme-purple: 262 84% 59%;
     --theme-pink: 339 80% 59%;
     --theme-yellow: 48 96% 50%;
+    --theme-orange: 25 95% 53%;
   }
 }
 
@@ -88,25 +90,23 @@
       hsl(var(--theme-blue)),
       hsl(var(--theme-green)),
       hsl(var(--theme-yellow)),
+      hsl(var(--theme-orange)),
       hsl(var(--theme-red)),
       hsl(var(--theme-pink))
     );
-    background-size: 400% auto;
+    background-size: 200% auto;
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: gradient-background 15s linear infinite;
+    animation: gradient-background 5s linear infinite;
   }
 
   @keyframes gradient-background {
-    0% {
-      background-position: 0% 50%;
+    from {
+      background-position: 0% center;
     }
-    50% {
-      background-position: 100% 50%;
-    }
-    100% {
-      background-position: 0% 50%;
+    to {
+      background-position: -200% center;
     }
   }
 
