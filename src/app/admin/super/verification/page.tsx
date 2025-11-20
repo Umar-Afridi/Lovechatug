@@ -95,7 +95,7 @@ export default function ManageVerificationPage() {
     setSearching(true);
     try {
         const usersRef = collection(firestore, "users");
-        // Simplified query to avoid composite index on two different fields
+        
         const q = query(
             usersRef, 
             where("username", ">=", searchQuery.toLowerCase()), 
@@ -104,10 +104,7 @@ export default function ManageVerificationPage() {
         
         const querySnapshot = await getDocs(q);
         
-        // Filter on the client-side
-        let usersList = querySnapshot.docs
-            .map(d => d.data() as UserProfile)
-            .filter(u => u.verificationApplicationStatus === 'pending');
+        let usersList = querySnapshot.docs.map(d => d.data() as UserProfile);
 
         if (!currentUserProfile.canManageOfficials) {
             usersList = usersList.filter(u => u.uid === authUser?.uid || !u.officialBadge?.isOfficial);
@@ -330,7 +327,7 @@ export default function ManageVerificationPage() {
             </div>
         ) : (
             <div className="flex flex-1 items-center justify-center text-muted-foreground p-8 h-full">
-                <p>{searchQuery ? "No users with pending verification found." : "Search for a user to manage their verification."}</p>
+                <p>{searchQuery ? "No users found." : "Search for a user to manage their verification."}</p>
             </div>
         )}
         
