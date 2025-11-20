@@ -5,7 +5,7 @@ import React from 'react';
 // This layout wraps each tab panel in the swipeable carousel
 export default function TabsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="h-full flex-shrink-0 w-full">
+    <div className="h-full flex-shrink-0 w-full flex-none">
         {children}
     </div>
   );
