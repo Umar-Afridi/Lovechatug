@@ -34,6 +34,12 @@ import { useAuth } from '@/firebase/provider';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { UserPlus, Tv, Home, Search, X, MessageSquare, Clock, Settings, Bell, MoreVertical, Trash2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn, applyNameColor } from '@/lib/utils';
 import useEmblaCarousel from 'embla-carousel-react'
 import type { EmblaCarouselType } from 'embla-carousel'
@@ -625,26 +631,36 @@ function ChatAppLayoutContent({ children }: { children: ReactNode }) {
             setActiveIndex(newIndex);
             const newPath = TABS[newIndex];
             if (newPath && newPath !== pathname) {
-                router.replace(newPath);
+                // This will only update the URL without a full page reload
+                // which is what we want for a smooth carousel experience
+                window.history.replaceState(null, '', newPath);
             }
         },
-        [pathname, router]
+        [pathname]
     );
+    
+     const onNavClick = useCallback((index: number) => {
+        if (emblaApi) {
+            emblaApi.scrollTo(index);
+        }
+    }, [emblaApi]);
+
 
     useEffect(() => {
         if (!emblaApi) return;
         emblaApi.on('select', onSelect);
         emblaApi.on('reInit', onSelect);
-
+        
         const tabIndex = TABS.indexOf(pathname);
         if (tabIndex !== -1 && tabIndex !== emblaApi.selectedScrollSnap()) {
-            emblaApi.scrollTo(tabIndex, true);
+            emblaApi.scrollTo(tabIndex, true); // Use snap: true for instant jump
         }
 
         return () => {
             emblaApi.off('select', onSelect);
         };
     }, [emblaApi, onSelect, pathname]);
+
 
     useEffect(() => {
         if (!authLoading) {
