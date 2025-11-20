@@ -225,7 +225,7 @@ function ChatListPage() {
     >
       {chats.map((chat) => {
         const otherParticipant = chat.otherParticipant;
-        const unreadCount = chat.unreadCount?.[user!.uid] ?? 0;
+        const unreadCount = user ? chat.unreadCount?.[user.uid] ?? 0 : 0;
         const isLongPressed = longPressedChatId === chat.id;
 
         if (!otherParticipant) return null;
