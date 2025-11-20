@@ -25,13 +25,12 @@ export function FrameCard({ item }: FrameCardProps) {
         x{item.quantity}
       </Badge>
       
-      <div className="relative w-full aspect-square flex-shrink-0 flex items-center justify-center p-4">
+      <div className="relative w-full aspect-square flex-shrink-0">
         <Image
             src={item.imageUrl}
             alt={item.name}
-            width={150}
-            height={150}
-            className="object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
+            fill
+            className="object-contain p-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
         />
       </div>
 
