@@ -13,7 +13,7 @@ export function applyNameColor(name: string, color?: UserProfile['nameColor']) {
         return name;
     }
     if (color === 'gradient') {
-        return React.createElement('span', { className: "font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 background-animate gradient-shine" }, name);
+        return React.createElement('span', { className: "font-bold background-animate" }, name);
     }
     
     const colorClasses: Record<Exclude<NonNullable<UserProfile['nameColor']>, 'default' | 'gradient'>, string> = {

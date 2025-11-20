@@ -81,57 +81,64 @@
 
 @layer utilities {
   .background-animate {
-    background-size: 400%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradient-background 8s ease infinite;
+    @apply relative text-transparent bg-clip-text;
   }
-
-  .gradient-shine {
-    position: relative;
-  }
-
-  .gradient-shine::before {
+  
+  .background-animate::before,
+  .background-animate::after {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
+    z-index: -1;
+  }
+  
+  /* Slow, multi-color gradient background */
+  .background-animate::before {
     background-image: linear-gradient(
-      115deg,
+      90deg,
+      hsl(var(--theme-red)),
+      hsl(var(--theme-pink)),
+      hsl(var(--theme-green)),
+      hsl(var(--theme-yellow)),
+      hsl(var(--theme-red))
+    );
+    background-size: 400% 100%;
+    animation: gradient-background 10s linear infinite;
+  }
+
+  /* Fast, sharp golden shine effect */
+  .background-animate::after {
+     background-image: linear-gradient(
+      90deg,
       transparent 0%,
-      transparent 35%,
+      transparent 40%,
       hsl(var(--theme-yellow) / 0.8) 50%,
-      transparent 65%,
+      transparent 60%,
       transparent 100%
     );
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradient-shine 4s linear infinite;
-    z-index: 1;
+    background-size: 300% 100%;
+    animation: gradient-shine 3s linear infinite;
   }
+
 
   @keyframes gradient-background {
     0% {
       background-position: 0% 50%;
     }
-    50% {
+    100% {
       background-position: 100% 50%;
     }
-    100% {
-      background-position: 0% 50%;
-    }
   }
-
+  
   @keyframes gradient-shine {
     0% {
-      background-position: 200% center;
+      background-position: 150% 50%;
     }
     100% {
-      background-position: -200% center;
+      background-position: -50% 50%;
     }
   }
 
